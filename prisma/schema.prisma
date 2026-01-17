@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  name         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  active       Boolean       @default(true)
+  createdBy    String?
+  role         UserRole      @default(REGISTRATION_STAFF)
+  activityLogs ActivityLog[]
+}
+
+model Location {
+  id           String           @id @default(uuid())
+  name         String           @unique
+  code         String?
+  address      String?        // Full address text for messages
+  locationUrl  String?        // Google Maps URL
+  isActive     Boolean          @default(true)
+  applicants   Applicant[]
+  transactions Transaction[]
+  routesFrom   TransportRoute[] @relation("RouteFrom")
+  routesTo     TransportRoute[] @relation("RouteTo")
+  transportingApplicants Applicant[] @relation("TransportFrom")
+  vouchers               Voucher[]
+}
+
+model ServiceConfig {
+  id                String   @id @default("global")
+  registrationPrice Decimal  @default(0) @db.Decimal(10, 2)
+  examChangeFee     Decimal  @default(16000) @db.Decimal(10, 2)
+  maxFreeChanges    Int      @default(1)
+  updatedAt         DateTime @updatedAt
+}
+
+model TransportRoute {
+  id             String   @id @default(uuid())
+  fromId         String
+  toId           String
+  oneWayPrice    Decimal  @db.Decimal(10, 2)
+  roundTripPrice Decimal  @db.Decimal(10, 2)
+  departureTime  String?
+  arrivalTime    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  from           Location @relation("RouteFrom", fields: [fromId], references: [id])
+  to             Location @relation("RouteTo", fields: [toId], references: [id])
+}
+
+model CancellationPolicy {
+  id           String   @id @default(uuid())
+  name         String
+  category     String
+  hoursTrigger Int?
+  condition    String?
+  feeAmount    Decimal  @db.Decimal(10, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Applicant {
+  id                String          @id @default(uuid())
+  fullName          String
+  profession        String
+  phone             String
+  whatsappNumber    String
+  examDate          DateTime?
+  examLocation      String?
+  examTime          String?
+  platformEmail     String?         @unique
+  platformPassword  String?
+  examTicketImage   String?
+  certificateImage  String?
+  status            ApplicantStatus @default(NEW_REGISTRATION)
+  notes             String?
+  hasTransportation Boolean         @default(false)
+  travelDate        DateTime?
+  totalAmount       Decimal         @db.Decimal(10, 2)
+  amountPaid        Decimal         @default(0) @db.Decimal(10, 2)
+  remainingBalance  Decimal         @db.Decimal(10, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  discount          Decimal         @default(0) @db.Decimal(10, 2)
+  applicantType     String?         @default("RESIDENT")
+  dob               DateTime?
+  firstName         String?
+  gender            String?
+  lastName          String?
+  nationalId        String?
+  passportExpiry    DateTime?
+  passportNumber    String?
+  applicantCode     String?         @unique
+  locationId        String?
+  transportFromId   String?
+  transportFrom     Location?       @relation("TransportFrom", fields: [transportFromId], references: [id])
+  location          Location?       @relation(fields: [locationId], references: [id])
+  transportType     String?
+  activityLogs      ActivityLog[]
+  documents         Document[]
+  ticket            Ticket?
+  transactions      Transaction[]
+  messageLogs       MessageLog[]
+  vouchers          Voucher[]
+}
+
+// Message Logging for Smart Messaging System
+model MessageLog {
+  id           String    @id @default(uuid())
+  applicantId  String
+  templateId   String?
+  trigger      String    // ON_ACCOUNT_CREATED, ON_EXAM_SCHEDULED, etc.
+  channel      String    @default("WHATSAPP") // WHATSAPP, SMS, EMAIL
+  message      String    @db.Text
+  attachments  String?   // JSON array of attachment URLs
+  status       String    @default("SENT") // PENDING, SENT, FAILED
+  sentAt       DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  applicant    Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+model PricingPackage {
+  id         String        @id @default(uuid())
+  name       String        @unique
+  location   ExamLocation?
+  price      Decimal       @db.Decimal(10, 2)
+  actualCost Decimal       @db.Decimal(10, 2)
+  active     Boolean       @default(true)
+}
+
+model Transaction {
+  id              String          @id @default(uuid())
+  applicantId     String?
+  amount          Decimal         @db.Decimal(10, 2)
+  type            TransactionType
+  date            DateTime        @default(now())
+  notes           String?
+  category        String?
+  description     String?
+  relatedLocation ExamLocation?
+  locationId      String?
+  applicant       Applicant?      @relation(fields: [applicantId], references: [id])
+  location        Location?       @relation(fields: [locationId], references: [id])
+}
+
+model ActivityLog {
+  id          String     @id @default(uuid())
+  action      String
+  details     String?
+  userId      String?
+  applicantId String?
+  timestamp   DateTime   @default(now())
+  applicant   Applicant? @relation(fields: [applicantId], references: [id])
+  user        User?      @relation(fields: [userId], references: [id])
+}
+
+model MessagingTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // WHATSAPP, EMAIL, SMS
+  trigger   String?  @unique // e.g., ON_REGISTRATION, ON_PASS, ON_FAIL
+  subject   String?
+  body      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Document {
+  id          String       @id @default(uuid())
+  applicantId String
+  type        DocumentType
+  fileName    String
+  fileUrl     String
+  uploadedAt  DateTime     @default(now())
+  applicant   Applicant    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id                String    @id @default(uuid())
+  applicantId       String    @unique
+  ticketNumber      String    @unique
+  busNumber         String?
+  seatNumber        String?
+  departureDate     DateTime
+  departureLocation String
+  arrivalLocation   String
+  transportCompany  String
+  status            String    @default("ISSUED")
+  createdAt         DateTime  @default(now())
+  applicant         Applicant @relation(fields: [applicantId], references: [id])
+}
+
+enum ExamLocation {
+  TAIZ
+  ADEN
+  HADRAMOUT
+}
+
+enum ApplicantStatus {
+  NEW_REGISTRATION
+  ACCOUNT_CREATED
+  EXAM_SCHEDULED
+  AWAITING_EXAM
+  ATTENDED_EXAM
+  PASSED
+  FAILED
+  POSTPONED
+  CANCELLED
+  SERVICES_CONFIGURED
+  ABSENT
+}
+
+enum UserRole {
+  ADMIN
+  REGISTRATION_STAFF
+  ACCOUNTANT
+  FOLLOW_UP_STAFF
+}
+
+enum TransactionType {
+  PAYMENT
+  EXPENSE
+  WITHDRAWAL
+}
+
+enum DocumentType {
+  EXAM_TICKET
+  CERTIFICATE
+  ID_DOCUMENT
+  OTHER
+}
+
+model Voucher {
+  id          String      @id @default(uuid())
+  applicantId String
+  type        VoucherType
+  notes       String?
+  discountPercent Float       @default(100)
+  locationId  String?
+  location    Location?       @relation(fields: [locationId], references: [id])
+  isUsed      Boolean     @default(false)
+  usedAt      DateTime?
+  createdAt   DateTime    @default(now())
+  expiresAt   DateTime?
+  applicant   Applicant   @relation(fields: [applicantId], references: [id])
+}
+
+enum VoucherType {
+  EXAM
+  TRANSPORT_ONEWAY
+  TRANSPORT_ROUNDTRIP
+  FULL_PROGRAM
+}
+
