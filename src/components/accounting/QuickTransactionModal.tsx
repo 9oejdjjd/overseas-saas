@@ -22,6 +22,7 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
 
     // Transaction Data
     const [amount, setAmount] = useState("");
+    const [discountAmount, setDiscountAmount] = useState("");
     const [description, setDescription] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -34,6 +35,7 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
             setSearchResults([]);
             setSelectedApplicant(null);
             setAmount("");
+            setDiscountAmount("");
             setDescription("");
         }
     }, [isOpen]);
@@ -46,12 +48,14 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
                 fetch(`/api/applicants?search=${searchQuery}&limit=5`)
                     .then(res => res.json())
                     .then(data => {
-                        // API returns an array of applicants directly
-                        if (Array.isArray(data)) {
+                        // API returns { data: [...], pagination: {...} }
+                        if (data.data && Array.isArray(data.data)) {
+                            setSearchResults(data.data);
+                        } else if (Array.isArray(data)) {
+                            // Support legacy/direct array format if exists
                             setSearchResults(data);
                         } else {
-                            // Fallback in case API changes later
-                            setSearchResults(data.applicants || []);
+                            setSearchResults([]);
                         }
                     })
                     .catch(console.error)
@@ -70,6 +74,7 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
             const body = {
                 type,
                 amount: Number(amount),
+                discountAmount: type === "PAYMENT" && discountAmount ? Number(discountAmount) : 0,
                 description,
                 notes: description,
                 applicantId: selectedApplicant?.id || null,
@@ -197,7 +202,7 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
+                                <div className={type === "PAYMENT" ? "" : "col-span-2"}>
                                     <Label>المبلغ (ر.ي)</Label>
                                     <Input
                                         type="number"
@@ -208,6 +213,21 @@ export function QuickTransactionModal({ isOpen, onClose, onSuccess }: QuickTrans
                                         autoFocus
                                     />
                                 </div>
+                                {type === "PAYMENT" && (
+                                    <div>
+                                        <Label>خصم (ر.ي)</Label>
+                                        <Input
+                                            type="number"
+                                            className="text-lg font-bold text-orange-600"
+                                            placeholder="0"
+                                            value={discountAmount}
+                                            onChange={e => setDiscountAmount(e.target.value)}
+                                        />
+                                        {discountAmount && Number(discountAmount) > 0 && (
+                                            <p className="text-xs text-orange-600 mt-1">سيُخصم {Number(discountAmount).toLocaleString()} ر.ي من المبلغ المستحق</p>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="col-span-2">
                                     <Label>ملاحظات / وصف</Label>
                                     <Input

@@ -40,6 +40,7 @@ export type Transaction = {
     type: string; // PAYMENT, EXPENSE, WITHDRAWAL
     date: string;
     notes?: string | null;
+    description?: string | null;
 };
 
 export type Ticket = {
@@ -56,6 +57,8 @@ export type Ticket = {
     status: string;
     createdAt: string;
     applicantCode?: string | null;
+    trip?: any;
+    returnTrip?: any;
 };
 
 export type ActivityLog = {
@@ -75,6 +78,12 @@ export interface ExtendedApplicant extends Applicant {
         code?: string;
         address?: string | null;
         locationUrl?: string | null;
+        examCenters?: { id: string; name: string }[];
+    } | null;
+    examCenterId?: string | null;
+    examCenter?: {
+        id: string;
+        name: string;
     } | null;
     transportFrom?: { id: string; name: string } | null;
     transportType?: string | null;

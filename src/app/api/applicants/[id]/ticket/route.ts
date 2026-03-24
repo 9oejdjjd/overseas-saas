@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function GET(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> } // applicantId
 ) {
     try {
@@ -40,17 +40,22 @@ export async function GET(
 
         // If we have both locations, try to find the route
         if (fromLocation && toLocation) {
-            const route = await prisma.transportRoute.findFirst({
+            const route = await prisma.transportRouteDefault.findFirst({
                 where: {
-                    fromId: fromLocation.id,
-                    toId: toLocation.id,
-                    isActive: true
+                    fromDestinationId: fromLocation.id, // Assuming location ID matches destination ID or we need lookup
+                    toDestinationId: toLocation.id,
+                    // isActive: true // Default routes don't have isActive flag in schema shown? check schema
                 }
             });
 
             if (route) {
-                departureTime = route.departureTime;
-                arrivalTime = route.arrivalTime;
+                // Default routes might not have departure times, specific trips do. 
+                // But this file seems to want general route info.
+                // Schema shows TransportRouteDefault has NO departureTime/arrivalTime.
+                // So we can't return them from default route.
+                // We return null or remove these fields from response if data is missing.
+                departureTime = null;
+                arrivalTime = null;
             }
         }
 

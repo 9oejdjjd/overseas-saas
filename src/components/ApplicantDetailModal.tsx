@@ -9,7 +9,6 @@ import { useApplicantData } from "@/hooks/useApplicantData";
 import { ApplicantSetupWizard } from "./ApplicantSetupWizard";
 
 interface Props {
-    // @ts-ignore
     applicant: ExtendedApplicant | null;
     open: boolean;
     onClose: () => void;

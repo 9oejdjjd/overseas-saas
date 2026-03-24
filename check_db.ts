@@ -8,17 +8,16 @@ async function main() {
         const locations = await prisma.location.findMany();
         locations.forEach(l => console.log(`Location: '${l.name}' (ID: ${l.id})`));
 
-        console.log("\n--- Checking Transport Routes ---");
-        const routes = await prisma.transportRoute.findMany({
-            include: { from: true, to: true },
-            where: { isActive: true }
+        console.log("\n--- Checking Transport Routes (Defaults) ---");
+        const routes = await prisma.transportRouteDefault.findMany({
+            include: { fromDestination: true, toDestination: true },
         });
 
         if (routes.length === 0) {
             console.log("No active routes found!");
         } else {
             routes.forEach(r => {
-                console.log(`Route: '${r.from.name}' -> '${r.to.name}' | Price: ${r.oneWayPrice}`);
+                console.log(`Route: '${r.fromDestination.name}' -> '${r.toDestination.name}' | Price: ${r.price}`);
             });
         }
 

@@ -61,10 +61,16 @@ export function ApplicantsTableToolbar<TData>({
                     <SelectContent>
                         <SelectItem value="ALL">جميع الحالات</SelectItem>
                         <SelectItem value="NEW_REGISTRATION">تسجيل جديد</SelectItem>
-                        <SelectItem value="TICKET_ISSUED">تم إصدار التذكرة</SelectItem>
+                        <SelectItem value="ACCOUNT_CREATED">تم إنشاء الحساب</SelectItem>
                         <SelectItem value="EXAM_SCHEDULED">اختبار مجدول</SelectItem>
-                        <SelectItem value="COMPLETED">مكتمل</SelectItem>
+                        <SelectItem value="AWAITING_EXAM">بانتظار الاختبار</SelectItem>
+                        <SelectItem value="ATTENDED_EXAM">حضر الاختبار</SelectItem>
+                        <SelectItem value="PASSED">ناجح</SelectItem>
+                        <SelectItem value="FAILED">راسب</SelectItem>
+                        <SelectItem value="ABSENT">غائب</SelectItem>
+                        <SelectItem value="POSTPONED">مؤجل</SelectItem>
                         <SelectItem value="CANCELLED">ملغي</SelectItem>
+                        <SelectItem value="SERVICES_CONFIGURED">تم تكوين الخدمات</SelectItem>
                     </SelectContent>
                 </Select>
 

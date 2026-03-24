@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, formatDateLocal } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CustomDatePicker } from "@/components/ui/custom-date-picker";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarClock, Save, Lock, AlertCircle, Edit, MapPin, Clock, CalendarDays, X, CheckCircle, CheckCircle2, XCircle, AlertTriangle, UserCheck } from "lucide-react";
+import { CalendarClock, Save, Lock, AlertCircle, Edit, MapPin, Clock, CalendarDays, X, CheckCircle, CheckCircle2, XCircle, AlertTriangle, UserCheck, Loader2 } from "lucide-react";
 import { ExtendedApplicant } from "@/types/applicant";
 import { Badge } from "@/components/ui/badge";
 import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
@@ -27,7 +26,7 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
     const [locations, setLocations] = useState<any[]>([]);
     const [serviceConfig, setServiceConfig] = useState<{ registrationPrice: number } | null>(null);
     const [activeVouchers, setActiveVouchers] = useState<any[]>([]);
-    const [useVoucher, setUseVoucher] = useState<{ id: string, notes?: string } | null>(null);
+    const [useVoucher, setUseVoucher] = useState<{ id: string, notes?: string, discountPercent?: number } | null>(null);
 
     // Check if exam is already scheduled
     const isExamScheduled = !!(applicant.examDate && applicant.examTime);
@@ -45,7 +44,10 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
         examTime: applicant.examTime || "",
         // Auto-select location: use examLocation if set, otherwise fallback to location.name from registration
         examLocation: applicant.examLocation || applicant.location?.name || "",
+        examCenter: applicant.examCenterId || "",
     });
+
+    const [availableCenters, setAvailableCenters] = useState<any[]>([]);
 
     // Fetch Locations and Pricing
     useEffect(() => {
@@ -116,6 +118,20 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
         }
     }, [viewMode, isEditing, isExamScheduled]);
 
+    // Update available centers when location changes
+    useEffect(() => {
+        const selectedLoc = locations.find(l => l.name === formData.examLocation);
+        setAvailableCenters(selectedLoc ? selectedLoc.examCenters || [] : []);
+
+        // Reset center if it doesn't belong to the new location (unless it's the initial load)
+        if (selectedLoc && formData.examCenter) {
+            const centerExists = selectedLoc.examCenters?.some((c: any) => c.id === formData.examCenter);
+            if (!centerExists) {
+                setFormData(prev => ({ ...prev, examCenter: "" }));
+            }
+        }
+    }, [formData.examLocation, locations]);
+
     const handleScheduleExam = async () => {
         if (!formData.examDate) {
             alert("Please select a date");
@@ -161,6 +177,7 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                     examDate: formData.examDate,
                     examTime: formData.examTime,
                     examLocation: formData.examLocation,
+                    examCenterId: formData.examCenter,
                     scheduleExam: true,
                     isRetake: isRetake,
                     feeAmount: feeAmount,
@@ -207,7 +224,15 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
     const isViewMode = (isExamScheduled || isFailedOrAbsent) && !isEditing;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-xl">
+                    <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        <span className="text-sm font-semibold text-blue-800">جاري المعالجة...</span>
+                    </div>
+                </div>
+            )}
             {/* --- EXAM DATE CARD --- */}
             <Card className={isViewMode ? "bg-white border-blue-100 shadow-sm" : "bg-white"}>
                 <CardHeader className="pb-2">
@@ -259,6 +284,11 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                     <span className="font-bold text-lg text-gray-900">
                                         {locations.find(l => l.name === applicant.examLocation)?.name || applicant.examLocation || "-"}
                                     </span>
+                                    {applicant.examCenter && (
+                                        <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1">
+                                            {applicant.examCenter.name}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -288,9 +318,10 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                 <div className="flex justify-center pt-2">
                                     <ContextualMessageButton
                                         applicant={applicant}
-                                        trigger="ON_EXAM_SCHEDULED"
+                                        trigger="ON_EXAM_SCHEDULE"
                                         variant="success"
                                         label="إرسال تأكيد الموعد"
+                                        allowCustomAttachment={true}
                                         onSuccess={onUpdate}
                                     />
                                 </div>
@@ -323,22 +354,41 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
 
                             <div className="space-y-2">
                                 <Label>تاريخ الاختبار الجديد</Label>
-                                <CustomDatePicker
-                                    value={formData.examDate ? new Date(formData.examDate) : undefined}
-                                    onChange={(date) => {
-                                        const dateStr = date ? date.toISOString().split('T')[0] : "";
+                                <DatePicker
+                                    date={formData.examDate ? new Date(formData.examDate) : undefined}
+                                    setDate={(date) => {
+                                        const dateStr = date ? formatDateLocal(date) : "";
                                         setFormData({ ...formData, examDate: dateStr });
                                     }}
+                                    placeholder="اختر تاريخ الاختبار"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label>وقت الاختبار</Label>
-                                <Input
-                                    type="time"
+                                <Select
                                     value={formData.examTime}
-                                    onChange={(e) => setFormData({ ...formData, examTime: e.target.value })}
-                                    className="font-mono"
-                                />
+                                    onValueChange={(v) => setFormData({ ...formData, examTime: v })}
+                                >
+                                    <SelectTrigger className="font-mono text-center bg-white border-blue-200 focus:ring-blue-500">
+                                        <SelectValue placeholder="اختر وقت الاختبار" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-56">
+                                        {Array.from({ length: 27 }, (_, i) => {
+                                            const hour = Math.floor(i / 2) + 7;
+                                            const m = i % 2 === 0 ? "00" : "30";
+                                            return `${hour.toString().padStart(2, '0')}:${m}`;
+                                        }).map(time => (
+                                            <SelectItem key={time} value={time}>{time} {parseInt(time) < 12 ? 'ص' : 'م'}</SelectItem>
+                                        ))}
+                                        {formData.examTime && !Array.from({ length: 27 }, (_, i) => {
+                                            const hour = Math.floor(i / 2) + 7;
+                                            const m = i % 2 === 0 ? "00" : "30";
+                                            return `${hour.toString().padStart(2, '0')}:${m}`;
+                                        }).includes(formData.examTime) && (
+                                            <SelectItem value={formData.examTime}>{formData.examTime}</SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label>مدينة الاختبار <span className="text-xs text-gray-400 font-normal">({locations.length} متاح)</span></Label>
@@ -364,6 +414,32 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            <div className="space-y-2">
+                                <Label>مركز الاختبار <span className="text-xs text-gray-400 font-normal">({availableCenters.length} متاح)</span></Label>
+                                <Select
+                                    value={formData.examCenter}
+                                    onValueChange={(v) => setFormData({ ...formData, examCenter: v })}
+                                    disabled={!formData.examLocation || availableCenters.length === 0}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={!formData.examLocation ? "اختر المدينة أولاً" : "اختر المركز"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableCenters.length > 0 ? (
+                                            availableCenters.map((center) => (
+                                                <SelectItem key={center.id} value={center.id}>
+                                                    {center.name}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <div className="p-2 text-center text-gray-500 text-sm">
+                                                لا توجد مراكز متاحة
+                                            </div>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     )}
                 </CardContent>
@@ -378,6 +454,7 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                     examDate: applicant.examDate ? new Date(applicant.examDate).toISOString().split('T')[0] : "",
                                     examTime: applicant.examTime || "",
                                     examLocation: applicant.examLocation || applicant.location?.name || "",
+                                    examCenter: applicant.examCenterId || "",
                                 });
                             }}>
                                 <X className="h-4 w-4 ml-2" />
@@ -487,10 +564,11 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                         <h4 className="font-semibold text-gray-800">إرسال الشهادة</h4>
                                         <ContextualMessageButton
                                             applicant={applicant}
-                                            trigger="ON_CERTIFICATE_SENT"
+                                            trigger="ON_CERTIFICATE"
                                             variant="default"
                                             label="إرسال الشهادة + رسالة"
                                             allowCustomAttachment={true}
+                                            requireAttachment={true}
                                             attachmentName="ملف الشهادة"
                                             className="w-full bg-blue-600 hover:bg-blue-700"
                                             onSuccess={onUpdate}
@@ -598,22 +676,41 @@ export function ApplicantExamTab({ applicant, onUpdate, viewMode = "admin" }: Ap
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>تاريخ الاختبار الجديد</Label>
-                                            <CustomDatePicker
-                                                value={formData.examDate ? new Date(formData.examDate) : undefined}
-                                                onChange={(date) => {
-                                                    const dateStr = date ? date.toISOString().split('T')[0] : "";
+                                            <DatePicker
+                                                date={formData.examDate ? new Date(formData.examDate) : undefined}
+                                                setDate={(date) => {
+                                                    const dateStr = date ? formatDateLocal(date) : "";
                                                     setFormData({ ...formData, examDate: dateStr });
                                                 }}
+                                                placeholder="اختر تاريخ الاختبار"
                                             />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>وقت الاختبار</Label>
-                                            <Input
-                                                type="time"
+                                            <Select
                                                 value={formData.examTime}
-                                                onChange={(e) => setFormData({ ...formData, examTime: e.target.value })}
-                                                className="font-mono"
-                                            />
+                                                onValueChange={(v) => setFormData({ ...formData, examTime: v })}
+                                            >
+                                                <SelectTrigger className="font-mono text-center bg-white border-blue-200 focus:ring-blue-500">
+                                                    <SelectValue placeholder="اختر وقت الاختبار" />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-56">
+                                                    {Array.from({ length: 27 }, (_, i) => {
+                                                        const hour = Math.floor(i / 2) + 7;
+                                                        const m = i % 2 === 0 ? "00" : "30";
+                                                        return `${hour.toString().padStart(2, '0')}:${m}`;
+                                                    }).map(time => (
+                                                        <SelectItem key={time} value={time}>{time} {parseInt(time) < 12 ? 'ص' : 'م'}</SelectItem>
+                                                    ))}
+                                                    {formData.examTime && !Array.from({ length: 27 }, (_, i) => {
+                                                        const hour = Math.floor(i / 2) + 7;
+                                                        const m = i % 2 === 0 ? "00" : "30";
+                                                        return `${hour.toString().padStart(2, '0')}:${m}`;
+                                                    }).includes(formData.examTime) && (
+                                                        <SelectItem value={formData.examTime}>{formData.examTime}</SelectItem>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                         <div className="space-y-2 md:col-span-2">
                                             <Label>مدينة الاختبار</Label>

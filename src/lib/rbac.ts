@@ -21,6 +21,7 @@ export const PERMISSIONS = {
 
     // Settings
     ACCESS_SETTINGS: ['ADMIN'],
+    MANAGE_SYSTEM: ['ADMIN'],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -29,8 +30,8 @@ export type Permission = keyof typeof PERMISSIONS;
  * Check if a user role has a specific permission
  */
 export function hasPermission(userRole: UserRole | string, permission: Permission): boolean {
-    const allowedRoles = PERMISSIONS[permission];
-    return allowedRoles.includes(userRole as UserRole);
+    const allowedRoles: readonly string[] = PERMISSIONS[permission];
+    return allowedRoles.includes(userRole);
 }
 
 /**

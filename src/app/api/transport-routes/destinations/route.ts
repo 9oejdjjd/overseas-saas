@@ -13,23 +13,23 @@ export async function GET(req: Request) {
         }
 
         // Find routes starting from 'from'
-        const routes = await prisma.transportRoute.findMany({
+        const routes = await prisma.transportRouteDefault.findMany({
             where: {
-                from: { name: from },
-                isActive: true
+                fromDestination: { name: from },
+                // isActive: true
             },
             include: {
-                to: true
+                toDestination: true
             },
-            distinct: ['toId']
+            distinct: ['toDestinationId']
         });
 
 
 
-        const destinations = routes.map(r => ({
-            id: r.to.id,
-            name: r.to.name,
-            price: r.oneWayPrice
+        const destinations = routes.map((r: { toDestination: { id: any; name: any; }; price: any; }) => ({
+            id: r.toDestination.id,
+            name: r.toDestination.name,
+            price: r.price
         }));
 
         return NextResponse.json(destinations);

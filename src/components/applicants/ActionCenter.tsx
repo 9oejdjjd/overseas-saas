@@ -13,7 +13,26 @@ interface Stats {
 
 export function ActionCenter() {
     const [stats, setStats] = useState<Stats | null>(null);
+    const [loading, setLoading] = useState(true);
 
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const res = await fetch("/api/applicants/stats");
+                if (!res.ok) throw new Error("Failed to fetch stats");
+                const data = await res.json();
+                setStats(data);
+            } catch (error) {
+                console.error("Error fetching stats:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, []);
+
+    if (loading) return null; // Or return a skeleton loader
     if (!stats) return null;
 
     // Check if everything is good

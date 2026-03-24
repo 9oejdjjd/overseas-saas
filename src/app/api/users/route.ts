@@ -3,6 +3,8 @@ import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { userCreateSchema } from "@/lib/validations";
+import { z } from "zod";
 
 export async function GET() {
     try {
@@ -44,7 +46,16 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { name, email, password, role } = body;
+        const parsed = userCreateSchema.safeParse(body);
+        
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "بيانات غير صالحة", details: parsed.error.format() },
+                { status: 400 }
+            );
+        }
+
+        const { name, email, password, role } = parsed.data;
 
         // Check if email already exists
         const existingUser = await prisma.user.findUnique({

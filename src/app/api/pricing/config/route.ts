@@ -33,8 +33,12 @@ export async function PATCH(request: Request) {
             where: { id: "global" },
             data: {
                 registrationPrice: body.registrationPrice,
-                examChangeFee: body.examChangeFee,
-                maxFreeChanges: body.maxFreeChanges
+                registrationCost: body.registrationCost,
+                examChangeCost: body.examChangeCost,
+                maxFreeChanges: body.maxFreeChanges,
+                maxAllowedExamChanges: body.maxAllowedExamChanges,
+                examModificationDeadline: body.examModificationDeadline,
+                examCancellationDeadline: body.examCancellationDeadline
             }
         });
 

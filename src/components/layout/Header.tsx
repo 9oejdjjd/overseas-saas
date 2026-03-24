@@ -36,7 +36,6 @@ export function Header() {
     };
 
     const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-        // ... (existing search logic remains same, just ensuring this block is valid)
         if (e.key === "Enter" && searchQuery.trim()) {
             setIsSearching(true);
             try {
@@ -45,17 +44,21 @@ export function Header() {
                     alert(`خطأ في البحث: ${res.status}`);
                     return;
                 }
-                const results = await res.json();
-                if (results && results.error) {
-                    alert(`خطأ: ${results.error}`);
+                const response = await res.json();
+                if (response && response.error) {
+                    alert(`خطأ: ${response.error}`);
                     return;
                 }
+
+                // API returns { data: [...], pagination: {...} }
+                const results = response.data || response;
+
                 if (Array.isArray(results) && results.length > 0) {
                     const exactMatch = results.find(
-                        (r) => r.applicantCode?.toLowerCase() === searchQuery.toLowerCase()
+                        (r: any) => r.applicantCode?.toLowerCase() === searchQuery.toLowerCase()
                     );
                     const target = exactMatch || results[0];
-                    router.push(`/applicants/${target.id}`);
+                    router.push(`/dashboard/applicants/${target.id}`);
                 } else {
                     alert(`لم يتم العثور على متقدم بـ "${searchQuery}"`);
                 }

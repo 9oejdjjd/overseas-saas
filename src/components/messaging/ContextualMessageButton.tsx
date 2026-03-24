@@ -7,9 +7,7 @@ import { MessageCircle, Send, Loader2, Copy, CheckCircle2, Paperclip, FileText, 
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-
-// Global window reference to reuse the same WhatsApp tab
-let whatsappWindowRef: Window | null = null;
+import { useToast } from "@/components/ui/simple-toast";
 
 interface ContextualMessageButtonProps {
     applicant: any;
@@ -18,6 +16,7 @@ interface ContextualMessageButtonProps {
     attachmentUrl?: string;
     attachmentName?: string;
     allowCustomAttachment?: boolean; // Allow user to add their own attachment
+    requireAttachment?: boolean; // FORCE user to attach a file before sending
     autoGeneratePDF?: boolean; // For ticket - auto generate PDF
     pdfGeneratorRef?: React.RefObject<HTMLDivElement>; // Ref to ticket template for PDF generation
     variant?: "default" | "success" | "mini" | "inline";
@@ -27,19 +26,31 @@ interface ContextualMessageButtonProps {
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
-    "ON_ACCOUNT_CREATED": "رسالة الترحيب",
-    "ON_EXAM_SCHEDULED": "تأكيد موعد الاختبار",
-    "ON_EXAM_MODIFIED": "تعديل موعد الاختبار",
-    "ON_EXAM_ABSENT": "تسجيل غياب",
-    "ON_TICKET_ISSUED": "تفاصيل التذكرة",
-    "ON_TICKET_MODIFIED": "تعديل التذكرة",
-    "ON_TICKET_CANCELLED": "إلغاء التذكرة",
+    "ON_REGISTRATION": "تأكيد التسجيل الجديد",
+    "ON_DASHBOARD_ACCESS": "بيانات الدخول للمنصة",
+    "ON_EXAM_SCHEDULE": "تأكيد حجز الاختبار",
+    "ON_EXAM_RESCHEDULE": "تعديل موعد الاختبار",
+    "ON_EXAM_CANCEL": "إلغاء حجز الاختبار",
+    "ON_EXAM_ABSENT": "تغيب عن الاختبار",
+    "ON_EXAM_VOUCHER": "قسيمة اختبار",
+    "ON_TICKET_ISSUE": "إصدار تذكرة سفر",
+    "ON_TICKET_UPDATE": "تعديل تذكرة سفر",
+    "ON_TICKET_CANCEL": "إلغاء تذكرة سفر",
+    "ON_TICKET_NO_SHOW": "تغيب عن الرحلة",
+    "ON_TICKET_VOUCHER": "قسيمة تذكرة سفر",
+    "REMINDER_EXAM_2DAYS": "تذكير اختبار (48 ساعة)",
+    "REMINDER_TRAVEL_2DAYS": "تذكير سفر (48 ساعة)",
+    "ON_MOCK_EXAM_LINK": "رابط الاختبار التجريبي",
+    "ON_MOCK_PASS": "نتيجة اختبار تجريبي (ناجح - مسجل)",
+    "ON_MOCK_FAIL": "نتيجة اختبار تجريبي (راسب - مسجل)",
+    "ON_MOCK_PASS_VISITOR": "نتيجة اختبار تجريبي (ناجح - زائر)",
+    "ON_MOCK_FAIL_VISITOR": "نتيجة اختبار تجريبي (راسب - زائر)",
     "ON_PASS": "تهنئة بالنجاح",
-    "ON_FAIL": "رسالة تشجيع",
-    "ON_EXAM_REMINDER": "تذكير بالاختبار",
-    "ON_TRAVEL_REMINDER": "تذكير بالسفر",
-    "ON_REGISTRATION": "تأكيد التسجيل",
-    "ON_CERTIFICATE_SENT": "إرسال الشهادة",
+    "ON_CERTIFICATE": "إرسال الشهادة",
+    "ON_FAIL": "إشعار نتيجة (لم يجتز)",
+    "ON_RETAKE_VOUCHER": "قسيمة تعويضية",
+    "ON_FEEDBACK": "طلب تقييم الخدمة",
+    "ON_REFERRAL_VOUCHER": "قسيمة تسويقية"
 };
 
 export function ContextualMessageButton({
@@ -49,6 +60,7 @@ export function ContextualMessageButton({
     attachmentUrl,
     attachmentName,
     allowCustomAttachment = false,
+    requireAttachment = false,
     autoGeneratePDF = false,
     pdfGeneratorRef,
     variant = "default",
@@ -69,6 +81,7 @@ export function ContextualMessageButton({
     const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
     const [generatingPdf, setGeneratingPdf] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
 
     // Check if this message was already sent
     useEffect(() => {
@@ -90,54 +103,32 @@ export function ContextualMessageButton({
         setLoading(true);
         setIsOpen(true);
         try {
-            const res = await fetch("/api/settings/templates");
-            const templates = await res.json();
-
-            const template = templates.find((t: any) => t.trigger === trigger);
-
-            if (template) {
-                setTemplateName(template.name);
-                let text = template.body;
-
-                const effectiveTicket = ticket || applicant.ticket;
-
-                // Variable Replacement
-                text = text.replace(/{name}/g, applicant.fullName || "");
-                text = text.replace(/{applicant_code}/g, applicant.applicantCode || "");
-                text = text.replace(/{phone}/g, applicant.phone || "");
-                text = text.replace(/{profession}/g, applicant.profession || "");
-                text = text.replace(/{location}/g, applicant.location?.name || applicant.examLocation || "");
-                text = text.replace(/{location_address}/g, applicant.location?.address || "");
-                text = text.replace(/{location_url}/g, applicant.location?.locationUrl || "");
-                text = text.replace(/{remaining}/g, Number(applicant.remainingBalance || 0).toLocaleString());
-                text = text.replace(/{email}/g, applicant.platformEmail || "");
-                text = text.replace(/{password}/g, applicant.platformPassword || "");
-
-                if (applicant.examDate) {
-                    const dateStr = format(new Date(applicant.examDate), "EEEE d MMMM yyyy", { locale: ar });
-                    text = text.replace(/{exam_date}/g, dateStr);
-                }
-                if (applicant.examTime) {
-                    text = text.replace(/{exam_time}/g, applicant.examTime);
-                }
-
-                if (effectiveTicket) {
-                    text = text.replace(/{ticket_number}/g, effectiveTicket.ticketNumber || "");
-                    text = text.replace(/{transport_company}/g, effectiveTicket.transportCompany || "");
-                    text = text.replace(/{departure_location}/g, effectiveTicket.departureLocation || "");
-                    text = text.replace(/{arrival_location}/g, effectiveTicket.arrivalLocation || "");
-                    text = text.replace(/{bus_number}/g, effectiveTicket.busNumber || "");
-                    text = text.replace(/{seat_number}/g, effectiveTicket.seatNumber || "");
-                    if (effectiveTicket.departureDate) {
-                        const travelDate = format(new Date(effectiveTicket.departureDate), "EEEE d MMMM yyyy", { locale: ar });
-                        text = text.replace(/{travel_date}/g, travelDate);
+            // Use Backend Engine to Parse Template
+            const response = await fetch("/api/messages/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    applicantId: applicant.id,
+                    trigger,
+                    ticketId: ticket?.id,
+                    // Pass additional custom variables here if needed
+                    customVars: {
+                        discountAmount: "---", // To be filled optionally by parent components if needed 
+                        voucherCode: "---",
                     }
-                }
+                })
+            });
 
-                setMessage(text);
-            } else {
-                setMessage(`لا يوجد قالب معرف لهذا النوع: ${trigger}\n\nيرجى إنشاء قالب جديد من صفحة قوالب الرسائل.`);
+            if (!response.ok) {
+                const errData = await response.json();
+                setMessage(errData.error || "خطأ في توليد الرسالة من الخادم.");
+                setTemplateName("");
+                return;
             }
+
+            const data = await response.json();
+            setTemplateName(data.templateName);
+            setMessage(data.message);
 
         } catch (error) {
             console.error(error);
@@ -148,49 +139,71 @@ export function ContextualMessageButton({
     };
 
     const handleSend = async () => {
-        // Log the message to database
-        try {
-            await fetch("/api/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    applicantId: applicant.id,
-                    trigger,
-                    channel: "WHATSAPP",
-                    message,
-                    attachments: attachmentUrl ? [attachmentUrl] : null,
-                    status: "SENT",
-                })
-            });
-        } catch (e) {
-            console.error("Failed to log message", e);
+        // Enforce attachment requirement
+        if (requireAttachment && !customAttachment) {
+            toast("يرجى إرفاق الملف المطلوب قبل الإرسال", "error");
+            return;
         }
 
-        // Open WhatsApp
-        const phone = applicant.whatsappNumber || applicant.phone;
-        let cleanPhone = phone.replace(/\D/g, '');
-        if (cleanPhone.startsWith('0')) cleanPhone = cleanPhone.substring(1);
-        if (!cleanPhone.startsWith('967')) cleanPhone = '967' + cleanPhone;
-
+        setLoading(true);
         let finalMessage = message;
         if (attachmentUrl) {
             finalMessage += `\n\n📎 الملف المرفق:\n${attachmentUrl}`;
         }
 
-        // Use WhatsApp Web directly for faster access (skips the intermediate page)
-        const url = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(finalMessage)}`;
+        // Process custom attachment if any
+        let base64Data = null;
+        let fileName = null;
 
-        // Reuse the same window/tab if it's still open
-        if (whatsappWindowRef && !whatsappWindowRef.closed) {
-            whatsappWindowRef.location.href = url;
-            whatsappWindowRef.focus();
-        } else {
-            whatsappWindowRef = window.open(url, 'whatsapp_chat');
+        if (customAttachment) {
+            try {
+                base64Data = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(customAttachment);
+                });
+                fileName = customAttachment.name;
+            } catch (err) {
+                console.error("Failed to read attachment", err);
+                toast("فشل في قراءة المرفق", "error");
+                setLoading(false);
+                return;
+            }
         }
 
-        setIsOpen(false);
-        setAlreadySent(true);
-        if (onSuccess) onSuccess();
+        try {
+            const sendResponse = await fetch("/api/messages/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    applicantId: applicant.id,
+                    trigger,
+                    message: finalMessage,
+                    attachments: attachmentUrl ? [attachmentUrl] : null,
+                    customAttachmentBase64: base64Data,
+                    customAttachmentName: fileName
+                })
+            });
+
+            if (!sendResponse.ok) {
+                const errData = await sendResponse.json();
+                toast(errData.error || "فشل إرسال الرسالة عبر WPPConnect", "error");
+                setLoading(false);
+                return;
+            }
+
+            toast("تم إرسال الرسالة بنجاح عبر WPPConnect", "success");
+            setIsOpen(false);
+            setAlreadySent(true);
+            if (onSuccess) onSuccess();
+
+        } catch (e) {
+            console.error("Failed to send message", e);
+            toast("حدث خطأ في طلب الإرسال", "error");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const buttonLabel = label || TRIGGER_LABELS[trigger] || "إرسال رسالة";

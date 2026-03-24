@@ -1,9 +1,9 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(
-    req: Request,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -62,16 +62,15 @@ export async function POST(
         // Determine departure
         const departureLoc = (action === "MODIFICATION" && newDeparture) ? newDeparture : applicant.ticket.departureLocation;
 
-        const currentRoute = await prisma.transportRoute.findFirst({
+        const currentRoute = await prisma.transportRouteDefault.findFirst({
             where: {
-                from: { name: departureLoc },
-                to: { name: applicant.ticket.arrivalLocation },
-                isActive: true
+                fromDestination: { name: departureLoc },
+                toDestination: { name: applicant.ticket.arrivalLocation },
             }
         });
 
         const isRoundTrip = applicant.transportType === "ROUND_TRIP";
-        const oldPrice = currentRoute ? (isRoundTrip ? Number(currentRoute.roundTripPrice) : Number(currentRoute.oneWayPrice)) : 0;
+        const oldPrice = currentRoute ? (isRoundTrip ? Number(currentRoute.priceRoundTrip) : Number(currentRoute.price)) : 0;
 
         let newPrice = oldPrice; // Default if no change
         let policyFee = applicablePolicy ? Number(applicablePolicy.feeAmount) : 0;
@@ -79,14 +78,13 @@ export async function POST(
 
         // Modification Logic
         if (action === "MODIFICATION" && newDestination) {
-            const targetRoute = await prisma.transportRoute.findFirst({
+            const targetRoute = await prisma.transportRouteDefault.findFirst({
                 where: {
-                    from: { name: departureLoc },
-                    to: { name: newDestination },
-                    isActive: true
+                    fromDestination: { name: departureLoc },
+                    toDestination: { name: newDestination },
                 }
             });
-            newPrice = targetRoute ? (isRoundTrip ? Number(targetRoute.roundTripPrice) : Number(targetRoute.oneWayPrice)) : 0;
+            newPrice = targetRoute ? (isRoundTrip ? Number(targetRoute.priceRoundTrip) : Number(targetRoute.price)) : 0;
 
             if (targetRoute) {
                 // If old price was 0 (missing route), difference is full value. 
@@ -112,6 +110,9 @@ export async function POST(
         const currentTotal = Number(applicant.totalAmount);
         const newTotal = currentTotal + totalFee;
 
+        // Build applicant label for descriptions
+        const applicantLabel = `${applicant.fullName || 'غير معروف'}`;
+
         // Use 'any' type array to allow mixed Prisma Client types in transaction
         const txOps: any[] = [
             // 1. Update Applicant Financials
@@ -133,7 +134,38 @@ export async function POST(
             })
         ];
 
-        // 3. Update Ticket if Modification
+        // 3. Record financial Transaction for the fee/penalty
+        if (totalFee > 0) {
+            let feeDescription = '';
+            let feeCategory = '';
+
+            if (action === "CANCELLATION") {
+                feeCategory = "TICKET_PENALTY";
+                feeDescription = `غرامة إلغاء تذكرة - ${applicantLabel} - السياسة: ${applicablePolicy?.name || 'بدون سياسة'} - الغرامة: ${policyFee.toLocaleString()} ر.ي`;
+            } else if (action === "MODIFICATION") {
+                feeCategory = "TICKET_MODIFICATION";
+                const parts = [];
+                if (policyFee > 0) parts.push(`غرامة تعديل: ${policyFee.toLocaleString()} ر.ي`);
+                if (priceDifference !== 0) parts.push(`فرق السعر: ${priceDifference.toLocaleString()} ر.ي`);
+                feeDescription = `رسوم تعديل تذكرة - ${applicantLabel} - ${parts.join(' + ')} - الإجمالي: ${totalFee.toLocaleString()} ر.ي`;
+                if (newDestination) feeDescription += ` - الوجهة الجديدة: ${newDestination}`;
+            }
+
+            txOps.push(
+                prisma.transaction.create({
+                    data: {
+                        applicantId: id,
+                        amount: totalFee,
+                        type: "EXPENSE",
+                        category: feeCategory,
+                        description: feeDescription,
+                        notes: `سياسة: ${applicablePolicy?.name || 'غير محدد'}`,
+                    }
+                })
+            );
+        }
+
+        // 4. Update Ticket if Modification
         if (action === "MODIFICATION") {
             txOps.push(
                 prisma.ticket.update({
@@ -146,7 +178,7 @@ export async function POST(
             );
         }
 
-        // 4. If Cancellation
+        // 5. If Cancellation
         if (action === "CANCELLATION") {
             txOps.push(
                 prisma.ticket.update({

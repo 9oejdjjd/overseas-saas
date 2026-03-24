@@ -1,20 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(
-    request: Request,
-    props: { params: Promise<{ id: string }> }
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const params = await props.params;
-        const { action, details } = await request.json();
-        const applicantId = params.id;
+        const { id } = await params;
+        const body = await request.json();
+        const { action, details } = body;
 
         const log = await prisma.activityLog.create({
             data: {
                 action,
                 details,
-                applicantId
+                applicantId: id
             }
         });
 

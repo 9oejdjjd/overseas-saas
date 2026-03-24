@@ -30,7 +30,7 @@ export default function LoginPage() {
             if (res?.error) {
                 setError("بيانات الدخول غير صحيحة");
             } else {
-                router.push("/");
+                router.push("/dashboard");
                 router.refresh();
             }
         } catch (err) {

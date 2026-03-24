@@ -54,6 +54,7 @@ export async function GET(request: Request) {
             stats: {
                 total: stats.reduce((acc, s) => acc + s._count.id, 0),
                 sent: stats.find(s => s.status === "SENT")?._count.id || 0,
+                failed: stats.find(s => s.status === "FAILED")?._count.id || 0,
                 pending: stats.find(s => s.status === "PENDING")?._count.id || 0,
                 sentToday,
             }
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
                 message,
                 attachments: attachments ? JSON.stringify(attachments) : null,
                 status: status || "SENT",
-                sentAt: status === "SENT" ? new Date() : null,
+                sentAt: status === "SENT" ? new Date() : undefined,
             }
         });
 

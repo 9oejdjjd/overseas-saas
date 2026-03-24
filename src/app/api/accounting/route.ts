@@ -87,15 +87,18 @@ export async function GET(request: Request) {
             },
         });
 
-        // Calculate per-applicant profit
+        // Calculate per-applicant profit using REAL expenses
         const applicantProfits = applicants.map((app) => {
             const paid = app.transactions
                 .filter((t) => t.type === "PAYMENT")
-                .reduce((sum, t) => sum + Number(t.amount), 0);
+                .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
 
-            // Simplified cost estimation (30% margin)
-            const estimatedCost = Number(app.totalAmount) * 0.7;
-            const profit = paid - estimatedCost;
+            // Real cost from actual EXPENSE transactions
+            const realCost = app.transactions
+                .filter((t) => t.type === "EXPENSE")
+                .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+            const profit = paid - realCost;
 
             return {
                 id: app.id,
@@ -105,7 +108,7 @@ export async function GET(request: Request) {
                 totalAmount: Number(app.totalAmount),
                 discount: Number(app.discount),
                 paid,
-                estimatedCost,
+                realCost,
                 profit,
             };
         });
@@ -116,11 +119,11 @@ export async function GET(request: Request) {
             select: { id: true, name: true }
         });
 
-        // Profit by location (dynamic)
+        // Profit by location (dynamic) - using REAL costs
         const profitByLocation = allLocations.map((loc) => {
             const locApplicants = applicantProfits.filter((a) => a.locationId === loc.id);
             const locRevenue = locApplicants.reduce((sum, a) => sum + a.paid, 0);
-            const locCost = locApplicants.reduce((sum, a) => sum + a.estimatedCost, 0);
+            const locCost = locApplicants.reduce((sum, a) => sum + a.realCost, 0);
             const locProfit = locRevenue - locCost;
 
             return {
@@ -134,16 +137,47 @@ export async function GET(request: Request) {
             };
         });
 
+        // Overdue applicants (those with remaining balance > 0)
+        const overdueApplicants = await prisma.applicant.findMany({
+            where: {
+                remainingBalance: { gt: 0 },
+                ...(locationId ? { locationId } : {}),
+            },
+            select: {
+                id: true,
+                fullName: true,
+                applicantCode: true,
+                phone: true,
+                whatsappNumber: true,
+                profession: true,
+                totalAmount: true,
+                amountPaid: true,
+                discount: true,
+                remainingBalance: true,
+                createdAt: true,
+                status: true,
+                location: { select: { name: true } },
+            },
+            orderBy: { remainingBalance: 'desc' },
+        });
+
+        const totalOverdue = overdueApplicants.reduce(
+            (sum, a) => sum + Number(a.remainingBalance), 0
+        );
+
         return NextResponse.json({
             summary: {
                 revenue,
                 expenses,
                 withdrawals,
                 netProfit,
+                totalOverdue,
+                overdueCount: overdueApplicants.length,
             },
             transactions,
             applicantProfits,
             profitByLocation,
+            overdueApplicants,
             locations: allLocations, // Include locations for filter dropdown
         });
     } catch (error) {

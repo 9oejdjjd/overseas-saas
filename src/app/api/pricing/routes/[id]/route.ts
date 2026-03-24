@@ -1,22 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function PATCH(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params;
         const body = await request.json();
 
-        const route = await prisma.transportRoute.update({
+        const route = await prisma.transportRouteDefault.update({
             where: { id },
             data: {
-                oneWayPrice: body.oneWayPrice,
-                roundTripPrice: body.roundTripPrice,
-                departureTime: body.departureTime,
-                arrivalTime: body.arrivalTime,
-                isActive: body.isActive
+                price: body.oneWayPrice,
+                priceRoundTrip: body.roundTripPrice,
             }
         });
 
@@ -27,14 +24,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params;
-        const route = await prisma.transportRoute.update({
+        const route = await prisma.transportRouteDefault.delete({
             where: { id },
-            data: { isActive: false }
         });
 
         return NextResponse.json(route);

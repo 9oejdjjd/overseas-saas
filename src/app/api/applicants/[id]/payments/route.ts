@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
 
@@ -14,15 +14,28 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { applicantId, amount, notes } = body;
 
+        // Fetch applicant name for rich description
+        const applicantInfo = await prisma.applicant.findUnique({
+            where: { id: applicantId },
+            select: { fullName: true, applicantCode: true, locationId: true }
+        });
+
+        const applicantLabel = applicantInfo
+            ? `${applicantInfo.fullName}${applicantInfo.applicantCode ? ` (${applicantInfo.applicantCode})` : ''}`
+            : 'غير معروف';
+
+        const richDescription = `سند قبض من ${applicantLabel} - المبلغ: ${Number(amount).toLocaleString()} ر.ي${notes ? ` - ${notes}` : ''}`;
+
         // Create payment transaction
         const transaction = await prisma.transaction.create({
             data: {
                 applicantId,
                 amount,
                 type: "PAYMENT",
-                category: "دفعة",
-                description: notes || "دفعة من العميل",
+                category: "CLIENT_PAYMENT",
+                description: richDescription,
                 notes,
+                locationId: applicantInfo?.locationId || null,
             },
         });
 
@@ -39,7 +52,7 @@ export async function POST(request: Request) {
 
         // Calculate totals
         const totalPaid = applicant?.transactions.reduce(
-            (sum, t) => sum + Number(t.amount),
+            (sum: number, t: { amount: { toString: () => string } | number }) => sum + Number(t.amount),
             0
         ) || 0;
 

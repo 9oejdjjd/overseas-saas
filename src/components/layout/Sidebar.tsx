@@ -9,7 +9,6 @@ import { hasPermission } from "@/lib/rbac";
 import {
     LayoutDashboard,
     Users,
-    FileText,
     Settings,
     MessageSquare,
     DollarSign,
@@ -19,43 +18,48 @@ import {
     PieChart,
     Ticket,
     Bus,
+    Briefcase,
+    BadgePercent,
+    TicketPercent,
+    FileText,
+    BookOpen
 } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [
-    { name: "لوحة التحكم", href: "/", icon: LayoutDashboard, permission: null },
-    { name: "المتقدمين", href: "/applicants", icon: Users, permission: "VIEW_APPLICANTS" as const },
+    { name: "لوحة التحكم", href: "/dashboard", icon: LayoutDashboard, permission: null },
+    { name: "المتقدمين", href: "/dashboard/applicants", icon: Users, permission: "VIEW_APPLICANTS" as const },
+    { name: "الاختبارات التجريبية", href: "/dashboard/mock-exams", icon: BookOpen, permission: "VIEW_APPLICANTS" as const },
     {
-        name: "إدارة الرحلات",
-        href: "/tickets",
-        icon: Ticket,
+        name: "إدارة وجدولة النقل",
+        href: "/dashboard/transport",
+        icon: Bus,
         permission: "VIEW_APPLICANTS" as const,
     },
     {
-        name: "كشف الرحلات",
-        href: "/transport/manifest",
+        name: "قائمة الركاب (مانيفست)",
+        href: "/dashboard/transport/manifest",
         icon: Bus,
-        permission: "VIEW_APPLICANTS" as const, // Same permission as tickets for now
+        permission: "VIEW_APPLICANTS" as const,
     },
 
     {
         name: "المحاسبة",
-        href: "/accounting",
+        href: "/dashboard/accounting",
         icon: DollarSign,
         permission: "VIEW_ACCOUNTING" as const,
     },
-    { name: "الأسعار", href: "/pricing", icon: PieChart, permission: "MANAGE_PRICING" as const },
-    { name: "مركز الرسائل", href: "/messaging", icon: MessageSquare, permission: null },
-    { name: "قوالب الرسائل", href: "/settings/templates", icon: FileText, permission: null },
+    { name: "الأسعار", href: "/dashboard/pricing", icon: PieChart, permission: "MANAGE_PRICING" as const },
+    { name: "مركز الرسائل", href: "/dashboard/messaging", icon: MessageSquare, permission: null },
     {
         name: "نظام القسائم",
-        href: "/vouchers",
+        href: "/dashboard/vouchers",
         icon: Ticket,
         permission: "VIEW_ACCOUNTING" as const
     },
     {
         name: "الإعدادات",
-        href: "/settings",
+        href: "/dashboard/settings",
         icon: Settings,
         permission: "ACCESS_SETTINGS" as const,
     },

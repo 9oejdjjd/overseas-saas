@@ -47,8 +47,13 @@ export function CustomDatePicker({ value, onChange, className }: DateInputProps)
 
         if (d && m && y && y.length === 4) {
             const date = new Date(parseInt(y), parseInt(m), parseInt(d));
-            // Basic validation
-            if (date && date.getFullYear() === parseInt(year) && date.getDate() === parseInt(day)) {
+            // Validate using the current arguments, not the stale state
+            if (
+                date &&
+                date.getFullYear() === parseInt(y) &&
+                date.getMonth() === parseInt(m) &&
+                date.getDate() === parseInt(d)
+            ) {
                 onChange(date);
             }
         } else {

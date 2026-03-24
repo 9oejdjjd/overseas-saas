@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
-import { Cairo } from "next/font/google";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/simple-toast";
 
-const cairo = Cairo({
+const ibmPlexArabic = IBM_Plex_Sans_Arabic({
   subsets: ["arabic"],
-  variable: "--font-cairo",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-ibm-arabic",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "نظام إدارة الاعتماد المهني",
-  description: "نظام إدارة تسجيل الامتحانات المهنية",
+  title: "بوابة الاعتماد المهني | اختبار تجريبي مجاني للعمالة اليمنية",
+  description: "اختبر مستواك قبل اختبار الاعتماد المهني السعودي. اختبارات تجريبية مجانية لمهن: عامل تحميل وتنزيل، سائق شاحنة، خياط، عامل مزرعة والمزيد. نجهزك للنجاح من أول محاولة.",
+  keywords: "اعتماد مهني, اختبار تجريبي, عمالة يمنية, السعودية, اختبار مهني, عامل تحميل, سائق شاحنة, خياط, بوابة الاعتماد المهني",
   manifest: "/manifest.json",
+  openGraph: {
+    title: "بوابة الاعتماد المهني | اختبر مستواك مجاناً",
+    description: "منصة تجهزك لاختبار الاعتماد المهني السعودي بأسلوب سهل وبسيط. اختبارات تجريبية مجانية لجميع المهن الحرفية.",
+    type: "website",
+    locale: "ar_YE",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "الاعتماد المهني",
+    title: "بوابة الاعتماد المهني",
   },
   formatDetection: {
     telephone: false,
@@ -34,7 +42,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${cairo.className} ${cairo.variable} antialiased bg-gray-50 text-gray-900`}>
+      <body className={`${ibmPlexArabic.className} ${ibmPlexArabic.variable} antialiased bg-gray-50 text-gray-900`}>
         <ToastProvider>
           {children}
         </ToastProvider>
@@ -42,3 +50,4 @@ export default function RootLayout({
     </html>
   );
 }
+

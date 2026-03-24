@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,6 +13,13 @@ export async function GET(
       include: {
         location: true,
         transportFrom: true,
+        examCenter: true,
+        ticket: {
+          include: {
+            trip: true,
+            returnTrip: true,
+          }
+        }
       }
     });
 
@@ -56,7 +63,7 @@ export async function GET(
 }
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -68,6 +75,18 @@ export async function PATCH(
 
     // Handle Platform Credentials Update
     if (body.updateStatus && body.platformEmail) {
+      // Server-side guard: prevent modifying email after first save
+      const existing = await prisma.applicant.findUnique({
+        where: { id },
+        select: { platformEmail: true }
+      });
+      if (existing?.platformEmail) {
+        return NextResponse.json(
+          { error: "لا يمكن تعديل البريد بعد الحفظ الأول" },
+          { status: 403 }
+        );
+      }
+
       // User requested plain text storage for admin retrieval
       const storedPassword = body.platformPassword;
       dataToUpdate = {
@@ -151,6 +170,7 @@ export async function PATCH(
         examDate: new Date(body.examDate), // Convert to Date
         examTime: body.examTime,
         ...(body.examLocation && { examLocation: body.examLocation }),
+        ...(body.examCenterId && { examCenterId: body.examCenterId }),
       };
 
       // If retaking, status goes back to SCHEDULED
@@ -185,7 +205,7 @@ export async function PATCH(
         'firstName', 'lastName', 'passportNumber', 'nationalId', 'profession', 'notes',
         'locationId', 'transportFromId', 'transportType', 'hasTransportation',
         'totalAmount', 'discount', 'amountPaid', 'remainingBalance',
-        'examLocation' // Note: examDate/Time handled above
+        'examLocation', 'examCenterId' // Note: examDate/Time handled above
       ];
 
       allowedFields.forEach(field => {
@@ -223,6 +243,140 @@ export async function PATCH(
           applicantId: id,
         },
       });
+
+      // --- NEW FEATURE: Generate ExamSession Token for Private Testing ---
+      if (isExamReschedule && applicant.profession) {
+        try {
+          // Find if there corresponds a Profession model to this applicant's profession string
+          const professionObj = await prisma.profession.findFirst({
+            where: { name: applicant.profession }
+          });
+
+          if (professionObj) {
+            // Check if there is already an active session for this attempt to avoid recreating
+            const existingSession = await prisma.examSession.findFirst({
+              where: {
+                applicantId: id,
+                professionId: professionObj.id,
+                status: "NEW" // Only reuse if it's new
+              }
+            });
+
+            if (!existingSession) {
+              await prisma.examSession.create({
+                data: {
+                  type: "PRIVATE",
+                  status: "NEW",
+                  professionId: professionObj.id,
+                  applicantId: id,
+                  passingScore: professionObj.passingScore || 60,
+                }
+              });
+            }
+          }
+        } catch (sessionErr) {
+          console.error("Failed to generate Exam Session for applicant:", sessionErr);
+        }
+      }
+    // --- NEW FEATURE: Auto-send WhatsApp messages on status changes ---
+      const { autoSendMessage } = await import("@/lib/autoSendMessage");
+      
+      if (newStatus === "PASSED") {
+        autoSendMessage(id, "ON_PASS", { followUpTriggers: ["ON_FEEDBACK"] })
+          .catch(e => console.error("[AutoSend] ON_PASS chain error:", e));
+      } else if (newStatus === "FAILED") {
+        autoSendMessage(id, "ON_FAIL")
+          .catch(e => console.error("[AutoSend] ON_FAIL error:", e));
+      } else if (newStatus === "ABSENT") {
+        autoSendMessage(id, "ON_EXAM_ABSENT")
+          .catch(e => console.error("[AutoSend] ON_EXAM_ABSENT error:", e));
+      }
+
+      // If this is a reschedule (not first-time scheduling), send reschedule notification
+      if (newStatus === "EXAM_SCHEDULED" && body.scheduleExam) {
+        const prevExamDate = await prisma.activityLog.count({
+          where: { applicantId: id, action: "EXAM_RESCHEDULED" }
+        });
+        if (prevExamDate > 0) {
+          autoSendMessage(id, "ON_EXAM_RESCHEDULE")
+            .catch(e => console.error("[AutoSend] ON_EXAM_RESCHEDULE error:", e));
+        }
+      }
+    }
+
+    // 3. Auto-record pricing & operational expense for exam scheduling
+    if (body.scheduleExam && body.examDate && newStatus === "EXAM_SCHEDULED") {
+      try {
+        // Fetch applicant info for description and pricing
+        const appForDesc = await prisma.applicant.findUnique({
+          where: { id },
+          select: {
+            fullName: true, applicantCode: true, locationId: true,
+            examLocation: true, profession: true, discount: true,
+            totalAmount: true, remainingBalance: true, amountPaid: true,
+            examCenter: { select: { name: true } }
+          }
+        });
+
+        // Lookup pricing package (sale price + operational cost)
+        const matchingPackage = await prisma.pricingPackage.findFirst({
+          where: {
+            active: true,
+            ...(appForDesc?.examLocation ? { location: appForDesc.examLocation as any } : {})
+          },
+          select: { price: true, actualCost: true, name: true }
+        });
+
+        const salePrice = matchingPackage ? Number(matchingPackage.price) : 0;
+        const operationalCost = matchingPackage ? Number(matchingPackage.actualCost) : 0;
+        const applicantDiscount = Number(appForDesc?.discount || 0);
+
+        const applicantLabel = appForDesc
+          ? `${appForDesc.fullName}${appForDesc.applicantCode ? ` (${appForDesc.applicantCode})` : ''}`
+          : 'غير معروف';
+        const profession = appForDesc?.profession || 'غير محددة';
+        const centerName = appForDesc?.examCenter?.name || appForDesc?.examLocation || 'غير محدد';
+        const examDateStr = body.examDate;
+        const isRetake = body.isRetake || false;
+
+        // === A. Update applicant's totalAmount with SALE PRICE (minus discount) ===
+        if (salePrice > 0) {
+          const effectiveSalePrice = Math.max(salePrice - applicantDiscount, 0);
+          const currentTotal = Number(appForDesc?.totalAmount || 0);
+          const currentPaid = Number(appForDesc?.amountPaid || 0);
+          const newTotal = currentTotal + effectiveSalePrice;
+          const newBalance = newTotal - currentPaid;
+
+          await prisma.applicant.update({
+            where: { id },
+            data: {
+              totalAmount: newTotal,
+              remainingBalance: newBalance,
+            }
+          });
+        }
+
+        // === B. Record OPERATIONAL EXPENSE (actualCost) ===
+        const expenseDesc = isRetake
+          ? `رسوم إعادة الاختبار لـ ${applicantLabel} اختبار لمهنة ${profession} بتاريخ ${examDateStr}`
+          : `رسوم الاختبار لـ ${applicantLabel} اختبار لمهنة ${profession} بتاريخ ${examDateStr}`;
+
+        if (operationalCost > 0) {
+          await prisma.transaction.create({
+            data: {
+              applicantId: id,
+              amount: operationalCost,
+              type: "EXPENSE",
+              category: isRetake ? "EXAM_RETAKE_FEE" : "EXAM_FEE",
+              description: expenseDesc,
+              notes: `باقة: ${matchingPackage?.name || 'غير محدد'} | مركز: ${centerName}`,
+              locationId: appForDesc?.locationId || null,
+            }
+          });
+        }
+      } catch (expError) {
+        console.error("Failed to record exam pricing (non-blocking):", expError);
+      }
     }
 
     return NextResponse.json(applicant);

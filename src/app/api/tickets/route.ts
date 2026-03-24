@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -13,16 +14,17 @@ export async function POST(request: Request) {
         const body = await request.json();
         const {
             applicantId,
-            busNumber,
+            tripId,
+            stopId, // Optional: if boarding from an intermediate stop
             seatNumber,
-            departureDate,
-            departureLocation,
-            arrivalLocation,
-            transportCompany,
-            tripType = "ONE_WAY" // Default
+            tripType = "ONE_WAY",
+            price, // Optional: Price override from frontend
+            agentName,
+            boardingPoint,
+            companions = [] // Array of { name: string }
         } = body;
 
-        // Fetch Applicant to check current status
+        // Fetch Applicant
         const applicant = await prisma.applicant.findUnique({
             where: { id: applicantId },
             include: { location: true }
@@ -32,43 +34,78 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Applicant not found" }, { status: 404 });
         }
 
-        // Pricing Logic
-        let addedPrice = 0;
-        let routeFound = false;
+        // Fetch Trip
+        if (!tripId) {
+            return NextResponse.json({ error: "Trip ID is required" }, { status: 400 });
+        }
 
-        // Condition: Only add price if user didn't have transportation previously
-        // OR if we decide this action always incurs cost. 
-        // Based on user request: "In case created without transport... activate... add amount".
-        // If created WITH transport, price is already in total.
-        if (!applicant.hasTransportation && departureLocation && arrivalLocation) {
-            // Find Locations
-            const fromLoc = await prisma.location.findFirst({ where: { name: departureLocation } });
-            const toLoc = await prisma.location.findFirst({ where: { name: arrivalLocation } });
+        const trip = await prisma.scheduledTrip.findUnique({
+            where: { id: tripId },
+            include: { fromDestination: true, toDestination: true, stops: { include: { destination: true } } }
+        });
 
-            if (fromLoc && toLoc) {
-                // Find Route
-                const route = await prisma.transportRoute.findFirst({
-                    where: {
-                        OR: [
-                            { fromId: fromLoc.id, toId: toLoc.id },
-                            // { fromId: toLoc.id, toId: fromLoc.id } // Pricing might be directional
-                        ]
-                    }
-                });
+        if (!trip) {
+            return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+        }
 
-                if (route) {
-                    addedPrice = tripType === "ROUND_TRIP"
-                        ? Number(route.roundTripPrice)
-                        : Number(route.oneWayPrice);
-                    routeFound = true;
-                }
+        if (!trip) {
+            return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+        }
+
+        const totalPassengers = 1 + companions.length;
+        if (trip.bookedSeats + totalPassengers > trip.capacity) {
+            return NextResponse.json({ error: "Trip does not have enough seats" }, { status: 400 });
+        }
+
+        // Determine Price and Locations
+        // Use provided price if available, otherwise fallback to trip default
+        let finalPrice = price !== undefined ? Number(price) : Number(trip.price);
+
+        let departureLocation = trip.fromDestination.name;
+        let arrivalLocation = trip.toDestination.name;
+        let departureDate = trip.date;
+        let busNumber = trip.busNumber;
+        let departureTime = trip.departureTime;
+
+        // Check if Stop is selected
+        if (stopId) {
+            const stop = trip.stops.find((s: any) => s.id === stopId);
+            if (stop) {
+                // If price wasn't overridden, use stop price
+                if (price === undefined) finalPrice = Number(stop.price);
+                departureLocation = stop.destination.name;
+                departureTime = stop.departureTime || trip.departureTime;
             }
+        }
+
+        // Check Return Trip
+        let returnTripData = null;
+        if (body.returnTripId) {
+            const returnTrip = await prisma.scheduledTrip.findUnique({
+                where: { id: body.returnTripId },
+                include: { fromDestination: true, toDestination: true }
+            });
+
+            if (!returnTrip) {
+                return NextResponse.json({ error: "Return trip not found" }, { status: 404 });
+            }
+
+            if (returnTrip.bookedSeats + totalPassengers > returnTrip.capacity) {
+                return NextResponse.json({ error: "Return trip does not have enough seats" }, { status: 400 });
+            }
+            returnTripData = returnTrip;
         }
 
         // Generate Ticket Number
         const ticketNumber = "TKT-" + Math.floor(100000 + Math.random() * 900000);
+        
+        // Generate Companion Data
+        const companionsData = companions.map((c: any) => ({
+            name: c.name,
+            ticketNumber: "TKT-" + Math.floor(100000 + Math.random() * 900000)
+        }));
 
-        // Transaction handling associated with ticket creation
+        // Transaction
         const ticket = await prisma.$transaction(async (tx) => {
             // 1. Create Ticket
             const newTicket = await tx.ticket.create({
@@ -77,58 +114,139 @@ export async function POST(request: Request) {
                     ticketNumber,
                     busNumber,
                     seatNumber,
-                    departureDate: new Date(departureDate),
+                    departureDate: departureDate,
                     departureLocation,
                     arrivalLocation,
-                    transportCompany,
+                    transportCompany: "أوفرسيز",
+                    tripId,
+
+                    // Return Details
+                    returnTripId: returnTripData?.id,
+                    returnBusNumber: returnTripData?.busNumber,
+                    // returnSeatNumber: "AUTO", // Logic for seat assignment if needed
+
+                    agentName,
+                    boardingPoint,
+                    companions: companionsData.length > 0 ? companionsData : undefined,
+
+                    status: "ISSUED"
                 },
             });
 
-            // 2. Update Applicant if Price added
-            if (addedPrice > 0 || !applicant.hasTransportation) {
+            // 2. Update Trip Seats (Outbound)
+            await tx.scheduledTrip.update({
+                where: { id: tripId },
+                data: { bookedSeats: { increment: totalPassengers } }
+            });
+
+            // 3. Update Trip Seats (Return)
+            if (returnTripData) {
+                await tx.scheduledTrip.update({
+                    where: { id: returnTripData.id },
+                    data: { bookedSeats: { increment: totalPassengers } }
+                });
+            }
+
+            // 4. Update Applicant Financials
+            let applicantCharge = 0;
+            // Charge for Applicant
+            if (!applicant.hasTransportation) applicantCharge += finalPrice;
+            // Charge for companions
+            if (companions.length > 0) applicantCharge += (finalPrice * companions.length);
+
+            if (applicantCharge > 0) {
                 await tx.applicant.update({
                     where: { id: applicantId },
                     data: {
                         hasTransportation: true,
-                        transportType: tripType, // Update preference
-                        totalAmount: { increment: addedPrice },
-                        remainingBalance: { increment: addedPrice },
-                        // Also update transportFrom relation if we found the location?
-                        // Simple string update for now is tricky as schema uses ID.
+                        transportType: tripType,
+                        totalAmount: { increment: applicantCharge },
+                        remainingBalance: { increment: applicantCharge },
                     }
                 });
+            }
 
-                // 3. Log Financial Transaction if price added
-                if (addedPrice > 0) {
-                    // Wait, totalAmount increase is NOT a transaction (Payment/Expense). 
-                    // It's a change in the Invoice.
-                    // But we can log activity.
-                }
+            // 5. Record Financial Statement (Ledger) for tickets
+            if (!applicant.hasTransportation) {
+                await tx.transaction.create({
+                    data: {
+                        applicantId,
+                        amount: finalPrice,
+                        type: "CHARGE",
+                        category: "TRANSPORT",
+                        description: `تذكرة سفر رقم ${ticketNumber} للخط ${departureLocation} - ${arrivalLocation} بتاريخ ${new Date(departureDate).toLocaleDateString('ar-EG')}`,
+                        locationId: applicant.locationId
+                    }
+                });
+            }
+
+            if (companions.length > 0) {
+                await tx.transaction.create({
+                    data: {
+                        applicantId,
+                        amount: finalPrice * companions.length,
+                        type: "CHARGE",
+                        category: "TRANSPORT_COMPANION",
+                        description: `تذاكر سفر للمرافقين للخط ${departureLocation} - ${arrivalLocation} بتاريخ ${new Date(departureDate).toLocaleDateString('ar-EG')} - مرافق للمتقدم ${applicant.fullName}`,
+                        locationId: applicant.locationId
+                    }
+                });
             }
 
             return newTicket;
         });
 
-        // Log Activity
+        // Auto-record transport operational expense
         try {
-            await prisma.activityLog.create({
-                data: {
-                    action: "TICKET_ISSUED",
-                    details: `Issued Ticket ${ticketNumber}. Added Price: ${addedPrice}`,
-                    applicantId,
-                    userId: session.user?.id,
+            // Lookup actual transport cost from TransportRouteDefault
+            const routeDefault = await prisma.transportRouteDefault.findFirst({
+                where: {
+                    fromDestination: { name: departureLocation },
+                    toDestination: { name: arrivalLocation }
                 },
+                select: { cost: true, costRoundTrip: true }
             });
+
+            const isRoundTrip = tripType === "ROUND_TRIP";
+            const transportCost = routeDefault
+                ? Number(isRoundTrip ? (routeDefault.costRoundTrip || routeDefault.cost) : routeDefault.cost)
+                : 0;
+
+            const totalTransportCost = transportCost * totalPassengers;
+            const applicantLabel = `${applicant.fullName}${applicant.applicantCode ? ` (${applicant.applicantCode})` : ''}`;
+            const tripTypeLabel = isRoundTrip ? 'ذهاب وعودة' : 'ذهاب';
+            const expenseDesc = `تكلفة النقل البري لـ ${applicantLabel}${companions.length > 0 ? ` ومرافقيه (${companions.length})` : ''} ونوع الرحلة ${tripTypeLabel} (${departureLocation} ← ${arrivalLocation})`;
+
+            if (totalTransportCost > 0) {
+                await prisma.transaction.create({
+                    data: {
+                        applicantId,
+                        amount: totalTransportCost,
+                        type: "EXPENSE",
+                        category: "TRANSPORT_COST",
+                        description: expenseDesc,
+                        notes: `تذكرة: ${ticketNumber}`,
+                        locationId: applicant.locationId || null,
+                    }
+                });
+            }
+        } catch (expError) {
+            console.error("Failed to record transport expense (non-blocking):", expError);
+        }
+
+        // Auto-send ticket issuance notification
+        try {
+            const { autoSendMessage } = await import("@/lib/autoSendMessage");
+            autoSendMessage(applicantId, "ON_TICKET_ISSUE", { ticketId: ticket.id })
+                .catch(e => console.error("[AutoSend] ON_TICKET_ISSUE error:", e));
         } catch (e) {
-            console.error("Log failed", e);
+            console.error("[AutoSend] Failed to import autoSendMessage:", e);
         }
 
         return NextResponse.json(ticket);
+
     } catch (error) {
         console.error("Ticket Creation Error:", error);
-        return NextResponse.json(
-            { error: "Failed to create ticket" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to create ticket" }, { status: 500 });
     }
 }

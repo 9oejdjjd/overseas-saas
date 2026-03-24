@@ -7,371 +7,200 @@ import { ar } from "date-fns/locale";
 
 type TicketProps = {
     ticket: {
-        ticketNumber: string;
-        busNumber?: string | null;
-        seatNumber?: string | null;
-        departureDate: string;
-        departureTime?: string | null;
-        arrivalTime?: string | null;
-        departureLocation: string;
-        arrivalLocation: string;
-        transportCompany: string;
-        createdAt: string;
+        ticketNumber: string; busNumber?: string | null; seatNumber?: string | null;
+        departureDate: string; departureTime?: string | null; arrivalTime?: string | null;
+        departureLocation: string; arrivalLocation: string; transportCompany: string; createdAt: string;
+        agentName?: string | null; boardingPoint?: string | null;
+        trip?: { date: string; departureTime?: string | null; arrivalTime?: string | null; busNumber?: string | null; };
+        returnTrip?: { date: string; departureTime?: string | null; arrivalTime?: string | null; busNumber?: string | null; };
     };
-    applicant: {
-        fullName: string;
-        phone: string;
-        passportNumber?: string | null;
-        applicantCode?: string | null;
-    };
+    applicant: { fullName: string; phone: string; passportNumber?: string | null; applicantCode?: string | null; };
     tripType?: "one-way" | "round-trip";
-    returnDate?: string | null;
-    returnDepartureTime?: string | null;
-    returnArrivalTime?: string | null;
 };
 
-// Colors
-const COLORS = {
-    blue: "#3061ab",
-    yellow: "#ffad00",
-    white: "#ffffff",
-    textGray: "#64748b",
-    textDark: "#334155"
-};
+const COLORS = { blue: "#335c98", yellow: "#f9a000", textGray: "#475569", textDark: "#0f172a", white: "#ffffff", dotted: "rgba(255,255,255,0.4)" };
 
-const formatTime = (time: string | null | undefined): string => {
-    if (!time) return "07:00";
-    return time.replace(":", ".");
-};
+const formatTime = (time: string | null | undefined): string => { if (!time) return "07:00"; return time; };
+const getPeriodEn = (time: string | null | undefined): string => { if (!time) return "AM"; const h = parseInt(time.split(":")[0]); return h >= 12 ? "PM" : "AM"; };
+const subtractOneHour = (time: string | null | undefined): string => {
+    if (!time) return "09.00 AM";
+    const [hStr, mStr] = time.split(":");
+    let h = parseInt(hStr);
+    let m = parseInt(mStr);
 
-const getPeriod = (time: string | null | undefined): string => {
-    if (!time) return "صباحا";
-    const h = parseInt(time.split(":")[0]);
-    return h >= 12 ? "مساء" : "صباحا";
-};
-
-const formatDate = (dateStr: string): string => {
-    try {
-        return format(new Date(dateStr), "dd.MM.yyyy");
-    } catch {
-        return "";
+    // Subtract 40 minutes
+    m -= 40;
+    if (m < 0) {
+        m += 60;
+        h -= 1;
     }
-};
+    if (h < 0) h = 23;
 
-const getDay = (dateStr: string): string => {
-    try {
-        return format(new Date(dateStr), "EEEE", { locale: ar });
-    } catch {
-        return "";
-    }
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${h12.toString().padStart(2, '0')}.${m.toString().padStart(2, '0')} ${ampm}`;
 };
+const formatDate = (dateStr: string): string => { try { return format(new Date(dateStr), "dd.MM.yyyy"); } catch { return ""; } };
+const getDay = (dateStr: string): string => { try { return format(new Date(dateStr), "EEEE", { locale: ar }); } catch { return ""; } };
+const formatTicketNumber = (t: string) => { if (!t) return ""; return t.replace(/(.{3})/g, '$1 ').trim(); };
 
 export const TicketTemplate = forwardRef<HTMLDivElement, TicketProps>(
-    ({ ticket, applicant, tripType = "round-trip", returnDate, returnDepartureTime, returnArrivalTime }, ref) => {
-        const depDate = ticket.departureDate;
-        const retDate = returnDate || ticket.departureDate;
-
+    ({ ticket, applicant, tripType = "round-trip" }, ref) => {
+        const trip = ticket.trip || { date: ticket.departureDate, departureTime: ticket.departureTime, arrivalTime: ticket.arrivalTime, busNumber: ticket.busNumber };
+        const retTrip = ticket.returnTrip || { date: ticket.departureDate, departureTime: null, arrivalTime: null, busNumber: null };
+        const depDate = trip.date;
+        const retDate = retTrip.date;
         return (
-            <div
-                ref={ref}
-                style={{
-                    fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-                    width: "1000px",
-                    backgroundColor: "transparent",
-                    direction: "ltr",
-                }}
-            >
-                <div style={{ display: "flex", flexDirection: "row", alignItems: "stretch", height: "320px", backgroundColor: "white", borderRadius: "10px", overflow: "hidden" }}>
+            <div ref={ref} style={{ fontFamily: "'Cairo', 'Tajawal', 'Segoe UI', Arial, sans-serif", width: "950px", backgroundColor: "white", direction: "ltr", padding: "15px", boxSizing: "border-box", WebkitPrintColorAdjust: "exact" }}>
+                <style dangerouslySetInnerHTML={{ __html: `@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');` }} />
 
-                    {/* 1. LEFT SECTION (Blue Card) */}
-                    <div style={{
-                        width: "280px",
-                        backgroundColor: COLORS.blue,
-                        padding: "25px",
-                        display: "flex",
-                        flexDirection: "column",
-                        color: "white",
-                        borderRadius: "10px",
-                        marginRight: "5px",
-                        flexShrink: 0
-                    }}>
-                        {/* Barcode */}
-                        <div style={{ marginBottom: "25px", backgroundColor: "white", padding: "8px 5px", borderRadius: "4px", display: "flex", justifyContent: "center" }}>
-                            <Barcode value={ticket.ticketNumber} height={35} displayValue={false} width={1.8} margin={0} />
+                {/* 1. TOP PART */}
+                <div style={{ display: "flex", alignItems: "stretch", marginBottom: "20px" }}>
+
+                    {/* Left Section (Blue) */}
+                    <div style={{ width: "260px", backgroundColor: COLORS.blue, padding: "20px 25px", display: "flex", flexDirection: "column", color: "white", borderRadius: "10px", flexShrink: 0, boxSizing: "border-box" }}>
+                        <div style={{ display: "flex", justifyContent: "center", marginBottom: "5px" }}>
+                            <Barcode value={ticket.ticketNumber || "0"} height={35} displayValue={false} width={1.5} margin={0} background="transparent" lineColor="#ffffff" />
                         </div>
-
-                        {/* PNR */}
-                        <div style={{ marginBottom: "20px" }}>
-                            <div style={{ fontSize: "11px", opacity: 0.8, letterSpacing: "0.5px" }}>PNR</div>
-                            <div style={{ fontSize: "18px", fontWeight: "bold", letterSpacing: "1px" }}>{applicant.applicantCode || "PNR CODE"}</div>
-                            <div style={{ borderBottom: "1px dashed rgba(255,255,255,0.3)", marginTop: "8px" }}></div>
+                        <div style={{ textAlign: "center", fontSize: "14px", fontWeight: "900", letterSpacing: "3px", marginBottom: "20px", fontFamily: "monospace" }}>
+                            {formatTicketNumber(ticket.ticketNumber || "123456789101112")}
                         </div>
-
-                        {/* Attendance Time */}
-                        <div style={{ marginBottom: "20px" }}>
-                            <div style={{ fontSize: "11px", opacity: 0.8, letterSpacing: "0.5px", textAlign: "right", direction: "rtl" }}>وقت الحضور</div>
-                            <div style={{ fontSize: "20px", fontWeight: "bold" }}>09.00 AM</div>
-                            <div style={{ borderBottom: "1px dashed rgba(255,255,255,0.3)", marginTop: "8px" }}></div>
+                        <div style={{ marginBottom: "15px" }}>
+                            <div style={{ fontSize: "11px", margin: "0" }}>PNR</div>
+                            <div style={{ fontSize: "14px", fontWeight: "900", textTransform: "uppercase", letterSpacing: "1px", margin: "0" }}>{applicant.applicantCode || "PNR PASSENGER"}</div>
+                            <div style={{ borderBottom: `1px dashed ${COLORS.dotted}`, marginTop: "10px" }}></div>
                         </div>
-
-                        {/* Passport */}
-                        <div>
-                            <div style={{ fontSize: "11px", opacity: 0.8, letterSpacing: "0.5px" }}>PASSPORT NUMBER</div>
-                            <div style={{ fontSize: "18px", fontWeight: "bold", letterSpacing: "1px" }}>{applicant.passportNumber || "1128485940"}</div>
+                        <div style={{ marginBottom: "15px", textAlign: "right", direction: "rtl", paddingRight: "5px" }}>
+                            <div style={{ fontSize: "11px", margin: "0" }}>وقت الحضور</div>
+                            <div style={{ fontSize: "14px", fontWeight: "900", direction: "ltr", textAlign: "left", letterSpacing: "1px", margin: "0" }}>{subtractOneHour(trip.departureTime)}</div>
+                            <div style={{ borderBottom: `1px dashed ${COLORS.dotted}`, marginTop: "10px" }}></div>
+                        </div>
+                        <div style={{ marginBottom: "15px" }}>
+                            <div style={{ fontSize: "11px", margin: "0", textTransform: "uppercase" }}>PSASPORT NAMER</div>
+                            <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", margin: "0" }}>{applicant.passportNumber || "1128485940"}</div>
+                            <div style={{ borderBottom: `1px dashed ${COLORS.dotted}`, marginTop: "10px" }}></div>
+                        </div>
+                        <div style={{ marginBottom: "15px" }}>
+                            <div style={{ fontSize: "11px", margin: "0", textTransform: "uppercase" }}>AGENT</div>
+                            <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", margin: "0", textTransform: "uppercase" }}>{ticket.agentName || "NAME AGENT"}</div>
                         </div>
                     </div>
 
-                    {/* 2. MIDDLE SECTION (Bus & Title) */}
-                    <div style={{
-                        width: "160px",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        position: "relative",
-                        flexShrink: 0,
-                        borderRight: `2px dashed ${COLORS.blue}`
-                    }}>
-                        <div style={{
-                            fontSize: "32px",
-                            fontWeight: "bold",
-                            color: COLORS.blue,
-                            marginBottom: "20px",
-                            fontFamily: "Arial, sans-serif"
-                        }}>
-                            تذكره سفر
+                    {/* Right Section (Itinerary) */}
+                    <div style={{ flex: 1, padding: "10px 10px 10px 25px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ textAlign: "right", paddingRight: "10px", marginBottom: "10px" }}>
+                            <div style={{ fontSize: "14px", color: COLORS.blue, fontWeight: "bold", marginBottom: "2px" }}>أسم المسافر</div>
+                            <div style={{ fontSize: "16px", fontWeight: "900", color: COLORS.blue, textTransform: "uppercase" }}>{applicant.fullName || "NAME PASSENGER"}</div>
                         </div>
 
-                        <svg width="100" height="120" viewBox="0 0 100 120">
-                            {/* Simplified Bus Shape matching reference */}
-                            <path d="M15 30 Q15 10 50 10 Q85 10 85 30 V100 Q85 110 75 110 H25 Q15 110 15 100 Z" fill={COLORS.blue} />
-                            {/* Window */}
-                            <rect x="25" y="40" width="50" height="25" rx="4" fill="white" />
-                            {/* Top Display */}
-                            <rect x="35" y="20" width="30" height="6" rx="2" fill="white" />
-                            {/* Lights */}
-                            <circle cx="28" cy="90" r="5" fill="white" />
-                            <circle cx="72" cy="90" r="5" fill="white" />
-                        </svg>
-                    </div>
-
-                    {/* 3. RIGHT SECTION (Itinerary) */}
-                    <div style={{ flex: 1, padding: "20px 0 20px 0", display: "flex", flexDirection: "column" }}>
-
-                        {/* Header */}
-                        <div style={{ textAlign: "right", paddingRight: "70px", marginBottom: "20px" }}>
-                            <div style={{ fontSize: "12px", color: COLORS.textGray, marginBottom: "2px" }}>أسم المسافر</div>
-                            <div style={{ fontSize: "12px", color: COLORS.textGray, textTransform: "uppercase", marginBottom: "2px" }}>NAME PASSENGER</div>
-                            <div style={{ fontSize: "20px", fontWeight: "bold", color: COLORS.blue }}>{applicant.fullName}</div>
-                            <div style={{ borderBottom: "1px dashed #cbd5e1", marginTop: "10px", marginRight: "-20px" }}></div>
-                        </div>
-
-                        {/* Trips */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-
-                            {/* --- Outbound --- */}
-                            <div style={{ display: "flex", alignItems: "center", position: "relative", paddingRight: "45px" }}>
-                                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: "20px" }}>
-
-                                    {/* Trip ID */}
-                                    <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                        <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>رقم الرحلة</div>
-                                        <div style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "15px" }}>{ticket.busNumber || "A1 234"}</div>
-                                    </div>
-
-                                    {/* Date */}
-                                    <div style={{ textAlign: "center", minWidth: "90px" }}>
-                                        <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>Date</div>
-                                        <div style={{ fontWeight: "bold", color: COLORS.textDark, fontSize: "15px" }}>{formatDate(depDate)}</div>
-                                        <div style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.textDark }}>{getDay(depDate)}</div>
-                                    </div>
-
-                                    {/* To */}
-                                    <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                        <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>To</div>
-                                        <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.yellow }}>{ticket.arrivalLocation}</div>
-                                    </div>
-
-                                    {/* Times */}
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "100px" }}>
-                                        <div style={{ display: "flex", gap: "5px", fontSize: "11px", alignItems: "center" }}>
-                                            <span>الأنطلاق</span>
-                                            <span style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "12px" }}>{formatTime(ticket.departureTime)}</span>
-                                            <span>{getPeriod(ticket.departureTime)}</span>
-                                        </div>
-                                        <div style={{ fontSize: "18px", color: COLORS.yellow, fontWeight: "bold", margin: "-2px 0" }}>
-                                            <svg width="40" height="10" viewBox="0 0 40 10">
-                                                <path d="M0 5 L35 5 M35 5 L30 0 M35 5 L30 10" stroke={COLORS.yellow} strokeWidth="2" fill="none" />
-                                            </svg>
-                                        </div>
-                                        <div style={{ display: "flex", gap: "5px", fontSize: "11px", alignItems: "center" }}>
-                                            <span>الوصول</span>
-                                            <span style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "12px" }}>{formatTime(ticket.arrivalTime)}</span>
-                                            <span>{getPeriod(ticket.arrivalTime)}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* From */}
-                                    <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                        <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>From</div>
-                                        <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.yellow }}>{ticket.departureLocation}</div>
-                                    </div>
-
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "25px" }}>
+                            {/* Outbound */}
+                            <div style={{ position: "relative", paddingRight: "50px" }}>
+                                <div style={{ position: "absolute", right: "0", top: "0", bottom: "0", width: "30px", backgroundColor: COLORS.yellow, borderRadius: "15px", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
+                                    <div style={{ transform: "rotate(-90deg)", whiteSpace: "nowrap", fontWeight: "bold", fontSize: "12px", width: "100px", textAlign: "center" }}>الذهاب</div>
                                 </div>
-
-                                {/* Tab: Outbound */}
-                                <div style={{
-                                    position: "absolute",
-                                    right: "10px",
-                                    top: "50%",
-                                    transform: "translateY(-50%)",
-                                    width: "26px",
-                                    height: "70px",
-                                    backgroundColor: COLORS.yellow,
-                                    borderRadius: "13px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    color: "white"
-                                }}>
-                                    <div style={{
-                                        transform: "rotate(-90deg)",
-                                        whiteSpace: "nowrap",
-                                        fontWeight: "bold",
-                                        fontSize: "12px"
-                                    }}>
-                                        الذهاب
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                                    <div style={{ textAlign: "center", width: "60px" }}><div style={{ fontSize: "12px", color: COLORS.blue, fontWeight: "bold" }}>To</div><div style={{ fontSize: "16px", fontWeight: "900", color: COLORS.yellow }}>{ticket.arrivalLocation}</div></div>
+                                    <div style={{ flex: 1, position: "relative", margin: "0 20px", display: "flex", alignItems: "center" }}>
+                                        <svg width="100%" height="10" style={{ width: "100%", overflow: "visible" }}>
+                                            <circle cx="100%" cy="5" r="3" fill={COLORS.yellow} style={{ transform: "translateX(-3px)" }} />
+                                            <line x1="calc(100% - 6px)" y1="5" x2="8" y2="5" stroke={COLORS.yellow} strokeWidth="2" />
+                                            <polygon points="8,1 0,5 8,9" fill={COLORS.yellow} />
+                                        </svg>
                                     </div>
+                                    <div style={{ textAlign: "center", width: "60px" }}><div style={{ fontSize: "12px", color: COLORS.blue, fontWeight: "bold" }}>From</div><div style={{ fontSize: "16px", fontWeight: "900", color: COLORS.yellow }}>{ticket.departureLocation}</div></div>
                                 </div>
-
-                                <div style={{ position: "absolute", bottom: "-8px", left: "20px", right: "50px", borderBottom: "1px dotted #ccc" }}></div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", direction: "rtl", textAlign: "center" }}>
+                                    <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>Date</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", letterSpacing: "1px" }}>{formatDate(depDate)}</div></div>
+                                    <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px", textTransform: "uppercase" }}>DAY</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue }}>{getDay(depDate)}</div></div>
+                                    <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>الأنطلاق</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", direction: "ltr" }}>{getPeriodEn(trip.departureTime)} {formatTime(trip.departureTime)}</div></div>
+                                    <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>الوصول</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", direction: "ltr" }}>{getPeriodEn(trip.arrivalTime)} {formatTime(trip.arrivalTime)}</div></div>
+                                    <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>رقم الرحله</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace" }}>{trip.busNumber || "A1 234"}</div></div>
+                                </div>
                             </div>
-
-                            {/* --- Return --- */}
                             {tripType === "round-trip" && (
-                                <div style={{ display: "flex", alignItems: "center", position: "relative", paddingRight: "45px" }}>
-                                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: "20px" }}>
-
-                                        {/* Trip ID */}
-                                        <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                            <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>رقم الرحلة</div>
-                                            <div style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "15px" }}>{ticket.busNumber || "A1 234"}</div>
+                                <>
+                                    <div style={{ borderBottom: "1px dotted #cbd5e1", marginRight: "35px", marginLeft: "10px" }}></div>
+                                    <div style={{ position: "relative", paddingRight: "50px" }}>
+                                        <div style={{ position: "absolute", right: "0", top: "0", bottom: "0", width: "30px", backgroundColor: COLORS.yellow, borderRadius: "15px", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
+                                            <div style={{ transform: "rotate(-90deg)", whiteSpace: "nowrap", fontWeight: "bold", fontSize: "12px", width: "100px", textAlign: "center" }}>العودة</div>
                                         </div>
-
-                                        {/* Date */}
-                                        <div style={{ textAlign: "center", minWidth: "90px" }}>
-                                            <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>Date</div>
-                                            <div style={{ fontWeight: "bold", color: COLORS.textDark, fontSize: "15px" }}>{formatDate(retDate.toString())}</div>
-                                            <div style={{ fontSize: "13px", fontWeight: "bold", color: COLORS.textDark }}>{getDay(retDate.toString())}</div>
-                                        </div>
-
-                                        {/* To (Return) */}
-                                        <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                            <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>To</div>
-                                            <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.yellow }}>{ticket.departureLocation}</div>
-                                        </div>
-
-                                        {/* Times */}
-                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "100px" }}>
-                                            <div style={{ display: "flex", gap: "5px", fontSize: "11px", alignItems: "center" }}>
-                                                <span>الأنطلاق</span>
-                                                <span style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "12px" }}>{formatTime(returnDepartureTime || ticket.arrivalTime)}</span>
-                                                <span>{getPeriod(returnDepartureTime || ticket.arrivalTime)}</span>
-                                            </div>
-                                            <div style={{ fontSize: "18px", color: COLORS.yellow, fontWeight: "bold", margin: "-2px 0" }}>
-                                                <svg width="40" height="10" viewBox="0 0 40 10">
-                                                    <path d="M0 5 L35 5 M35 5 L30 0 M35 5 L30 10" stroke={COLORS.yellow} strokeWidth="2" fill="none" />
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                                            <div style={{ textAlign: "center", width: "60px" }}><div style={{ fontSize: "12px", color: COLORS.blue, fontWeight: "bold" }}>To</div><div style={{ fontSize: "16px", fontWeight: "900", color: COLORS.yellow }}>{ticket.departureLocation}</div></div>
+                                            <div style={{ flex: 1, position: "relative", margin: "0 20px", display: "flex", alignItems: "center" }}>
+                                                <svg width="100%" height="10" style={{ width: "100%", overflow: "visible" }}>
+                                                    <circle cx="100%" cy="5" r="3" fill={COLORS.yellow} style={{ transform: "translateX(-3px)" }} />
+                                                    <line x1="calc(100% - 6px)" y1="5" x2="8" y2="5" stroke={COLORS.yellow} strokeWidth="2" />
+                                                    <polygon points="8,1 0,5 8,9" fill={COLORS.yellow} />
                                                 </svg>
                                             </div>
-                                            <div style={{ display: "flex", gap: "5px", fontSize: "11px", alignItems: "center" }}>
-                                                <span>الوصول</span>
-                                                <span style={{ fontWeight: "bold", color: COLORS.blue, fontSize: "12px" }}>{formatTime(returnArrivalTime || ticket.departureTime)}</span>
-                                                <span>{getPeriod(returnArrivalTime || ticket.departureTime)}</span>
-                                            </div>
+                                            <div style={{ textAlign: "center", width: "60px" }}><div style={{ fontSize: "12px", color: COLORS.blue, fontWeight: "bold" }}>From</div><div style={{ fontSize: "16px", fontWeight: "900", color: COLORS.yellow }}>{ticket.arrivalLocation}</div></div>
                                         </div>
-
-                                        {/* From (Return) */}
-                                        <div style={{ textAlign: "center", minWidth: "60px" }}>
-                                            <div style={{ fontSize: "11px", color: COLORS.textGray, marginBottom: "2px" }}>From</div>
-                                            <div style={{ fontSize: "18px", fontWeight: "bold", color: COLORS.yellow }}>{ticket.arrivalLocation}</div>
-                                        </div>
-
-                                    </div>
-
-                                    {/* Tab: Return */}
-                                    <div style={{
-                                        position: "absolute",
-                                        right: "10px",
-                                        top: "50%",
-                                        transform: "translateY(-50%)",
-                                        width: "26px",
-                                        height: "70px",
-                                        backgroundColor: COLORS.yellow,
-                                        borderRadius: "13px",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        color: "white"
-                                    }}>
-                                        <div style={{
-                                            transform: "rotate(-90deg)",
-                                            whiteSpace: "nowrap",
-                                            fontWeight: "bold",
-                                            fontSize: "12px"
-                                        }}>
-                                            العودة
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", direction: "rtl", textAlign: "center" }}>
+                                            <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>Date</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", letterSpacing: "1px" }}>{formatDate(retDate)}</div></div>
+                                            <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px", textTransform: "uppercase" }}>DAY</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue }}>{getDay(retDate)}</div></div>
+                                            <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>الأنطلاق</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", direction: "ltr" }}>{getPeriodEn(retTrip.departureTime)} {formatTime(retTrip.departureTime)}</div></div>
+                                            <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>الوصول</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace", direction: "ltr" }}>{getPeriodEn(retTrip.arrivalTime)} {formatTime(retTrip.arrivalTime)}</div></div>
+                                            <div><div style={{ fontSize: "11px", color: COLORS.blue, marginBottom: "4px" }}>رقم الرحله</div><div style={{ fontSize: "14px", fontWeight: "900", color: COLORS.blue, fontFamily: "monospace" }}>{retTrip.busNumber || "A1 234"}</div></div>
                                         </div>
                                     </div>
-                                </div>
+                                </>
                             )}
-
                         </div>
                     </div>
 
-                    {/* 4. FAR RIGHT STRIP (Blue) */}
-                    <div style={{
-                        width: "60px",
-                        backgroundColor: COLORS.blue,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: "10px",
-                        marginLeft: "10px",
-                        color: "white",
-                        flexShrink: 0,
-                        position: "relative"
-                    }}>
-                        <div style={{
-                            transform: "rotate(-90deg)",
-                            // origin center
-                            whiteSpace: "nowrap",
-                            fontSize: "20px",
-                            marginBottom: "80px", // spacing for the text when rotated
-                            fontWeight: "bold"
-                        }}>
-                            تذكره السفر
-                        </div>
+                    {/* Far Right Strip (Blue) */}
+                    <div style={{ width: "50px", backgroundColor: COLORS.blue, borderRadius: "10px", marginLeft: "15px", color: "white", flexShrink: 0, position: "relative" }}>
+                        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%) rotate(-90deg)", whiteSpace: "nowrap", fontSize: "20px", fontWeight: "900" }}>تذكره السفر</div>
+                    </div>
+                </div>
 
-                        <div style={{
-                            transform: "rotate(-90deg)",
-                            whiteSpace: "nowrap",
-                            fontSize: "12px",
-                            fontFamily: "monospace",
-                            letterSpacing: "2px",
-                            position: "absolute",
-                            bottom: "80px"
-                        }}>
-                            123 456 789
+                {/* 2. BOTTOM PART */}
+                <div style={{ display: "flex", alignItems: "stretch", minHeight: "260px", backgroundColor: COLORS.blue, borderRadius: "10px", overflow: "hidden" }}>
+                    {/* Left Section (Logos Area) */}
+                    <div style={{ width: "400px", padding: "30px 40px", display: "flex", flexDirection: "column", color: "white", flexShrink: 0, borderRight: `1px dashed ${COLORS.dotted}` }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "30px" }}>
+                            <div style={{ width: "80px", height: "80px", border: `1px dashed ${COLORS.dotted}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", textAlign: "center", color: "rgba(255,255,255,0.7)" }}>أوفرسيز<br />(مساحة)</div>
+                            <div style={{ width: "100px", height: "60px", border: `1px dashed ${COLORS.dotted}`, borderRadius: "5px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", textAlign: "center", color: "rgba(255,255,255,0.7)" }}>بوابة الاعتماد<br />(مساحة)</div>
+                        </div>
+                        <div style={{ fontSize: "10px", lineHeight: "1.8", fontWeight: "bold", marginTop: "auto" }}>
+                            <div style={{ color: COLORS.yellow }}>P.O : 466-Sanaa-Hadda St-Cinima Complex</div>
+                            <div>Tel : +967 1 - 261000 / 261222</div>
+                            <div>Fax : +967 1 - 261222</div>
+                            <div>Mobile : +967-776221111 / 733223372</div>
+                            <div>E-mail : info@overseas-travels.com</div>
                         </div>
                     </div>
 
+                    {/* Right Section (Rules) */}
+                    <div style={{ flex: 1, padding: "30px", display: "flex", flexDirection: "column", color: "white", direction: "rtl", textAlign: "right" }}>
+                        <div style={{ marginBottom: "15px" }}>
+                            <div style={{ fontSize: "13px", marginBottom: "4px" }}>رقم التذكره</div>
+                            <div style={{ fontSize: "16px", fontWeight: "900", direction: "ltr", textAlign: "right", letterSpacing: "2px", fontFamily: "monospace" }}>{formatTicketNumber(ticket.ticketNumber || "123456789101112")}</div>
+                        </div>
+                        <div style={{ marginBottom: "15px" }}>
+                            <div style={{ fontSize: "13px", marginBottom: "4px" }}>نقطة الانطلاق</div>
+                            <div style={{ fontSize: "16px", fontWeight: "900" }}>{ticket.boardingPoint || ticket.departureLocation}</div>
+                        </div>
+                        <div style={{ borderBottom: `1px dashed ${COLORS.dotted}`, margin: "10px -30px 20px -30px" }}></div>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: "16px", fontWeight: "900", marginBottom: "10px" }}>تعليمات هامه</div>
+                            <ul style={{ margin: 0, padding: "0 20px 0 0", fontSize: "12px", lineHeight: "1.9", listStyleType: "disc", fontWeight: "600" }}>
+                                <li>يرجى الحضور إلى موقع الانطلاق قبل موعد الرحلة بساعة</li>
+                                <li>قد تتغير مواعيد الرحلات بسبب الظروف التشغيلية أو الطارئة</li>
+                                <li>التذكرة غير مستردة، ويمكن تعديلها قبل موعد الرحلة بـ 48 ساعة كحد أقصى</li>
+                                <li>لا تتحمل الشركة أي مسؤولية عن الأمتعة الشخصية الخاصة بالمسافر</li>
+                                <li>يلتزم المسافر بـ اتباع تعليمات السائق طوال مدة الرحلة حفاظاً على السلامة</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* Far Right Strip (Yellow) */}
+                    <div style={{ width: "50px", backgroundColor: COLORS.yellow, position: "relative", color: "white", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%) rotate(-90deg)", whiteSpace: "nowrap", fontSize: "20px", fontWeight: "900" }}>تذكره السفر</div>
+                    </div>
                 </div>
 
-                {/* Print Info */}
-                <div style={{ textAlign: "center", fontSize: "10px", color: "#aaa", marginTop: "10px" }}>
-                    Generated: {format(new Date(), "yyyy-MM-dd HH:mm:ss")}
-                </div>
             </div>
         );
     }

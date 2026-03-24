@@ -44,7 +44,7 @@ async function main() {
             data: { applicantCode: uniqueCode },
         });
 
-        console.log(`Updated ${app.email || app.fullName}: ${uniqueCode}`);
+        console.log(`Updated ${app.platformEmail || app.fullName}: ${uniqueCode}`);
     }
 
     console.log("Backfill complete! 🚀");

@@ -1,0 +1,16 @@
+
+model TransportRouteDefault {
+  id                String               @id @default(uuid())
+  fromDestinationId String
+  toDestinationId   String
+  price             Decimal              @db.Decimal(10, 2)
+  priceRoundTrip    Decimal?             @db.Decimal(10, 2) // Optional info
+  
+  fromDestination   TransportDestination @relation("RouteDefaultFrom", fields: [fromDestinationId], references: [id])
+  toDestination     TransportDestination @relation("RouteDefaultTo", fields: [toDestinationId], references: [id])
+
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([fromDestinationId, toDestinationId])
+}

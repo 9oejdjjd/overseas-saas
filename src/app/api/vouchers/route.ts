@@ -88,6 +88,26 @@ export async function POST(req: Request) {
 
         // Parse back for response
         const responseVoucher = { ...voucher, ...metadata, type: type, discountPercent: metadata.discount };
+
+        // Auto-send voucher notification if it's a personal voucher for a real applicant
+        if (finalApplicantId && effectiveCategory !== "PUBLIC") {
+            try {
+                const { autoSendMessage } = await import("@/lib/autoSendMessage");
+                // Determine which trigger to use based on voucher type
+                const trigger = (type === "REFERRAL" || metadata.realType === "REFERRAL") 
+                    ? "ON_REFERRAL_VOUCHER" 
+                    : "ON_RETAKE_VOUCHER";
+                autoSendMessage(finalApplicantId, trigger, {
+                    customVars: { 
+                        voucherCode: metadata.code || voucher.id.slice(0, 8).toUpperCase(),
+                        discountAmount: `${metadata.discount}%`
+                    }
+                }).catch(e => console.error("[AutoSend] Voucher notification error:", e));
+            } catch (e) {
+                console.error("[AutoSend] Failed to import autoSendMessage:", e);
+            }
+        }
+
         return NextResponse.json(responseVoucher);
     } catch (error) {
         console.error("Error creating voucher:", error);

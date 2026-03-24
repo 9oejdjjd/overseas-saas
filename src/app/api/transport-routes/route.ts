@@ -21,7 +21,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Missing from or to parameters" }, { status: 400 });
         }
 
-        let whereClause: any = { isActive: true };
+        let whereClause: any = {};
 
         const buildLocationQuery = (param: string) => {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param);
@@ -44,14 +44,14 @@ export async function GET(request: Request) {
             return { OR: orConditions };
         };
 
-        if (fromParam) whereClause.from = buildLocationQuery(fromParam);
-        if (toParam) whereClause.to = buildLocationQuery(toParam);
+        if (fromParam) whereClause.fromDestination = buildLocationQuery(fromParam);
+        if (toParam) whereClause.toDestination = buildLocationQuery(toParam);
 
-        const route = await prisma.transportRoute.findFirst({
+        const route = await prisma.transportRouteDefault.findFirst({
             where: whereClause,
             include: {
-                from: { select: { name: true, code: true } },
-                to: { select: { name: true, code: true } },
+                fromDestination: { select: { name: true, code: true } },
+                toDestination: { select: { name: true, code: true } },
             }
         });
 

@@ -1,13 +1,13 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function PATCH(
-    request: Request,
-    { params }: { params: { id: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const id = params.id;
+        const { id } = await params;
         const body = await request.json();
         const template = await prisma.messagingTemplate.update({
             where: { id },
@@ -20,11 +20,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: { id: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const id = params.id;
+        const { id } = await params;
         await prisma.messagingTemplate.delete({ where: { id } });
         return NextResponse.json({ success: true });
     } catch (error) {

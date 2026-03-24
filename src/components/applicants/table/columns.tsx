@@ -5,7 +5,7 @@ import { Applicant } from "@/types/applicant";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MoreHorizontal, ArrowUpDown, Bus, Wallet, CalendarClock, Phone, CheckCircle2, XCircle, AlertCircle, Plane } from "lucide-react";
+import { MoreHorizontal, ArrowUpDown, Bus, Wallet, CalendarClock, Phone, CheckCircle2, XCircle, AlertCircle, Plane, BookOpen, Loader2 } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,7 +23,13 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { updateApplicantStatus } from "@/app/actions/applicant";
-import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
+import { useState } from "react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Extended type to include ticket from API
 export type ApplicantData = Applicant & {
@@ -52,6 +58,79 @@ const getTicketStatus = (app: ApplicantData) => {
     }
     return null; // No transportation needed
 };
+
+// One-click mock exam link sender component
+function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
+    const [sending, setSending] = useState(false);
+    const [sent, setSent] = useState(false);
+
+    const handleSend = async () => {
+        setSending(true);
+        try {
+            // Generate the message
+            const genRes = await fetch("/api/messages/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    applicantId: applicant.id,
+                    trigger: "ON_MOCK_EXAM_LINK",
+                })
+            });
+            if (!genRes.ok) throw new Error("Failed to generate");
+            const { message, phone } = await genRes.json();
+
+            // Send via WPPConnect
+            const sendRes = await fetch("/api/messages/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    applicantId: applicant.id,
+                    phone,
+                    message,
+                    trigger: "ON_MOCK_EXAM_LINK",
+                })
+            });
+            if (!sendRes.ok) throw new Error("Failed to send");
+            setSent(true);
+        } catch (e) {
+            console.error("Mock exam link send error:", e);
+        } finally {
+            setSending(false);
+        }
+    };
+
+    if (applicant.status !== "EXAM_SCHEDULED") return null;
+
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                            "h-8 w-8 p-0",
+                            sent ? "text-green-600" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        )}
+                        onClick={handleSend}
+                        disabled={sending || sent}
+                    >
+                        {sending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : sent ? (
+                            <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                            <BookOpen className="h-4 w-4" />
+                        )}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>{sent ? "تم الإرسال ✓" : "إرسال رابط الاختبار التجريبي"}</p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+}
 
 export const columns: ColumnDef<ApplicantData>[] = [
     {
@@ -107,35 +186,29 @@ export const columns: ColumnDef<ApplicantData>[] = [
             else if (status === 'NEW_REGISTRATION') display = { label: "جديد", class: "bg-gray-100 text-gray-600" };
 
             return (
-                <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <div className={cn("px-2 py-1 rounded-md text-xs font-semibold cursor-pointer select-none transition-colors hover:opacity-80", display.class)}>
-                                {display.label}
-                            </div>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuLabel>تحديث الحالة</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuRadioGroup value={status} onValueChange={(val) => {
-                                updateApplicantStatus(row.original.id, val);
-                                // Optional: Trigger toast here via event or props
-                            }}>
-                                <DropdownMenuRadioItem value="PASSED">ناجح</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="FAILED">راسب</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="ABSENT">غائب</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="EXAM_SCHEDULED">تم حجز الموعد</DropdownMenuRadioItem>
-                            </DropdownMenuRadioGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Smart WhatsApp for Status */}
-                    <ContextualMessageButton
-                        applicant={row.original}
-                        trigger={status === 'PASSED' ? 'ON_PASS' : status === 'FAILED' ? 'ON_FAIL' : undefined}
-                        mini
-                    />
-                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <div className={cn("px-2 py-1 rounded-md text-xs font-semibold cursor-pointer select-none transition-colors hover:opacity-80", display.class)}>
+                            {display.label}
+                        </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuLabel>تحديث الحالة</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup value={status} onValueChange={async (val) => {
+                            const result = await updateApplicantStatus(row.original.id, val);
+                            if (result?.success) {
+                                // Trigger table refresh
+                                document.dispatchEvent(new CustomEvent('refresh-applicants-table'));
+                            }
+                        }}>
+                            <DropdownMenuRadioItem value="PASSED">ناجح</DropdownMenuRadioItem>
+                            <DropdownMenuRadioItem value="FAILED">راسب</DropdownMenuRadioItem>
+                            <DropdownMenuRadioItem value="ABSENT">غائب</DropdownMenuRadioItem>
+                            <DropdownMenuRadioItem value="EXAM_SCHEDULED">تم حجز الموعد</DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             );
         }
     },
@@ -190,34 +263,47 @@ export const columns: ColumnDef<ApplicantData>[] = [
     },
     {
         id: "actions",
+        header: "الإجراءات",
         cell: ({ row }) => {
             const app = row.original;
 
             return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 opacity-50 hover:opacity-100">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>الإجراءات</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => navigator.clipboard.writeText(app.id)}>
-                            نسخ المعرف
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <Link href={`https://wa.me/${app.whatsappNumber}`} target="_blank">
-                            <DropdownMenuItem>مراسلة واتساب</DropdownMenuItem>
-                        </Link>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={(e) => {
+                <div className="flex items-center gap-1">
+                    {/* Mock Exam Link Button */}
+                    <MockExamLinkButton applicant={app} />
+
+                    {/* Primary Action: Open Modal */}
+                    <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
+                        onClick={() => {
                             document.dispatchEvent(new CustomEvent('open-applicant-modal', { detail: app }));
-                        }}>
-                            تفاصيل المتقدم
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        }}
+                    >
+                        فتح
+                    </Button>
+
+                    {/* More Options Dropdown */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-gray-100">
+                                <span className="sr-only">المزيد</span>
+                                <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>إجراءات سريعة</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => navigator.clipboard.writeText(app.applicantCode || app.id)}>
+                                نسخ رقم الملف
+                            </DropdownMenuItem>
+                            <Link href={`https://wa.me/${app.whatsappNumber}`} target="_blank">
+                                <DropdownMenuItem>مراسلة واتساب</DropdownMenuItem>
+                            </Link>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             );
         },
     },

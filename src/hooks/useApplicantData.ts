@@ -15,66 +15,77 @@ export function useApplicantData(applicantOrId: ExtendedApplicant | string | nul
 
     const applicantId = typeof applicantOrId === 'string' ? applicantOrId : applicantOrId?.id;
 
+    // Sync state immediately when applicant changes or modal closes
+    useEffect(() => {
+        if (typeof applicantOrId === 'object' && applicantOrId) {
+            setApplicant(applicantOrId);
+        } else if (!applicantOrId) {
+            // Reset all data when modal closes
+            setApplicant(null);
+            setTransactions([]);
+            setTicket(null);
+            setActivityLogs([]);
+            setTransportRoute(null);
+            setCancellationPolicies([]);
+            setPricingPackages([]);
+        }
+    }, [applicantOrId]);
+
     const fetchAllData = useCallback(async () => {
         if (!applicantId) return;
         setLoading(true);
-        try {
-            // 1. Fetch Applicant if not provided or to refresh
-            const appRes = await fetch(`/api/applicants/${applicantId}`);
-            if (appRes.ok) {
-                const appData = await appRes.json();
-                setApplicant(appData);
 
-                // Fetch Transport Route based on locations
-                if (appData.locationId || appData.location?.id) {
-                    const fromId = appData.locationId || appData.location?.id;
-                    const toLocation = appData.examLocation || "TAIZ";
-                    if (fromId && toLocation) {
-                        fetch(`/api/transport-routes?from=${fromId}&to=${toLocation}`)
-                            .then(res => res.json())
-                            .then(data => {
-                                if (!data.error) setTransportRoute(data);
-                            })
-                            .catch(console.error);
-                    }
-                }
-            }
+        // Track completion of all requests to clear the global loading flag
+        const pending: Promise<void>[] = [];
 
-            // 2. Fetch Transactions
-            fetch(`/api/applicants/${applicantId}/transactions`)
-                .then(res => res.json())
+        // Fire each request independently — each updates state as soon as it resolves.
+        // This means the UI renders each section progressively instead of waiting for ALL to complete.
+
+        // 1. Applicant (fresh data from server)
+        pending.push(
+            fetch(`/api/applicants/${applicantId}`).then(r => r.json())
+                .then(data => { if (data && !data.error) setApplicant(data); })
+                .catch(err => console.error("Error fetching applicant:", err))
+        );
+
+        // 2. Transactions
+        pending.push(
+            fetch(`/api/applicants/${applicantId}/transactions`).then(r => r.json())
                 .then(data => setTransactions(Array.isArray(data) ? data : []))
-                .catch(() => setTransactions([]));
+                .catch(err => console.error("Error fetching transactions:", err))
+        );
 
-            // 3. Fetch Ticket
-            fetch(`/api/applicants/${applicantId}/ticket`)
-                .then(res => res.json())
-                .then(data => setTicket(data))
-                .catch(() => setTicket(null));
+        // 3. Ticket
+        pending.push(
+            fetch(`/api/applicants/${applicantId}/ticket`).then(r => r.json())
+                .then(data => setTicket(data && !data.error ? data : null))
+                .catch(err => console.error("Error fetching ticket:", err))
+        );
 
-            // 4. Fetch Activity Logs
-            fetch(`/api/applicants/${applicantId}/activity`)
-                .then(res => res.json())
+        // 4. Activity Logs
+        pending.push(
+            fetch(`/api/applicants/${applicantId}/activity`).then(r => r.json())
                 .then(data => setActivityLogs(Array.isArray(data) ? data : []))
-                .catch(() => setActivityLogs([]));
+                .catch(err => console.error("Error fetching logs:", err))
+        );
 
-            // 5. Fetch Pricing
-            fetch("/api/pricing")
-                .then(res => res.json())
-                .then(data => setPricingPackages(data))
-                .catch(console.error);
+        // 5. Pricing Packages
+        pending.push(
+            fetch("/api/pricing").then(r => r.json())
+                .then(data => setPricingPackages(data || []))
+                .catch(err => console.error("Error fetching pricing:", err))
+        );
 
-            // 6. Fetch Policies
-            fetch("/api/policies")
-                .then(res => res.json())
-                .then(data => setCancellationPolicies(data))
-                .catch(console.error);
+        // 6. Cancellation Policies
+        pending.push(
+            fetch("/api/policies").then(r => r.json())
+                .then(data => setCancellationPolicies(data || []))
+                .catch(err => console.error("Error fetching policies:", err))
+        );
 
-        } catch (error) {
-            console.error("Error fetching applicant data:", error);
-        } finally {
-            setLoading(false);
-        }
+        // Wait for all to settle, then clear loading
+        await Promise.allSettled(pending);
+        setLoading(false);
     }, [applicantId]);
 
     // Initial fetch

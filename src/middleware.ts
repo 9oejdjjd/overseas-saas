@@ -9,8 +9,7 @@ export default withAuth({
 
 export const config = {
     matcher: [
-        "/",
-        "/applicants/:path*",
+        "/dashboard/:path*",
         "/api/applicants/:path*",
         // Exclude public API routes if needed, but for now protect everything by default except login/static
     ],

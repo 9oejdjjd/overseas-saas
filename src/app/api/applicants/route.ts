@@ -1,5 +1,5 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 // Helper to generate PNR
@@ -12,7 +12,7 @@ function generatePNR() {
     return result;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
@@ -24,19 +24,30 @@ export async function POST(request: Request) {
         let transportRoute = null;
 
         if (body.hasTransportation && body.locationId && body.transportFromId) {
-            transportRoute = await prisma.transportRoute.findFirst({
-                where: {
-                    fromId: body.transportFromId,
-                    toId: body.locationId,
-                    isActive: true
+            // Location and TransportDestination are different tables with different IDs.
+            // We need to resolve Location names first, then find matching TransportDestination IDs.
+            const fromLocation = await prisma.location.findUnique({ where: { id: body.transportFromId }, select: { name: true } });
+            const toLocation = await prisma.location.findUnique({ where: { id: body.locationId }, select: { name: true } });
+
+            if (fromLocation && toLocation) {
+                const fromDest = await prisma.transportDestination.findFirst({ where: { name: fromLocation.name } });
+                const toDest = await prisma.transportDestination.findFirst({ where: { name: toLocation.name } });
+
+                if (fromDest && toDest) {
+                    transportRoute = await prisma.transportRouteDefault.findFirst({
+                        where: {
+                            fromDestinationId: fromDest.id,
+                            toDestinationId: toDest.id,
+                        }
+                    });
                 }
-            });
+            }
 
             if (transportRoute) {
-                if (body.transportType === "ROUND_TRIP") {
-                    transportPrice = Number(transportRoute.roundTripPrice);
+                if (body.transportType === "ROUND_TRIP" && transportRoute.priceRoundTrip) {
+                    transportPrice = Number(transportRoute.priceRoundTrip);
                 } else {
-                    transportPrice = Number(transportRoute.oneWayPrice);
+                    transportPrice = Number(transportRoute.price);
                 }
             }
         }
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
                 select: { id: true, notes: true, type: true }
             });
 
-            const matchedVoucher = allVouchers.find(v => {
+            const matchedVoucher = allVouchers.find((v: { notes: string | null; id: string; type: any }) => {
                 if (!v.notes || !v.notes.includes("[META:")) return false;
                 try {
                     const parts = v.notes.split("[META:");
@@ -109,7 +120,7 @@ export async function POST(request: Request) {
         const remainingBalance = totalAmount - amountPaid;
 
         // Create transaction to ensure integrity
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // Update Voucher Usage if present
             if (usedVoucherId && body.promoCode) { // Double check we have a matched one
                 // We need to fetch it again or just update
@@ -209,6 +220,18 @@ export async function POST(request: Request) {
                 },
             });
 
+            // 5. Trigger Auto-Send WhatsApp Confirmation 
+            // We use dynamic import to avoid circular dependencies if any
+            try {
+                const { autoSendMessage } = await import("@/lib/autoSendMessage");
+                // Don't await to not block the response unless necessary
+                autoSendMessage(applicant.id, "ON_REGISTRATION").catch(err => 
+                    console.error("[AutoSend] Failed ON_REGISTRATION:", err)
+                );
+            } catch (e) {
+                console.error("[AutoSend] Import failed:", e);
+            }
+
             return applicant;
         });
 
@@ -222,7 +245,7 @@ export async function POST(request: Request) {
     }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
 
@@ -309,41 +332,25 @@ export async function GET(request: Request) {
                     fullName: true,
                     phone: true,
                     whatsappNumber: true,
-                    platformEmail: true,
                     examDate: true,
                     examTime: true,
                     location: {
-                        select: { name: true, code: true }
+                        select: { name: true, address: true, locationUrl: true }
                     },
-                    locationId: true,
+                    examCenter: {
+                        select: { name: true, address: true, locationUrl: true }
+                    },
                     status: true,
                     remainingBalance: true,
-                    totalAmount: true,
-                    discount: true,
-                    amountPaid: true,
                     hasTransportation: true,
-                    travelDate: true,
-                    firstName: true,
-                    lastName: true,
-                    passportNumber: true,
-                    gender: true,
-                    profession: true,
-                    nationalId: true,
-                    dob: true,
-                    passportExpiry: true,
-                    applicantType: true,
-                    createdAt: true,
                     ticket: {
                         select: {
                             id: true,
                             status: true,
                             ticketNumber: true,
-                            departureDate: true,
-                            departureLocation: true,
-                            arrivalLocation: true
+                            departureDate: true
                         }
                     },
-                    notes: true,
                 },
             })
         ]);

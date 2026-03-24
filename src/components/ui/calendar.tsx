@@ -65,31 +65,32 @@ function Calendar({
                 ...classNames,
             }}
             components={{
-                IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-                IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-                Dropdown: ({ value, onChange, children, ...props }: DropdownProps) => {
-                    const options = React.Children.toArray(children) as React.ReactElement<React.HTMLProps<HTMLOptionElement>>[]
-                    const selected = options.find((child) => child.props.value === value)
-                    const handleChange = (value: string) => {
+                Chevron: ({ orientation, className }) => {
+                    const Component = orientation === "left" ? ChevronLeft : ChevronRight;
+                    return <Component className={cn("h-4 w-4", className)} />;
+                },
+                Dropdown: ({ value, onChange, options, ...props }: DropdownProps) => {
+                    const handleChange = (val: string) => {
                         const changeEvent = {
-                            target: { value },
+                            target: { value: val },
                         } as React.ChangeEvent<HTMLSelectElement>
                         onChange?.(changeEvent)
                     }
+                    const selected = options?.find((opt) => opt.value.toString() === value?.toString());
                     return (
                         <Select
                             value={value?.toString()}
-                            onValueChange={(value) => {
-                                handleChange(value)
+                            onValueChange={(val) => {
+                                handleChange(val)
                             }}
                         >
                             <SelectTrigger className="h-[28px] pr-1.5 focus:ring-0 gap-1 border-gray-200">
-                                <SelectValue>{selected?.props?.children}</SelectValue>
+                                <SelectValue>{selected?.label}</SelectValue>
                             </SelectTrigger>
                             <SelectContent position="popper" className="max-h-[200px] overflow-y-auto min-w-[100px] bg-white z-[9999]" align="start">
-                                {options.map((option, id) => (
-                                    <SelectItem key={`${option.props.value}-${id}`} value={option.props.value?.toString() ?? ""}>
-                                        {option.props.children}
+                                {options?.map((option, id) => (
+                                    <SelectItem key={`${option.value}-${id}`} value={option.value.toString()}>
+                                        {option.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

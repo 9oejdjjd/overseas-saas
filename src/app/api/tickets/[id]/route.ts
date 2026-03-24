@@ -1,15 +1,29 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
+import { autoSendMessage } from "@/lib/autoSendMessage";
 import { authOptions } from "@/lib/auth";
 
+// Safely resolve userId: verify it exists in the User table before using
+async function resolveUserId(session: any): Promise<string | undefined> {
+    const rawId = session?.user?.id;
+    if (!rawId) return undefined;
+    try {
+        const user = await prisma.user.findUnique({ where: { id: rawId }, select: { id: true } });
+        return user?.id || undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 export async function PATCH(
-    req: Request,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
+        const validUserId = await resolveUserId(session);
         const { id } = await params;
         const body = await req.json();
 
@@ -18,7 +32,7 @@ export async function PATCH(
             const newStatus = body.status;
 
             // Transaction for Usage Update
-            const result = await prisma.$transaction(async (tx) => {
+            const result = await prisma.$transaction(async (tx: any) => {
                 const currentTicket = await tx.ticket.findUnique({
                     where: { id },
                     include: { applicant: true }
@@ -68,13 +82,13 @@ export async function PATCH(
                     }
 
                     // 2. Create Compensation Voucher
-                    const route = await tx.transportRoute.findFirst({
+                    const route = await tx.transportRouteDefault.findFirst({
                         where: {
-                            from: { name: currentTicket.departureLocation },
-                            to: { name: currentTicket.arrivalLocation }
+                            fromDestination: { name: currentTicket.departureLocation },
+                            toDestination: { name: currentTicket.arrivalLocation }
                         }
                     });
-                    const ticketPrice = Number(route?.oneWayPrice || 0);
+                    const ticketPrice = Number(route?.price || 0);
                     const refundable = ticketPrice - fineAmount;
 
                     if (refundable > 0) {
@@ -104,18 +118,26 @@ export async function PATCH(
                             action: "TICKET_NO_SHOW",
                             details: `Marked as No Show. Fine: ${fineAmount} YER. Voucher Created: ${refundable > 0 ? refundable + ' YER' : 'None'} (${finalPolicy?.name || 'Default'})`,
                             applicantId: currentTicket.applicantId,
-                            userId: session?.user?.id,
+                            ...(validUserId ? { userId: validUserId } : {}),
                         }
                     });
+
+                    // Auto-send NO_SHOW notification
+                    autoSendMessage(currentTicket.applicantId, "ON_TICKET_NO_SHOW", { ticketId: id })
+                        .catch(e => console.error("[AutoSend] ON_TICKET_NO_SHOW error:", e));
                 } else if (newStatus === 'USED' && currentTicket.applicantId) {
                     await tx.activityLog.create({
                         data: {
                             action: "TICKET_USED",
                             details: "Trip Completed (Marked via Manifest)",
                             applicantId: currentTicket.applicantId,
-                            userId: session?.user?.id,
+                            ...(validUserId ? { userId: validUserId } : {}),
                         }
                     });
+
+                    // Auto-send attendance/good luck notification
+                    autoSendMessage(currentTicket.applicantId, "ON_TICKET_ATTENDED", { ticketId: id })
+                        .catch(e => console.error("[AutoSend] ON_TICKET_ATTENDED error:", e));
                 }
 
                 return updatedTicket;
@@ -138,7 +160,7 @@ export async function PATCH(
         } = body;
 
         // Wrap in Transaction
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             const originalTicket = await tx.ticket.findUnique({
                 where: { id },
                 include: { applicant: true }
@@ -171,10 +193,10 @@ export async function PATCH(
             // AUTOMATED COMPENSATION LOGIC FOR CANCELLED
             if (status === "CANCELLED" && updatedTicket.applicantId) {
                 // Get ticket price from routes
-                const route = await tx.transportRoute.findFirst({
+                const route = await tx.transportRouteDefault.findFirst({
                     where: {
-                        from: { name: updatedTicket.departureLocation },
-                        to: { name: updatedTicket.arrivalLocation }
+                        fromDestination: { name: updatedTicket.departureLocation },
+                        toDestination: { name: updatedTicket.arrivalLocation }
                     }
                 });
 
@@ -182,8 +204,8 @@ export async function PATCH(
                 const currentTripType = applicant?.transportType || "ONE_WAY";
 
                 const ticketPrice = currentTripType === "ROUND_TRIP"
-                    ? Number(route?.roundTripPrice || 0)
-                    : Number(route?.oneWayPrice || 0);
+                    ? Number(route?.priceRoundTrip || 0)
+                    : Number(route?.price || 0);
 
                 const fine = Number(fineAmount) || 0;
 
@@ -224,9 +246,13 @@ export async function PATCH(
                         action: "TICKET_CANCELLED",
                         details: `Cancelled with fine: ${fine}. Refund Voucher: ${refundable}`,
                         applicantId: updatedTicket.applicantId,
-                        userId: session?.user?.id,
+                        ...(validUserId ? { userId: validUserId } : {}),
                     }
                 });
+
+                // Auto-send cancellation notification
+                autoSendMessage(updatedTicket.applicantId, "ON_TICKET_CANCEL", { ticketId: id })
+                    .catch(e => console.error("[AutoSend] ON_TICKET_CANCEL error:", e));
             } else if (status !== "CANCELLED") {
                 // Modification Logic (Price Diff + Fine)
                 const totalCost = (Number(fineAmount) || 0) + (Number(priceDiff) || 0);
@@ -241,15 +267,21 @@ export async function PATCH(
                     });
                 }
 
-                if (session?.user?.id) {
+                if (validUserId) {
                     await tx.activityLog.create({
                         data: {
                             action: "TICKET_UPDATED",
                             details: `Updated Ticket. Cost Adjustment: ${totalCost}`,
                             applicantId: updatedTicket.applicantId,
-                            userId: session?.user?.id,
+                            userId: validUserId,
                         }
                     });
+                }
+
+                // Auto-send ticket modification notification
+                if (updatedTicket.applicantId) {
+                    autoSendMessage(updatedTicket.applicantId, "ON_TICKET_UPDATE", { ticketId: id })
+                        .catch(e => console.error("[AutoSend] ON_TICKET_UPDATE error:", e));
                 }
             }
 
@@ -265,7 +297,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    req: Request,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -276,13 +308,14 @@ export async function DELETE(
             where: { id },
         });
 
-        if (session?.user?.id && ticket.applicantId) {
+        if (ticket.applicantId) {
+            const delValidUserId = await resolveUserId(session);
             await prisma.activityLog.create({
                 data: {
                     action: "TICKET_DELETED",
                     details: `Deleted Ticket ${ticket.ticketNumber}`,
                     applicantId: ticket.applicantId,
-                    userId: session.user.id,
+                    ...(delValidUserId ? { userId: delValidUserId } : {}),
                 },
             });
         }

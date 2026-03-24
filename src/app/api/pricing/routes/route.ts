@@ -1,19 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const fromId = searchParams.get("fromId");
 
-        const whereClause: any = { isActive: true };
-        if (fromId) whereClause.fromId = fromId;
+        const whereClause: any = {};
+        if (fromId) whereClause.fromDestinationId = fromId;
 
-        const routes = await prisma.transportRoute.findMany({
+        const routes = await prisma.transportRouteDefault.findMany({
             where: whereClause,
             include: {
-                from: true,
-                to: true,
+                fromDestination: true,
+                toDestination: true,
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
@@ -34,11 +34,10 @@ export async function POST(request: Request) {
         }
 
         // Check if route exists
-        const existing = await prisma.transportRoute.findFirst({
+        const existing = await prisma.transportRouteDefault.findFirst({
             where: {
-                fromId: body.fromId,
-                toId: body.toId,
-                isActive: true
+                fromDestinationId: body.fromId,
+                toDestinationId: body.toId,
             }
         });
 
@@ -46,18 +45,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Route already exists" }, { status: 400 });
         }
 
-        const route = await prisma.transportRoute.create({
+        const route = await prisma.transportRouteDefault.create({
             data: {
-                fromId: body.fromId,
-                toId: body.toId,
-                oneWayPrice: body.oneWayPrice,
-                roundTripPrice: body.roundTripPrice || 0, // Default to 0 if not provided
-                departureTime: body.departureTime,
-                arrivalTime: body.arrivalTime,
+                fromDestinationId: body.fromId,
+                toDestinationId: body.toId,
+                price: body.oneWayPrice,
+                priceRoundTrip: body.roundTripPrice || 0, // Default to 0 if not provided
             },
             include: {
-                from: true,
-                to: true
+                fromDestination: true,
+                toDestination: true
             }
         });
 

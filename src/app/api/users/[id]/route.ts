@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { userUpdateSchema } from "@/lib/validations";
 
 export async function PATCH(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -16,14 +17,24 @@ export async function PATCH(
 
         const { id } = await params;
         const body = await request.json();
+        const parsed = userUpdateSchema.safeParse(body);
+        
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "بيانات غير صالحة", details: parsed.error.format() },
+                { status: 400 }
+            );
+        }
+
+        const validData = parsed.data;
 
         const updatedUser = await prisma.user.update({
             where: { id },
             data: {
-                ...(body.name && { name: body.name }),
-                ...(body.email && { email: body.email }),
-                ...(body.role && { role: body.role }),
-                ...(body.active !== undefined && { active: body.active }),
+                ...(validData.name && { name: validData.name }),
+                ...(validData.email && { email: validData.email }),
+                ...(validData.role && { role: validData.role }),
+                ...(validData.active !== undefined && { active: validData.active }),
             },
             select: {
                 id: true,
@@ -56,7 +67,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {

@@ -21,14 +21,15 @@ export async function GET() {
                     remainingBalance: { gt: 0 }
                 }
             }),
-            // 2. Missing Ticket: Exam in < 3 days AND Status != TICKET_ISSUED (and not COMPLETED/CANCELLED)
+            // 2. Missing Ticket: Has transportation AND Exam in < 3 days AND No ticket assigned
             prisma.applicant.count({
                 where: {
+                    hasTransportation: true,
                     examDate: {
                         gte: now.toISOString(),
                         lte: threeDaysFromNow.toISOString()
                     },
-                    status: { notIn: ['TICKET_ISSUED', 'COMPLETED', 'CANCELLED'] as any }
+                    ticket: { is: null }
                 }
             }),
             // 3. Passport Expiring Soon

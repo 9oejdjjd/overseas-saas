@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ExamLocation } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -9,21 +9,21 @@ async function main() {
         // Full Packages (Platform + Exam + Transportation)
         {
             name: 'باقة تعز الكاملة',
-            location: 'TAIZ',
+            location: ExamLocation.TAIZ,
             price: 150000, // سعر مثالي
             actualCost: 120000,
             active: true,
         },
         {
             name: 'باقة عدن الكاملة',
-            location: 'ADEN',
+            location: ExamLocation.ADEN,
             price: 180000,
             actualCost: 145000,
             active: true,
         },
         {
             name: 'باقة حضرموت الكاملة',
-            location: 'HADRAMOUT',
+            location: ExamLocation.HADRAMOUT,
             price: 200000,
             actualCost: 165000,
             active: true,
@@ -39,21 +39,21 @@ async function main() {
         // Transportation Only Packages
         {
             name: 'مواصلات تعز فقط',
-            location: 'TAIZ',
+            location: ExamLocation.TAIZ,
             price: 50000,
             actualCost: 40000,
             active: true,
         },
         {
             name: 'مواصلات عدن فقط',
-            location: 'ADEN',
+            location: ExamLocation.ADEN,
             price: 80000,
             actualCost: 65000,
             active: true,
         },
         {
             name: 'مواصلات حضرموت فقط',
-            location: 'HADRAMOUT',
+            location: ExamLocation.HADRAMOUT,
             price: 100000,
             actualCost: 85000,
             active: true,

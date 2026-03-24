@@ -1,18 +1,19 @@
+
 "use client";
 
+import { useRef, useState, useEffect } from "react";
 import { useToast } from "@/components/ui/simple-toast";
-
 import { format } from "date-fns";
-import { CustomDatePicker } from "@/components/ui/custom-date-picker";
+import { ar } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Ticket as TicketIcon, Printer, Download, XCircle, Search, Save, Lock, AlertTriangle, Edit, Settings, Bus, RefreshCw, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Ticket as TicketIcon, Printer, Download, XCircle, Search, Save, Lock, AlertTriangle, Edit, Settings, Bus, RefreshCw, ArrowRight, MapPin, Clock, Loader2 } from "lucide-react";
 import { ExtendedApplicant, Ticket } from "@/types/applicant";
 import { TicketTemplate } from "@/components/TicketTemplate";
+import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
     Sheet,
@@ -20,9 +21,7 @@ import {
     SheetDescription,
     SheetHeader,
     SheetTitle,
-    SheetTrigger,
     SheetFooter,
-    SheetClose,
 } from "@/components/ui/sheet";
 import {
     Select,
@@ -31,8 +30,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
-import { cn } from "@/lib/utils";
 import {
     Dialog,
     DialogContent,
@@ -53,602 +50,306 @@ interface ApplicantTicketTabProps {
 export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "admin", cancellationPolicies = [] }: ApplicantTicketTabProps) {
     const ticketRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(false);
-    const [isSheetOpen, setIsSheetOpen] = useState(false);
-    const [locations, setLocations] = useState<any[]>([]);
+    const [destinations, setDestinations] = useState<any[]>([]);
 
-    // Smart Wizard State
-    const [showTransportForm, setShowTransportForm] = useState(applicant.hasTransportation || !!ticket);
-    const [activateMode, setActivateMode] = useState(false);
+    // Booking State
+    const [fromId, setFromId] = useState("");
+    const [toId, setToId] = useState("");
+    const [travelDate, setTravelDate] = useState("");
+    const [tripType, setTripType] = useState("ONE_WAY"); // ONE_WAY or ROUND_TRIP
+    const [returnDate, setReturnDate] = useState("");
 
+    // Custom Ticket Fields
+    const [agentName, setAgentName] = useState("");
+    const [boardingPoint, setBoardingPoint] = useState("");
+    const [companions, setCompanions] = useState<{name: string}[]>([]);
 
-    // Toast
+    // Search Results
+    const [availableTrips, setAvailableTrips] = useState<any[]>([]);
+    const [hasSearched, setHasSearched] = useState(false);
+
+    // Booking Steps: 1=Search, 2=Select Departure, 3=Select Return, 4=Review
+    const [step, setStep] = useState(1);
+
+    // Selection
+    const [selectedTrip, setSelectedTrip] = useState<any>(null); // Departure Trip
+    const [selectedStop, setSelectedStop] = useState<any>(null);
+
+    // Return Selection
+    const [selectedReturnTrip, setSelectedReturnTrip] = useState<any>(null);
+    const [selectedReturnStop, setSelectedReturnStop] = useState<any>(null);
+
+    // Sheet & Dialogs
+    const [showBookingSheet, setShowBookingSheet] = useState(false);
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
+
+    // Pricing State
+    const [pricingBreakdown, setPricingBreakdown] = useState<any[]>([]);
+    const [manualPrice, setManualPrice] = useState<number | null>(null);
+    const [isEditingPrice, setIsEditingPrice] = useState(false);
+
     const { toast } = useToast();
 
-    // Initial State for Sheet Form
-    const [editForm, setEditForm] = useState({
-        departureDate: "",
-        departureLocation: "",
-        arrivalLocation: "",
-        busNumber: "",
-        seatNumber: "",
-        tripType: "ONE_WAY" as "ONE_WAY" | "ROUND_TRIP",
-    });
-
-    // Calculated Fine & Price Logic
-    const [calculatedFine, setCalculatedFine] = useState(0);
-    const [priceDiff, setPriceDiff] = useState(0);
-    const [matchedPolicy, setMatchedPolicy] = useState<any>(null);
-    const [isCalculating, setIsCalculating] = useState(false);
-    const [newRoutePrice, setNewRoutePrice] = useState(0); // Track new price separately for UI if needed
-
-    // Store original route price ref
-    const [originalRoutePrice, setOriginalRoutePrice] = useState(0);
-
-    // Voucher Selection State
-    const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
-    const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
-    const [voucherDiscount, setVoucherDiscount] = useState(0);
-
-    // Public Voucher Code State
-    const [publicVoucherCode, setPublicVoucherCode] = useState("");
-    const [publicVoucher, setPublicVoucher] = useState<any>(null);
-    const [publicVoucherError, setPublicVoucherError] = useState("");
-    const [isCheckingCode, setIsCheckingCode] = useState(false);
-
-    // Cancellation Dialog State
-    const [showCancelDialog, setShowCancelDialog] = useState(false);
-    const [cancelDialogData, setCancelDialogData] = useState<{
-        ticketPrice: number;
-        fineAmount: number;
-        voucherValue: number;
-        policyName: string;
-        ticketType: string;
-    } | null>(null);
-
-    // Booking Confirmation Sheet State
-    const [showBookingSheet, setShowBookingSheet] = useState(false);
-    const [bookingData, setBookingData] = useState<{
-        ticketPrice: number;
-        tripType: string;
-        departureLocation: string;
-        arrivalLocation: string;
-        departureDate: string;
-    } | null>(null);
-
-    // In setup mode, if ticket exists -> Read Only
-    const isReadOnly = viewMode === "setup" && !!ticket;
-
-    // Helper: Find Location Name by ID or Name
-    const getLocationName = (idOrName: string | null | undefined) => {
-        if (!idOrName) return "";
-        const found = locations.find(l => l.id === idOrName || l.name === idOrName);
-        return found ? found.name : idOrName;
-    };
-
-    // Auto-Fill Logic
-    useEffect(() => {
-        if (viewMode === "setup" && !ticket && locations.length > 0) {
-            // Auto-fill logic for new ticket in wizard
-            const defaultDate = (() => {
-                if (applicant.examDate) {
-                    const d = new Date(applicant.examDate);
-                    d.setDate(d.getDate() - 1);
-                    return d.toISOString().split('T')[0];
-                }
-                return "";
-            })();
-
-            const fromLoc = getLocationName(applicant.transportFromId);
-            const toLoc = getLocationName(applicant.examLocation); // examLocation is usually name, but ensuring
-
-            setFormData(prev => ({
-                ...prev,
-                departureDate: defaultDate,
-                departureLocation: fromLoc,
-                arrivalLocation: toLoc,
-                // If user requested Round Trip in registration (Need to add this field to Applicant if not exists, currently defaulting One Way or checking notes/metadata? 
-                // schema says transportType exists on Applicant)
-                // We'll set it in the UI context if we had a field for it in formData, but formData here is just ticket fields.
-                // We can use it to fetch price.
-            }));
-        }
-    }, [viewMode, ticket, applicant, locations]);
-
-
-    // New Ticket Form State
-    // Calculate default date for NEW ticket
-    const getDefaultDate = () => {
-        if (ticket?.departureDate) return new Date(ticket.departureDate).toISOString().split('T')[0];
-        if (applicant.examDate) {
-            const date = new Date(applicant.examDate);
-            date.setDate(date.getDate() - 1); // Subtract 1 day
-            return date.toISOString().split('T')[0];
-        }
-        if (applicant.travelDate) return new Date(applicant.travelDate).toISOString().split('T')[0];
-        return "";
-    }
-
-    const [formData, setFormData] = useState({
-        // Note: New Ticket Creation usually assumes ONE_WAY unless we add field. 
-        // For now, let's keep creation simple or add tripType if user insists.
-        // Current prompt focused on Modification.
-        busNumber: ticket?.busNumber || "A1 100",
-        seatNumber: ticket?.seatNumber || "",
-        departureDate: getDefaultDate(),
-        departureLocation: ticket?.departureLocation || "صنعاء",
-        arrivalLocation: ticket?.arrivalLocation || applicant.location?.name || applicant.examLocation || "",
-        transportCompany: ticket?.transportCompany || "أوفرسيز للسفريات",
-        tripType: applicant.transportType || "ONE_WAY"
-    });
-
-    // Calculate Price for New Ticket (Wizard Mode)
-    useEffect(() => {
-        if (!ticket && showTransportForm && formData.departureLocation && formData.arrivalLocation) {
-            fetchRouteData(formData.departureLocation, formData.arrivalLocation).then(prices => {
-                const price = formData.tripType === 'ROUND_TRIP' ? prices.roundTrip : prices.oneWay;
-                setNewRoutePrice(price);
-            });
-        }
-    }, [ticket, showTransportForm, formData.departureLocation, formData.arrivalLocation, formData.tripType]);
-
-    // Fetch Locations on Mount
-    useEffect(() => {
-        const fetchLocations = async () => {
-            try {
-                const res = await fetch("/api/locations");
-                if (res.ok) {
-                    const data = await res.json();
-                    setLocations(data);
-                }
-            } catch (e) {
-                console.error("Failed to fetch locations");
-            }
-        };
-        fetchLocations();
-    }, []);
-
-    // Fetch Available Vouchers for Applicant (All types: Personal + Compensation)
-    useEffect(() => {
-        const fetchVouchers = async () => {
-            try {
-                const res = await fetch(`/api/vouchers?applicantId=${applicant.id}&activeOnly=true`);
-                if (res.ok) {
-                    const data = await res.json();
-                    // Filter active vouchers with balance > 0
-                    const activeVouchers = data.filter((v: any) =>
-                        !v.isUsed && v.balance > 0
-                    );
-                    setAvailableVouchers(activeVouchers);
-                }
-            } catch (e) {
-                console.error("Failed to fetch vouchers", e);
-            }
-        };
-        fetchVouchers();
-    }, [applicant.id]);
-
-    // Check Public Voucher Code
-    const checkPublicVoucherCode = async () => {
-        if (!publicVoucherCode.trim()) return;
-
-        setIsCheckingCode(true);
-        setPublicVoucherError("");
-        setPublicVoucher(null);
-
-        try {
-            const res = await fetch(`/api/vouchers?code=${encodeURIComponent(publicVoucherCode.trim())}`);
-            if (res.ok) {
-                const vouchers = await res.json();
-                if (vouchers.length > 0) {
-                    const voucher = vouchers[0];
-                    if (voucher.isUsed) {
-                        setPublicVoucherError("هذه القسيمة مستخدمة بالفعل");
-                    } else if (voucher.balance <= 0) {
-                        setPublicVoucherError("لا يوجد رصيد متاح في هذه القسيمة");
-                    } else {
-                        setPublicVoucher(voucher);
-                    }
-                } else {
-                    setPublicVoucherError("لم يتم العثور على قسيمة بهذا الكود");
-                }
-            }
-        } catch (e) {
-            setPublicVoucherError("خطأ في التحقق من الكود");
-        } finally {
-            setIsCheckingCode(false);
-        }
-    };
-
-    // Fetch Route Data Helper
-    const fetchRouteData = async (from: string, to: string) => {
-        try {
-            const res = await fetch(`/api/transport-routes?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-            if (res.ok) {
-                const data = await res.json();
-                return {
-                    oneWay: Number(data.oneWayPrice || 0),
-                    roundTrip: Number(data.roundTripPrice || 0)
-                };
-            }
-        } catch (e) {
-            console.error("Failed to fetch price", e);
-        }
-        return { oneWay: 0, roundTrip: 0 };
-    };
-
-    // When ticket changes (or component mounts), sync edit form and fetch original price
-    useEffect(() => {
-        if (ticket) {
-            // Determine current trip type from applicant
-            const currentTripType = (applicant.transportType === 'ROUND_TRIP') ? 'ROUND_TRIP' : 'ONE_WAY';
-
-            setEditForm({
-                departureDate: new Date(ticket.departureDate).toISOString().split('T')[0],
-                departureLocation: ticket.departureLocation,
-                arrivalLocation: ticket.arrivalLocation,
-                busNumber: ticket.busNumber || "",
-                seatNumber: ticket.seatNumber || "",
-                tripType: currentTripType,
-            });
-
-            // Calculate Original Price
-            fetchRouteData(ticket.departureLocation, ticket.arrivalLocation).then(prices => {
-                setOriginalRoutePrice(currentTripType === 'ROUND_TRIP' ? prices.roundTrip : prices.oneWay);
-            });
-        }
-    }, [ticket, applicant.transportType]);
-
-    // Recalculate Fine & Price whenever Edit Form Changes
-    useEffect(() => {
-        if (!ticket || !isSheetOpen) return;
-
-        const calculate = async () => {
-            setIsCalculating(true);
-            try {
-                // 1. Calculate Fine (Modification Policy)
-                const travelDate = new Date(ticket.departureDate);
-                const now = new Date();
-                const diffMs = travelDate.getTime() - now.getTime();
-                const hoursRemaining = diffMs / (1000 * 60 * 60);
-
-                // Filter for MODIFICATION policies
-                const modPolicies = cancellationPolicies
-                    .filter(p => p.category === 'MODIFICATION')
-                    .sort((a, b) => (a.hoursTrigger || 9999) - (b.hoursTrigger || 9999));
-
-                // Fallback if no specific category found, check name (Legacy)
-                if (modPolicies.length === 0) {
-                    cancellationPolicies.forEach(p => {
-                        if (p.name.includes('تعديل') && !p.category) modPolicies.push(p);
-                    });
-                    modPolicies.sort((a, b) => (a.hoursTrigger || 9999) - (b.hoursTrigger || 9999));
-                }
-
-                let policyToApply = null;
-                for (const policy of modPolicies) {
-                    if (policy.hoursTrigger && hoursRemaining < policy.hoursTrigger) {
-                        policyToApply = policy;
-                        break;
-                    }
-                }
-                if (!policyToApply && modPolicies.length > 0) {
-                    policyToApply = modPolicies.find(p => !p.hoursTrigger) || modPolicies[modPolicies.length - 1]; // Default or last (strictest?)
-                }
-
-                if (policyToApply) {
-                    setMatchedPolicy(policyToApply);
-                    setCalculatedFine(Number(policyToApply.feeAmount || 0));
-                } else {
-                    setMatchedPolicy(null);
-                    setCalculatedFine(0);
-                }
-
-                // 2. Calculate New Price
-                const prices = await fetchRouteData(editForm.departureLocation, editForm.arrivalLocation);
-                const currentNewPrice = editForm.tripType === 'ROUND_TRIP' ? prices.roundTrip : prices.oneWay;
-                setNewRoutePrice(currentNewPrice);
-
-                // 3. Diff
-                setPriceDiff(currentNewPrice - originalRoutePrice);
-
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setIsCalculating(false);
-            }
-        };
-
-        const timeout = setTimeout(calculate, 500); // Debounce
-        return () => clearTimeout(timeout);
-
-    }, [editForm, ticket, isSheetOpen, cancellationPolicies, originalRoutePrice]);
-
-
-    const handleIssueTicket = async () => {
-        if (!formData.departureDate) {
-            toast("يرجى تحديد تاريخ السفر أولاً", "error");
-            return;
-        }
-
-        if (!formData.departureLocation || !formData.arrivalLocation) {
-            toast("يرجى تحديد مسار الرحلة", "error");
-            return;
-        }
-
+    // Handle requesting transport for applicants who didn't select it during registration
+    const handleRequestTransport = async () => {
         setLoading(true);
         try {
-            // Fetch route price before confirmation
-            const prices = await fetchRouteData(formData.departureLocation, formData.arrivalLocation);
-            const price = formData.tripType === 'ROUND_TRIP'
-                ? Number(prices.roundTrip || 0)
-                : Number(prices.oneWay || 0);
-
-            setBookingData({
-                ticketPrice: price,
-                tripType: formData.tripType === 'ROUND_TRIP' ? "ذهاب وعودة" : "ذهاب فقط",
-                departureLocation: formData.departureLocation,
-                arrivalLocation: formData.arrivalLocation,
-                departureDate: formData.departureDate,
+            const res = await fetch(`/api/applicants/${applicant.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ hasTransportation: true })
             });
-            setShowBookingSheet(true);
-        } catch (error) {
-            alert("خطأ في حساب سعر التذكرة");
+            if (res.ok) {
+                toast("تم طلب خدمة المواصلات بنجاح", "success");
+                onUpdate();
+            } else {
+                toast("فشل طلب المواصلات", "error");
+            }
+        } catch (e) {
+            toast("حدث خطأ", "error");
         } finally {
             setLoading(false);
         }
     };
 
-    const confirmBooking = async () => {
-        if (!bookingData) return;
+    // Fetch Destinations
+    useEffect(() => {
+        fetch("/api/transport/destinations")
+            .then(res => res.json())
+            .then(data => setDestinations(data))
+            .catch(err => console.error(err));
+    }, []);
+
+    // Auto-fill from Applicant Data
+    useEffect(() => {
+        if (!ticket && destinations.length > 0) {
+            // 1. From (Transport From) - Match by Name because IDs might differ (Location vs TransportDestination)
+            // Use optional chaining for safety
+            const fromName = applicant.transportFrom?.name;
+            if (fromName) {
+                const match = destinations.find(d => d.name === fromName);
+                if (match) setFromId(match.id);
+            } else if (applicant.transportFromId) {
+                // Fallback to ID if name missing (orphan ID?)
+                const match = destinations.find(d => d.id === applicant.transportFromId);
+                if (match) setFromId(match.id);
+            }
+
+            // 2. To (Exam Location) - Match by Name
+            const toName = applicant.location?.name;
+            if (toName) {
+                const match = destinations.find(d => d.name === toName);
+                if (match) setToId(match.id);
+            } else if (applicant.locationId) {
+                const match = destinations.find(d => d.id === applicant.locationId);
+                if (match) setToId(match.id);
+            }
+
+            // 3. Travel Date (Exam Date - 1 Day)
+            if (applicant.examDate) {
+                const examDate = new Date(applicant.examDate);
+
+                const travelD = new Date(examDate);
+                travelD.setDate(travelD.getDate() - 1); // Day before exam
+                setTravelDate(travelD.toISOString().split('T')[0]);
+
+                // 4. Return Date (Same as Exam Date)
+                const returnD = new Date(examDate);
+                setReturnDate(returnD.toISOString().split('T')[0]);
+            }
+
+            // 5. Trip Type
+            if (applicant.transportType) {
+                setTripType(applicant.transportType);
+            }
+        }
+    }, [applicant, ticket, destinations]);
+
+    const handleSearchTrips = async (overrideStep1Date?: string) => {
+        if (!fromId || !toId || (!travelDate && !overrideStep1Date)) {
+            toast("يرجى اختيار معايير البحث بالكامل", "error");
+            return;
+        }
 
         setLoading(true);
+        setStep(1); // Reset
+        setSelectedTrip(null);
+        setSelectedReturnTrip(null);
+
         try {
-            const res = await fetch("/api/tickets", {
+            const params = new URLSearchParams();
+            params.append("from", fromId);
+            params.append("to", toId);
+            params.append("date", overrideStep1Date || travelDate);
+
+            const res = await fetch(`/api/transport/booking/search?${params.toString()}`);
+            if (res.ok) {
+                const trips = await res.json();
+                setAvailableTrips(trips);
+                setHasSearched(true);
+                setStep(2); // Go to Select Departure
+            } else {
+                toast("تعذر جلب الرحلات", "error");
+            }
+        } catch (e) {
+            console.error(e);
+            toast("خطأ في البحث عن الرحلات", "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSearchReturnTrips = async (overrideDate?: string) => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            params.append("from", toId);
+            params.append("to", fromId);
+            params.append("date", overrideDate || returnDate);
+            
+            const res = await fetch(`/api/transport/booking/search?${params.toString()}`);
+            if (res.ok) {
+                const returnTrips = await res.json();
+                setAvailableTrips(returnTrips);
+                setStep(3);
+            } else {
+                toast("خطأ في البحث عن رحلات العودة", "error");
+            }
+        } catch (e) {
+            toast("خطأ في البحث عن رحلات العودة", "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelectTrip = async (trip: any, stop: any = null) => {
+        if (step === 2) {
+            // Selected Departure
+            setSelectedTrip(trip);
+            setSelectedStop(stop);
+            
+            if (trip.segmentDetails?.fromBoardingPoint) {
+                setBoardingPoint(trip.segmentDetails.fromBoardingPoint);
+            } else {
+                setBoardingPoint("");
+            }
+
+            if (tripType === "ROUND_TRIP") {
+                // Prepare for Return Selection
+                handleSearchReturnTrips();
+            } else {
+                // One Way - Go to Pricing
+                calculatePrice(trip, stop, null, null);
+            }
+        } else if (step === 3) {
+            // Selected Return
+            setSelectedReturnTrip(trip);
+            setSelectedReturnStop(stop);
+            // Go to Pricing (Use previously selected departure + this return)
+            calculatePrice(selectedTrip, selectedStop, trip, stop);
+        }
+    };
+
+    const calculatePrice = async (depTrip: any, depStop: any, retTrip: any, retStop: any) => {
+        setLoading(true);
+        setIsEditingPrice(false);
+        setManualPrice(null);
+
+        try {
+            // Determine Base Price
+            const depPrice = depStop ? Number(depStop.price) : Number(depTrip.price);
+            let retPrice = 0;
+            if (retTrip) {
+                retPrice = retStop ? Number(retStop.price) : Number(retTrip.price);
+            }
+
+            const basePrice = depPrice + retPrice;
+
+            // Calculate Passenger Type
+            let passengerType = "ADULT";
+            if (applicant.dob) {
+                const age = new Date().getFullYear() - new Date(applicant.dob).getFullYear();
+                if (age < 2) passengerType = "INFANT";
+                else if (age < 12) passengerType = "CHILD";
+            }
+
+            // Call Pricing Engine
+            // Note: Pricing Engine currently handles single leg. 
+            // For Round Trip, we might want to call it twice OR ideally update it to handle total.
+            // For now, let's assume valid total price is sufficient, or call twice and sum?
+            // Better: Pass total base price and tripType=ROUND_TRIP to engine so it applies RT discount rules.
+
+            const res = await fetch("/api/transport/pricing-engine", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    applicantId: applicant.id,
-                    ...formData,
-                    voucherId: selectedVoucher?.id || null, // Personal Voucher
-                    publicVoucherId: publicVoucher?.id || null, // Public Voucher
-                    voucherDiscount: voucherDiscount,
-                }),
-            });
-
-            if (res.ok) {
-                // Mark Personal voucher as used if applied
-                if (selectedVoucher) {
-                    await fetch(`/api/vouchers/${selectedVoucher.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ isUsed: true }),
-                    });
-                }
-
-                // Mark Public voucher as used if applied (optional - depends on business logic, maybe public vouchers are reusable?)
-                // Assuming public vouchers are one-time use per person or globally unique codes
-                if (publicVoucher && publicVoucher.id) {
-                    await fetch(`/api/vouchers/${publicVoucher.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ isUsed: true }),
-                    });
-                }
-
-                toast("تم إصدار التذكرة بنجاح 🎫", "success");
-                setShowBookingSheet(false);
-                onUpdate();
-            }
-        } catch (error) {
-            toast("خطأ في إصدار التذكرة", "error");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-    // New State for Update Confirmation
-    const [showUpdateDialog, setShowUpdateDialog] = useState(false);
-
-    // Step 1: Trigger Dialog
-    const handleUpdateTicket = async () => {
-        if (!ticket) return;
-        // Verify minimal requirements
-        if (!editForm.departureDate) {
-            toast("يرجى تحديد تاريخ السفر", "error");
-            return;
-        }
-        setShowUpdateDialog(true);
-    };
-
-    // Step 2: Confirm Update
-    const confirmUpdateTicket = async () => {
-        if (!ticket) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/tickets/${ticket.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...editForm,
-                    fineAmount: calculatedFine,
-                    priceDiff: priceDiff
-                }),
-            });
-
-            if (res.ok) {
-                toast("تم تعديل التذكرة بنجاح", "success");
-                setIsSheetOpen(false);
-                setShowUpdateDialog(false);
-                onUpdate();
-            } else {
-                toast("فشل التعديل", "error");
-            }
-        } catch (error) {
-            toast("حدث خطأ أثناء التعديل", "error");
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const handleCancelTicket = async () => {
-        if (!ticket) return;
-
-        // Find Cancellation Fee Logic (Bonus)
-        const travelDate = new Date(ticket.departureDate);
-        const now = new Date();
-        const diffMs = travelDate.getTime() - now.getTime();
-        const hoursRemaining = diffMs / (1000 * 60 * 60);
-
-        const cancelPolicies = cancellationPolicies
-            .filter(p => p.category === 'CANCELLATION')
-            .sort((a, b) => {
-                // Sort by hours trigger descending to check larger windows first? 
-                // Or ascending?
-                // Logic: 
-                // If I have > 24h and < 24h.
-                // If I am at 30h. > 24h matches.
-                // If I am at 10h. < 24h matches.
-                // Providing a consistent sort is key. Let's rely on specific checks.
-                return (a.hoursTrigger || 0) - (b.hoursTrigger || 0);
-            });
-
-        let fee = 0;
-        let policyName = "";
-
-        // Iterate and find first matching policy
-        // We need to prioritize strict matches.
-        // Usually: 
-        // - Less than X hours (Urgent cancellation)
-        // - Greater than X hours (Normal cancellation)
-
-        for (const policy of cancelPolicies) {
-            const hours = policy.hoursTrigger || 0;
-            const condition = policy.condition || 'LESS_THAN'; // Default to less than if not specified
-
-            let isMatch = false;
-
-            if (condition === 'GREATER_THAN') {
-                if (hoursRemaining >= hours) {
-                    isMatch = true;
-                }
-            } else if (condition === 'LESS_THAN') {
-                if (hoursRemaining < hours) {
-                    isMatch = true;
-                }
-            } else {
-                // Fallback for EQUAL or undefined
-                if (hoursRemaining < hours) isMatch = true;
-            }
-
-            if (isMatch) {
-                // If we already found a match, should we overwrite it?
-                // Case: > 24h (Fee 100), < 72h (Fee 50) - 30h matches both if defined poorly.
-                // Let's assume policies shouldn't overlap in a conflicting way, or take the highest fee?
-                // For now, let's take the first one that matches logic-wise or maybe specificity.
-                // If I match "Greater than 24h" (30h), and I have "Greater than 48h" (30h is NOT > 48).
-
-                // Let's just pick the first valid match and break, assuming sorted by severity? 
-                // Or maybe we want to verify.
-
-                // Simple logic: overwrite fee if this matches. 
-                // If we sort ascending hours:
-                // 1. < 6h
-                // 2. > 24h
-
-                // At 30h: 
-                // 1. < 6h? No.
-                // 2. > 24h? Yes. -> Fee set.
-
-                // At 4h:
-                // 1. < 6h? Yes. -> Fee set.
-                // 2. > 24h? No.
-
-                // At 12h:
-                // 1. < 6h? No.
-                // 2. > 24h? No.
-                // Result: No fee? Usually standard fee applies. 
-
-                // Let's rely on what we have.
-                fee = Number(policy.feeAmount);
-                policyName = policy.name;
-
-                // If it's a "Less than" triggers, precise matches usually come first (smallest hours).
-                // If matched, we break.
-                if (condition === 'LESS_THAN') break;
-
-                // If "Greater than", maybe we keep looking? 
-                // Example: > 24h (100), > 48h (50). 
-                // At 60h: > 24h is true (100). > 48h is true (50).
-                // Usually earlier cancellation = cheaper. So we want the > 48h one. 
-                // Since we sorted ASC (24 then 48), we will see 24 first, set 100. Then see 48, set 50.
-                // So not breaking is better for GREATER_THAN if sorted ASC.
-            }
-        }
-
-        if (fee === 0 && cancelPolicies.length > 0) {
-            // Check for a default policy (no hours trigger or explicit default)
-            const defaultPolicy = cancelPolicies.find(p => !p.hoursTrigger);
-            if (defaultPolicy) {
-                fee = Number(defaultPolicy.feeAmount);
-                policyName = defaultPolicy.name;
-            }
-        }
-
-        // Calculate ticket price based on applicant's transport type
-        const ticketTypeVal = applicant.transportType || "ONE_WAY";
-
-        // We need to fetch route price - do it async
-        try {
-            const routeRes = await fetch(`/api/transport-routes?from=${encodeURIComponent(ticket.departureLocation)}&to=${encodeURIComponent(ticket.arrivalLocation)}`);
-            let ticketPrice = 0;
-            if (routeRes.ok) {
-                const routeData = await routeRes.json();
-                ticketPrice = ticketTypeVal === "ROUND_TRIP"
-                    ? Number(routeData.roundTripPrice || 0)
-                    : Number(routeData.oneWayPrice || 0);
-            }
-
-            const voucherValue = ticketPrice - fee;
-
-            // Show dialog with all details
-            setCancelDialogData({
-                ticketPrice,
-                fineAmount: fee,
-                voucherValue: Math.max(0, voucherValue),
-                policyName: policyName || "افتراضي",
-                ticketType: ticketTypeVal === "ROUND_TRIP" ? "ذهاب وعودة" : "ذهاب فقط"
-            });
-            setShowCancelDialog(true);
-        } catch (error) {
-            console.error("Error calculating cancel details", error);
-            toast("خطأ في حساب تفاصيل الإلغاء", "error");
-        }
-    };
-
-    // Confirm cancellation after user reviews the dialog
-    const confirmCancelTicket = async () => {
-        if (!ticket || !cancelDialogData) return;
-
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/tickets/${ticket.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    status: "CANCELLED",
-                    fineAmount: cancelDialogData.fineAmount
+                    basePrice,
+                    routeFromId: depTrip.fromDestinationId, // Main route
+                    routeToId: depTrip.toDestinationId,
+                    passengerType,
+                    tripType: tripType,
+                    busClass: "STANDARD",
+                    bookingDate: new Date(),
+                    travelDate: depTrip.date
                 })
             });
 
             if (res.ok) {
-                setShowCancelDialog(false);
-                setCancelDialogData(null);
-                toast("تم إلغاء التذكرة وإنشاء قسيمة التعويض بنجاح ✅", "success");
-                onUpdate();
+                const data = await res.json();
+                setPricingBreakdown(data.breakdown || []);
+                setManualPrice(data.finalPrice);
+            } else {
+                setManualPrice(basePrice);
+                setPricingBreakdown([{ label: "سعر أساسي", amount: basePrice }]);
             }
-        } catch (error) {
-            toast("خطأ في إلغاء التذكرة", "error");
+
+            setShowBookingSheet(true);
+            setStep(4); // Review
+        } catch (e) {
+            toast("خطأ في حساب السعر", "error");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const confirmBooking = async () => {
+        if (!selectedTrip) return;
+
+        setLoading(true);
+        try {
+            const payload: any = {
+                applicantId: applicant.id,
+                tripId: selectedTrip.id,
+                stopId: selectedStop?.id,
+                price: manualPrice,
+                tripType: tripType,
+                agentName: agentName,
+                boardingPoint: boardingPoint,
+                companions: companions.filter(c => c.name.trim() !== "")
+            };
+
+            if (selectedReturnTrip) {
+                payload.returnTripId = selectedReturnTrip.id;
+                // payload.returnStopId = selectedReturnStop?.id; // If API supports it
+            }
+
+            const res = await fetch("/api/tickets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                toast("تم إصدار التذكرة بنجاح", "success");
+                setShowBookingSheet(false);
+                setStep(1); // Reset
+                onUpdate();
+            } else {
+                const err = await res.json();
+                toast(err.error || "فشل حجز التذكرة", "error");
+            }
+        } catch (e) {
+            toast("حدث خطأ", "error");
         } finally {
             setLoading(false);
         }
@@ -664,7 +365,7 @@ export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "ad
             } as any);
 
             const imgData = canvas.toDataURL("image/png");
-            const pdf = new jsPDF("p", "mm", "a4"); // A4 paper
+            const pdf = new jsPDF("p", "mm", "a4");
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
@@ -676,342 +377,25 @@ export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "ad
         }
     };
 
-    return (
-        <>
-            {/* Cancellation Details Dialog */}
-            <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="text-right flex items-center gap-2 text-red-600">
-                            <XCircle className="h-5 w-5" />
-                            تأكيد إلغاء التذكرة
-                        </DialogTitle>
-                        <DialogDescription className="text-right">
-                            يرجى مراجعة تفاصيل الإلغاء قبل التأكيد
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {cancelDialogData && (
-                        <div className="space-y-4 py-4">
-                            {/* Ticket Info */}
-                            <div className="bg-slate-50 rounded-lg p-4 border">
-                                <div className="text-sm text-gray-500 mb-2">معلومات التذكرة</div>
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium">رقم التذكرة</span>
-                                    <span className="font-bold text-primary">{ticket?.ticketNumber}</span>
-                                </div>
-                                <div className="flex justify-between items-center mt-1">
-                                    <span className="font-medium">نوع الرحلة</span>
-                                    <Badge variant="outline">{cancelDialogData.ticketType}</Badge>
-                                </div>
-                                <div className="flex justify-between items-center mt-1">
-                                    <span className="font-medium">المسار</span>
-                                    <span className="text-sm">{ticket?.departureLocation} ↔ {ticket?.arrivalLocation}</span>
-                                </div>
-                            </div>
-
-                            {/* Financial Breakdown */}
-                            <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-4 border border-red-200">
-                                <div className="text-sm text-red-600 mb-3 font-medium">💰 التفاصيل المالية</div>
-
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-gray-600">سعر التذكرة</span>
-                                        <span className="font-medium">{cancelDialogData.ticketPrice.toLocaleString()} ر.ي</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-red-600">
-                                        <span className="flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            غرامة الإلغاء ({cancelDialogData.policyName})
-                                        </span>
-                                        <span className="font-medium">-{cancelDialogData.fineAmount.toLocaleString()} ر.ي</span>
-                                    </div>
-                                    <div className="border-t border-dashed pt-2 mt-2"></div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-bold text-green-700">قيمة القسيمة التعويضية</span>
-                                        <span className="font-bold text-lg text-green-600">
-                                            {cancelDialogData.voucherValue.toLocaleString()} ر.ي
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Info Alert */}
-                            {cancelDialogData.voucherValue > 0 && (
-                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
-                                    <div className="flex items-start gap-2">
-                                        <span className="text-lg">🎫</span>
-                                        <div>
-                                            <p className="font-medium">سيتم إنشاء قسيمة تعويض تلقائياً</p>
-                                            <p className="text-green-600 text-xs mt-1">
-                                                يمكن للمتقدم استخدامها عند حجز تذكرة جديدة
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowCancelDialog(false)}
-                            disabled={loading}
-                        >
-                            إلغاء
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={confirmCancelTicket}
-                            disabled={loading}
-                            className="gap-2"
-                        >
-                            {loading ? (
-                                <>جاري الإلغاء...</>
-                            ) : (
-                                <>
-                                    <XCircle className="h-4 w-4" />
-                                    تأكيد الإلغاء
-                                </>
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Update Confirmation Dialog */}
-            <Dialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="text-right flex items-center gap-2 text-blue-600">
-                            <Edit className="h-5 w-5" />
-                            تأكيد تعديل التذكرة
-                        </DialogTitle>
-                        <DialogDescription className="text-right">
-                            سيتم تطبيق الرسوم التالية على حساب المتقدم
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-4">
-                        <div className="bg-slate-50 border rounded-lg p-4">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-gray-600">حالة السياسة:</span>
-                                <Badge variant={matchedPolicy ? "destructive" : "outline"}>
-                                    {matchedPolicy ? matchedPolicy.name : "تعديل عادي"}
-                                </Badge>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="font-medium">غرامة التعديل</span>
-                                <span className="text-red-600 font-bold">{calculatedFine.toLocaleString()} ر.ي</span>
-                            </div>
-                            <div className="flex justify-between items-center mt-2">
-                                <span className="font-medium">فارق السعر ({editForm.tripType === 'ROUND_TRIP' ? "ذهاب وعودة" : "ذهاب فقط"})</span>
-                                <span className={cn("font-bold", priceDiff > 0 ? "text-red-600" : "text-green-600")}>
-                                    {priceDiff > 0 ? "+" : ""}{priceDiff.toLocaleString()} ر.ي
-                                </span>
-                            </div>
-                            <div className="border-t border-dashed my-3"></div>
-                            <div className="flex justify-between items-center text-lg">
-                                <span className="font-bold">الإجمالي المستحق</span>
-                                <span className="font-bold text-primary">{(calculatedFine + priceDiff).toLocaleString()} ر.ي</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="outline" onClick={() => setShowUpdateDialog(false)}>إلغاء</Button>
-                        <Button onClick={confirmUpdateTicket} disabled={loading}>
-                            {loading ? "جاري التعديل..." : "تأكيد التعديل"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-            {/* Booking Confirmation Sheet */}
-            <Sheet open={showBookingSheet} onOpenChange={setShowBookingSheet}>
-                <SheetContent className="sm:max-w-md overflow-y-auto">
-                    <SheetHeader>
-                        <SheetTitle className="text-right flex items-center gap-2 text-blue-700">
-                            <TicketIcon className="h-5 w-5" />
-                            تأكيد حجز التذكرة
-                        </SheetTitle>
-                        <SheetDescription className="text-right">
-                            راجع تفاصيل الرحلة والقسائم قبل التأكيد النهائي
-                        </SheetDescription>
-                    </SheetHeader>
-
-                    {bookingData && (
-                        <div className="space-y-6 py-6">
-                            {/* Trip Summary */}
-                            <div className="space-y-3">
-                                <h3 className="font-bold text-gray-800 text-right">🛫 تفاصيل الرحلة</h3>
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-right space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-bold text-slate-800">{bookingData.departureLocation}</span>
-                                        <ArrowLeftRight className="h-4 w-4 text-slate-400" />
-                                        <span className="font-bold text-slate-800">{bookingData.arrivalLocation}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500">نوع الرحلة:</span>
-                                        <Badge variant="outline">{bookingData.tripType}</Badge>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500">تاريخ السفر:</span>
-                                        <span className="font-medium" dir="ltr">{bookingData.departureDate}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Vouchers Section */}
-                            <div className="space-y-3">
-                                <h3 className="font-bold text-gray-800 text-right">🎟️ القسائم والخصومات</h3>
-
-                                {/* Personal Vouchers */}
-                                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                                    <Label className="text-sm font-medium text-blue-700 mb-2 block text-right">قسائم المتقدم الشخصية</Label>
-                                    {availableVouchers.length > 0 ? (
-                                        <Select
-                                            value={selectedVoucher?.id || "none"}
-                                            onValueChange={(val) => {
-                                                if (val === "none") {
-                                                    setSelectedVoucher(null);
-                                                    setVoucherDiscount(publicVoucher ? Number(publicVoucher.balance) : 0);
-                                                } else {
-                                                    const voucher = availableVouchers.find(v => v.id === val);
-                                                    setSelectedVoucher(voucher || null);
-                                                    const personalDiscount = voucher ? Number(voucher.balance) : 0;
-                                                    const publicDiscount = publicVoucher ? Number(publicVoucher.balance) : 0;
-                                                    setVoucherDiscount(personalDiscount + publicDiscount);
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger className="bg-white text-right" dir="rtl">
-                                                <SelectValue placeholder="اختر قسيمة شخصية" />
-                                            </SelectTrigger>
-                                            <SelectContent dir="rtl">
-                                                <SelectItem value="none">بدون قسيمة شخصية</SelectItem>
-                                                {availableVouchers.map((voucher) => (
-                                                    <SelectItem key={voucher.id} value={voucher.id}>
-                                                        <div className="flex items-center gap-2 w-full justify-between">
-                                                            <span>{Number(voucher.balance).toLocaleString()} ر.ي</span>
-                                                            <Badge variant="outline" className={
-                                                                voucher.notes?.includes('COMP_') || voucher.notes?.includes('تعويض')
-                                                                    ? "bg-orange-50 text-orange-700 border-orange-200 ml-2"
-                                                                    : "bg-blue-50 text-blue-700 border-blue-200 ml-2"
-                                                            }>
-                                                                {voucher.notes?.includes('COMP_') || voucher.notes?.includes('تعويض') ? 'تعويض' : 'شخصية'}
-                                                            </Badge>
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    ) : (
-                                        <div className="text-sm text-gray-500 text-center py-2 bg-gray-50 rounded border border-dashed">
-                                            لا توجد قسائم متاحة
-                                        </div>
-                                    )}
-                                </div>
-
-
-
-                                {/* Public Voucher Code */}
-                                <div className="bg-white rounded-lg p-3 border border-purple-100">
-                                    <Label className="text-sm font-medium text-purple-700 mb-2 block text-right">كود قسيمة عامة</Label>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={checkPublicVoucherCode}
-                                            disabled={isCheckingCode || !publicVoucherCode.trim()}
-                                            className="whitespace-nowrap"
-                                        >
-                                            {isCheckingCode ? <RefreshCw className="h-4 w-4 animate-spin" /> : "تحقق"}
-                                        </Button>
-                                        <Input
-                                            placeholder="أدخل الكود..."
-                                            value={publicVoucherCode}
-                                            onChange={(e) => setPublicVoucherCode(e.target.value)}
-                                            className="text-right"
-                                        />
-                                    </div>
-                                    {publicVoucherError && (
-                                        <div className="mt-2 text-xs text-red-600 flex items-center gap-1 justify-end">
-                                            {publicVoucherError} <XCircle className="h-3 w-3" />
-                                        </div>
-                                    )}
-                                    {publicVoucher && (
-                                        <div className="mt-2 flex items-center justify-between bg-purple-50 rounded p-2 text-sm border border-purple-200">
-                                            <span className="font-bold text-purple-600">{Number(publicVoucher.balance).toLocaleString()} ر.ي</span>
-                                            <span className="text-purple-700">✅ قيمة القسيمة</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Total Calculation */}
-                            <div className="space-y-3 pt-4 border-t">
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="font-medium">{bookingData.ticketPrice.toLocaleString()} ر.ي</span>
-                                    <span className="text-gray-600">سعر التذكرة:</span>
-                                </div>
-
-                                {selectedVoucher && (
-                                    <div className="flex justify-between items-center text-sm text-green-600">
-                                        <span className="font-medium">-{Number(selectedVoucher.balance).toLocaleString()} ر.ي</span>
-                                        <span>خصم قسيمة شخصية:</span>
-                                    </div>
-                                )}
-
-                                {publicVoucher && (
-                                    <div className="flex justify-between items-center text-sm text-purple-600">
-                                        <span className="font-medium">-{Number(publicVoucher.balance).toLocaleString()} ر.ي</span>
-                                        <span>خصم قسيمة عامة:</span>
-                                    </div>
-                                )}
-
-                                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-lg shadow-md mt-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-2xl font-bold">
-                                            {Math.max(0, bookingData.ticketPrice - voucherDiscount).toLocaleString()} <span className="text-sm font-normal">ر.ي</span>
-                                        </span>
-                                        <span className="font-bold">الإجمالي النهائي</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <SheetFooter className="flex-col gap-2 mt-4 sm:flex-col sm:space-x-0">
-                        <Button
-                            onClick={confirmBooking}
-                            disabled={loading}
-                            className="w-full h-12 text-lg bg-green-600 hover:bg-green-700 shadow-lg"
-                        >
-                            {loading ? "جاري الإصدار..." : (
-                                <span className="flex items-center gap-2">
-                                    تأكيد وحجز التذكرة <TicketIcon className="h-5 w-5" />
-                                </span>
-                            )}
-                        </Button>
-                        <SheetClose asChild>
-                            <Button variant="outline" className="w-full">إلغاء</Button>
-                        </SheetClose>
-                    </SheetFooter>
-                </SheetContent>
-            </Sheet>
-
+    // If ticket is already booked and active, show ticket details instead of booking form
+    if (ticket && (ticket.status === 'ISSUED' || ticket.status === 'ACTIVE')) {
+        return (
             <div className="space-y-6">
                 {/* Hidden Ticket Template for Printing */}
                 <div className="absolute top-[-9999px] left-[-9999px]">
-                    {ticket && (
-                        <TicketTemplate
-                            ref={ticketRef}
-                            ticket={{ ...ticket, createdAt: ticket.createdAt.toString(), departureTime: ticket.departureTime || null, arrivalTime: ticket.arrivalTime || null }}
-                            applicant={applicant}
-                            tripType={applicant.transportType === 'ROUND_TRIP' ? "round-trip" : "one-way"}
-                        />
-                    )}
+                    <TicketTemplate
+                        ref={ticketRef}
+                        ticket={{
+                            ...ticket,
+                            createdAt: ticket.createdAt.toString(),
+                            departureTime: ticket.departureTime || null,
+                            arrivalTime: ticket.arrivalTime || null,
+                            trip: ticket.trip as any,
+                            returnTrip: ticket.returnTrip as any
+                        }}
+                        applicant={applicant}
+                        tripType={applicant.transportType === 'ROUND_TRIP' ? "round-trip" : "one-way"}
+                    />
                 </div>
 
                 <Card>
@@ -1020,445 +404,489 @@ export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "ad
                             <CardTitle className="flex items-center gap-2">
                                 <TicketIcon className="h-5 w-5 text-blue-600" />
                                 إدارة التذاكر
-                                {isReadOnly && <Badge variant="secondary" className="mr-auto"><Lock className="w-3 h-3 mr-1" /> للقراءة فقط</Badge>}
                             </CardTitle>
-
-                            {/* Ticket Status Badge + WhatsApp Button */}
-                            {ticket && ticket.status !== 'CANCELLED' && (
-                                <div className="flex items-center gap-2">
-                                    <Badge
-                                        className={
-                                            ticket.status === 'ISSUED' || ticket.status === 'ACTIVE'
-                                                ? "bg-green-100 text-green-700 border-green-200"
-                                                : ticket.status === 'USED'
-                                                    ? "bg-gray-100 text-gray-700 border-gray-200"
-                                                    : ticket.status === 'NO_SHOW'
-                                                        ? "bg-red-100 text-red-700 border-red-200"
-                                                        : "bg-blue-100 text-blue-700 border-blue-200"
-                                        }
-                                    >
-                                        {ticket.status === 'ISSUED' || ticket.status === 'ACTIVE' ? 'فعّالة'
-                                            : ticket.status === 'USED' ? 'مستخدمة'
-                                                : ticket.status === 'NO_SHOW' ? 'تخلف'
-                                                    : ticket.status}
-                                    </Badge>
-
-                                    {/* Contextual WhatsApp Button */}
-                                    <ContextualMessageButton
-                                        applicant={applicant}
-                                        ticket={ticket}
-                                        trigger={
-                                            ticket.status === 'ISSUED' || ticket.status === 'ACTIVE'
-                                                ? 'ticket_issued'
-                                                : ticket.status === 'NO_SHOW'
-                                                    ? 'no_show'
-                                                    : 'ticket_issued'
-                                        }
-                                    />
-                                </div>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <Badge className="bg-green-100 text-green-700 border-green-200">
+                                    {ticket.status === 'ISSUED' || ticket.status === 'ACTIVE' ? 'فعّالة' : ticket.status}
+                                </Badge>
+                                <ContextualMessageButton
+                                    applicant={applicant}
+                                    ticket={ticket}
+                                    trigger="ON_TICKET_ISSUE"
+                                    variant="success"
+                                />
+                            </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        {!ticket || ticket.status === 'CANCELLED' ? (
-                            /* ----- Form to Issue Ticket ----- */
-                            <div className="space-y-4">
-                                {/* IF NO TRANSPORT REQUESTED: Show Activate Button */}
-                                {!showTransportForm && !activateMode && (
-                                    <div className="flex flex-col items-center justify-center py-10 space-y-4 border-2 border-dashed border-gray-200 rounded-lg">
-                                        <Bus className="h-12 w-12 text-gray-300" />
-                                        <div className="text-center">
-                                            <h3 className="text-lg font-medium text-gray-900">لم يتم طلب خدمة مواصلات</h3>
-                                            <p className="text-sm text-gray-500">يمكنك تفعيل الخدمة وإصدار التذكرة الآن</p>
-                                        </div>
-                                        <Button onClick={() => { setActivateMode(true); setShowTransportForm(true); }} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-                                            تفعيل خدمة المواصلات
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {/* Ticket Form (Visible if showTransportForm is true) */}
-                                {(showTransportForm || activateMode) && (
-                                    <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-                                        {ticket?.status === 'CANCELLED' && (
-                                            <div className="bg-red-50 text-red-800 p-3 rounded-lg text-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 border border-red-200">
-                                                <div className="flex items-center gap-2">
-                                                    <XCircle className="h-4 w-4 flex-shrink-0" />
-                                                    <span>هذه التذكرة ملغية (رقم {ticket.ticketNumber}). يمكنك إصدار تذكرة جديدة.</span>
-                                                </div>
-                                                <ContextualMessageButton
-                                                    applicant={applicant}
-                                                    ticket={ticket}
-                                                    trigger="ticket_cancelled"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* Auto-Calculated Price Display */}
-                                        {newRoutePrice > 0 && (
-                                            <div className={cn(
-                                                "border rounded-lg p-4 mb-4",
-                                                voucherDiscount > 0 ? "bg-gradient-to-r from-green-50 to-blue-50 border-green-200" : "bg-green-50 border-green-200"
-                                            )}>
-                                                <div className="space-y-3">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="bg-green-100 p-2 rounded-full">
-                                                                <Badge variant="outline" className="bg-white border-green-300 text-green-700">
-                                                                    {newRoutePrice.toLocaleString()} ر.ي
-                                                                </Badge>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-sm font-bold text-green-800">رسوم المواصلات</p>
-                                                                <p className="text-xs text-green-600">
-                                                                    المسار: {formData.departureLocation} ↔ {formData.arrivalLocation}
-                                                                    ({applicant.transportType === 'ROUND_TRIP' ? "ذهاب وعودة" : "ذهاب فقط"})
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {voucherDiscount > 0 && (
-                                                        <>
-                                                            <div className="border-t border-dashed border-gray-300 pt-2"></div>
-                                                            <div className="flex items-center justify-between text-sm">
-                                                                <span className="text-gray-600">السعر الأصلي:</span>
-                                                                <span className="font-medium">{newRoutePrice.toLocaleString()} ر.ي</span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between text-sm">
-                                                                <span className="text-green-600">خصم القسيمة:</span>
-                                                                <span className="font-medium text-green-600">-{voucherDiscount.toLocaleString()} ر.ي</span>
-                                                            </div>
-                                                            <div className="border-t border-gray-300 pt-2"></div>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-base font-bold text-gray-900">المبلغ النهائي:</span>
-                                                                <span className="text-lg font-bold text-blue-600">
-                                                                    {Math.max(0, newRoutePrice - voucherDiscount).toLocaleString()} ر.ي
-                                                                </span>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label>نوع الرحلة</Label>
-                                                <Select
-                                                    value={formData.tripType}
-                                                    onValueChange={(val) => setFormData({ ...formData, tripType: val })}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="ONE_WAY">ذهاب فقط</SelectItem>
-                                                        <SelectItem value="ROUND_TRIP">ذهاب وعودة</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>تاريخ السفر</Label>
-                                                <CustomDatePicker
-                                                    value={formData.departureDate ? new Date(formData.departureDate) : undefined}
-                                                    onChange={(date) => {
-                                                        const dateStr = date ? date.toISOString().split('T')[0] : "";
-                                                        setFormData({ ...formData, departureDate: dateStr });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>شركة النقل</Label>
-                                                <Input
-                                                    value={formData.transportCompany}
-                                                    onChange={(e) => setFormData({ ...formData, transportCompany: e.target.value })}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>من مدينة</Label>
-                                                <Select
-                                                    value={formData.departureLocation}
-                                                    onValueChange={(val) => setFormData({ ...formData, departureLocation: val })}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="اختر مدينة الانطلاق" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {locations.map((loc) => (
-                                                            <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>إلى مدينة</Label>
-                                                <Input
-                                                    value={formData.arrivalLocation}
-                                                    onChange={(e) => setFormData({ ...formData, arrivalLocation: e.target.value })}
-                                                    readOnly={viewMode === "setup"} // Lock destination in setup mode as per requirements?
-                                                    className={viewMode === "setup" ? "bg-gray-50 text-gray-500" : ""}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>رقم الباص (اختياري)</Label>
-                                                <Input
-                                                    value={formData.busNumber}
-                                                    onChange={(e) => setFormData({ ...formData, busNumber: e.target.value })}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>رقم المقعد (اختياري)</Label>
-                                                <Input
-                                                    value={formData.seatNumber}
-                                                    onChange={(e) => setFormData({ ...formData, seatNumber: e.target.value })}
-                                                />
-                                            </div>
-
-                                            <Button onClick={handleIssueTicket} disabled={loading} className="col-span-2 w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white">
-                                                {loading ? "جاري الإصدار..." : "إصدار التذكرة وحفظ الرسوم"}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
+                    <CardContent>
+                        <div className="p-4 bg-green-50 border border-green-100 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div>
+                                <p className="font-bold text-green-800 text-lg">تذكرة سفر رقم : {ticket.ticketNumber}</p>
+                                <p className="text-sm text-green-600 mb-1">
+                                    {ticket.departureLocation} ➔ {ticket.arrivalLocation} | {new Date(ticket.departureDate).toLocaleDateString("ar-EG")}
+                                </p>
+                                <Badge variant="default" className="text-xs">
+                                    {applicant.transportType === 'ROUND_TRIP' ? "ذهاب وعودة" : "ذهاب فقط"}
+                                </Badge>
                             </div>
-                        ) : (
-                            /* ----- Ticket Details View ----- */
-                            <div className="space-y-4">
-                                <div className="p-4 bg-green-50 border border-green-100 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <div>
-                                        <p className="font-bold text-green-800 text-lg">تذكرة سفر رقم : {ticket.ticketNumber}</p>
-                                        <p className="text-sm text-green-600 mb-1">
-                                            {ticket.departureLocation} ➔ {ticket.arrivalLocation} | {new Date(ticket.departureDate).toLocaleDateString("ar-EG")}
-                                        </p>
-                                        <Badge variant="outline" className="text-xs">
-                                            {applicant.transportType === 'ROUND_TRIP' ? "ذهاب وعودة" : "ذهاب فقط"}
-                                        </Badge>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button onClick={handleDownloadPDF} variant="outline" size="sm" className="bg-white hover:bg-gray-50">
-                                            <Download className="h-4 w-4 ml-2" />
-                                            تحميل PDF
-                                        </Button>
-
-                                        {/* Only show Cancel/Modify if Admin Mode */}
-                                        {viewMode === "admin" && (
-                                            <>
-                                                {/* --- Modify Ticket Sheet Trigger --- */}
-                                                <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-                                                    <SheetTrigger asChild>
-                                                        <Button variant="outline" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
-                                                            <Edit className="h-4 w-4 ml-2" />
-                                                            تعديل
-                                                        </Button>
-                                                    </SheetTrigger>
-                                                    <SheetContent className="sm:max-w-md overflow-y-auto w-full">
-                                                        <SheetHeader>
-                                                            <SheetTitle className="flex items-center gap-2">
-                                                                <Settings className="w-5 h-5 text-blue-600" />
-                                                                تعديل التذكرة
-                                                            </SheetTitle>
-                                                            <SheetDescription>
-                                                                قم بتعديل بيانات التذكرة أدناه. يرجى الانتباه للغرامات وفوارق الأسعار.
-                                                            </SheetDescription>
-                                                        </SheetHeader>
-
-                                                        <div className="py-6 space-y-6">
-
-                                                            {/* --- FINANCIAL SUMMARY SECTION --- */}
-                                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-                                                                <h4 className="font-semibold text-sm text-slate-700 mb-2">ملخص التكاليف</h4>
-
-                                                                {/* Fine Row */}
-                                                                <div className="flex justify-between items-center text-sm">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <AlertTriangle className="w-4 h-4 text-orange-500" />
-                                                                        <span className="text-slate-600">غرامة التعديل:</span>
-                                                                    </div>
-                                                                    <span className="font-medium">{calculatedFine.toLocaleString()} ر.ي</span>
-                                                                </div>
-
-                                                                {/* Price Diff Row */}
-                                                                <div className="flex justify-between items-center text-sm">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <RefreshCw className="w-4 h-4 text-blue-500" />
-                                                                        <span className="text-slate-600">فارق السعر:</span>
-                                                                    </div>
-                                                                    <span className={`font-medium ${priceDiff > 0 ? "text-blue-600" : priceDiff < 0 ? "text-green-600" : ""}`}>
-                                                                        {priceDiff > 0 ? "+" : ""}{priceDiff.toLocaleString()} ر.ي
-                                                                    </span>
-                                                                </div>
-
-                                                                <div className="border-t border-slate-200 my-2"></div>
-
-                                                                {/* Total Row */}
-                                                                <div className="flex justify-between items-center">
-                                                                    <span className="font-bold text-slate-800">الإجمالي المستحق:</span>
-                                                                    <span className={`font-bold text-lg ${(calculatedFine + priceDiff) > 0 ? "text-red-600" : (calculatedFine + priceDiff) < 0 ? "text-green-600" : "text-slate-700"}`}>
-                                                                        {(calculatedFine + priceDiff).toLocaleString()} ر.ي
-                                                                    </span>
-                                                                </div>
-
-                                                                {/* Policy Hint */}
-                                                                {matchedPolicy && (
-                                                                    <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100 italic">
-                                                                        * السياسة المطبقة: {matchedPolicy.condition || matchedPolicy.name}
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Debug/Info: Show old vs new price */}
-                                                                <div className="text-xs text-gray-400 mt-1">
-                                                                    السعر القديم: {originalRoutePrice} | السعر الجديد: {newRoutePrice}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Edit Form */}
-                                                            <div className="space-y-4 border-t pt-4">
-                                                                {/* Trip Type Selector */}
-                                                                <div className="space-y-2">
-                                                                    <Label>نوع الرحلة</Label>
-                                                                    <Select
-                                                                        value={editForm.tripType}
-                                                                        onValueChange={(val: "ONE_WAY" | "ROUND_TRIP") => setEditForm({ ...editForm, tripType: val })}
-                                                                    >
-                                                                        <SelectTrigger>
-                                                                            <SelectValue />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            <SelectItem value="ONE_WAY">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <ArrowRight className="w-4 h-4" />
-                                                                                    ذهاب فقط
-                                                                                </div>
-                                                                            </SelectItem>
-                                                                            <SelectItem value="ROUND_TRIP">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <ArrowLeftRight className="w-4 h-4" />
-                                                                                    ذهاب وعودة (شاملة)
-                                                                                </div>
-                                                                            </SelectItem>
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                </div>
-
-                                                                <div className="grid grid-cols-2 gap-3">
-                                                                    <div className="space-y-2">
-                                                                        <Label>نقطة الانطلاق</Label>
-                                                                        <Select
-                                                                            value={editForm.departureLocation}
-                                                                            onValueChange={(val) => setEditForm({ ...editForm, departureLocation: val })}
-                                                                        >
-                                                                            <SelectTrigger>
-                                                                                <SelectValue placeholder="اختر المدينة" />
-                                                                            </SelectTrigger>
-                                                                            <SelectContent>
-                                                                                {locations.map((loc) => (
-                                                                                    <SelectItem key={loc.id} value={loc.name}>
-                                                                                        {loc.name}
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                    </div>
-                                                                    <div className="space-y-2">
-                                                                        <Label>الوجهة</Label>
-                                                                        <Select
-                                                                            value={editForm.arrivalLocation}
-                                                                            onValueChange={(val) => setEditForm({ ...editForm, arrivalLocation: val })}
-                                                                        >
-                                                                            <SelectTrigger>
-                                                                                <SelectValue placeholder="اختر الوجهة" />
-                                                                            </SelectTrigger>
-                                                                            <SelectContent>
-                                                                                {locations.map((loc) => (
-                                                                                    <SelectItem key={loc.id} value={loc.name}>
-                                                                                        {loc.name}
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="space-y-2">
-                                                                    <Label>تاريخ السفر الجديد</Label>
-                                                                    <DatePicker
-                                                                        date={editForm.departureDate ? new Date(editForm.departureDate) : undefined}
-                                                                        setDate={(date) => {
-                                                                            const dateStr = date ? format(date, "yyyy-MM-dd") : "";
-                                                                            setEditForm({ ...editForm, departureDate: dateStr });
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <div className="grid grid-cols-2 gap-3">
-                                                                    <div className="space-y-2">
-                                                                        <Label>رقم الباص</Label>
-                                                                        <Input
-                                                                            value={editForm.busNumber}
-                                                                            onChange={e => setEditForm({ ...editForm, busNumber: e.target.value })}
-                                                                        />
-                                                                    </div>
-                                                                    <div className="space-y-2">
-                                                                        <Label>رقم المقعد</Label>
-                                                                        <Input
-                                                                            value={editForm.seatNumber}
-                                                                            onChange={e => setEditForm({ ...editForm, seatNumber: e.target.value })}
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <SheetFooter className="flex-col sm:flex-row gap-2">
-                                                            <Button onClick={handleUpdateTicket} disabled={loading || isCalculating} className="w-full bg-blue-600 hover:bg-blue-700">
-                                                                <Save className="h-4 w-4 ml-2" />
-                                                                {isCalculating ? "جاري الحساب..." : "تأكيد واستقطاع"}
-                                                            </Button>
-                                                            <SheetClose asChild>
-                                                                <Button variant="ghost" className="w-full">إلغاء</Button>
-                                                            </SheetClose>
-                                                        </SheetFooter>
-                                                    </SheetContent>
-                                                </Sheet>
-
-                                                <Button onClick={handleCancelTicket} variant="destructive" size="sm">
-                                                    <XCircle className="h-4 w-4 ml-2" />
-                                                    إلغاء التذكرة
-                                                </Button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {isReadOnly && (
-                                    <div className="flex items-center gap-2 p-3 bg-yellow-50 text-yellow-800 rounded text-sm">
-                                        <AlertTriangle className="h-4 w-4" />
-                                        <span>تم إصدار التذكرة. للتعديل أو الإلغاء يرجى الانتقال إلى صفحة الإدارة.</span>
-                                    </div>
-                                )}
-
-                                {/* WhatsApp Button for Ticket Issued */}
-                                {ticket && ticket.status !== 'CANCELLED' && (
-                                    <div className="flex justify-center pt-4 border-t border-gray-100">
-                                        <ContextualMessageButton
-                                            applicant={applicant}
-                                            ticket={ticket}
-                                            trigger="ON_TICKET_ISSUED"
-                                            variant="success"
-                                            label="إرسال تفاصيل التذكرة"
-                                            allowCustomAttachment={true}
-                                            attachmentName="تذكرة السفر PDF"
-                                            onSuccess={onUpdate}
-                                        />
-                                    </div>
-                                )}
+                            <div className="flex gap-2">
+                                <Button onClick={handleDownloadPDF} variant="outline" size="sm" className="bg-white hover:bg-gray-50">
+                                    <Download className="h-4 w-4 ml-2" />
+                                    تحميل PDF/طباعة
+                                </Button>
                             </div>
-                        )}
+                        </div>
+
+                        {/* WhatsApp Button snippet */}
+                        <div className="flex justify-center pt-6 mt-4 border-t border-gray-100">
+                            <ContextualMessageButton
+                                applicant={applicant}
+                                ticket={ticket}
+                                trigger="ON_TICKET_ISSUE"
+                                variant="default"
+                                label="إرسال تفاصيل التذكرة"
+                                allowCustomAttachment={true}
+                                attachmentName="تذكرة السفر PDF"
+                                onSuccess={onUpdate}
+                            />
+                        </div>
                     </CardContent>
                 </Card>
             </div>
-        </>
+        );
+    }
+
+    // If no transportation requested and no ticket, show request button
+    if (!applicant.hasTransportation && !ticket) {
+        return (
+            <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                <div className="p-4 rounded-full bg-gray-100">
+                    <Bus className="h-12 w-12 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-700">لم يتم طلب خدمة المواصلات</h3>
+                <p className="text-sm text-gray-500 text-center max-w-md">
+                    هذا المتقدم لم يطلب خدمة المواصلات عند التسجيل. يمكنك طلب الخدمة الآن لإصدار تذكرة.
+                </p>
+                <Button
+                    onClick={handleRequestTransport}
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700 mt-2"
+                >
+                    <Bus className="h-4 w-4 ml-2" />
+                    {loading ? "جاري الطلب..." : "طلب المواصلات"}
+                </Button>
+            </div>
+        );
+    }
+    return (
+        <div className="space-y-6 relative">
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-xl">
+                    <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        <span className="text-sm font-semibold text-blue-800">جاري المعالجة...</span>
+                    </div>
+                </div>
+            )}
+            {/* Step Indicator */}
+            {hasSearched && (
+                <div className="flex justify-between mb-4 px-4">
+                    <div className={`text-sm font-bold ${step >= 2 ? "text-green-600" : "text-gray-400"}`}>1. اختيار الذهاب</div>
+                    <div className={`text-sm font-bold ${step >= 3 ? "text-green-600" : "text-gray-400"}`}>2. اختيار العودة</div>
+                    <div className={`text-sm font-bold ${step >= 4 ? "text-green-600" : "text-gray-400"}`}>3. المراجعة والدفع</div>
+                </div>
+            )}
+
+            {/* Search Form (Only show if step 1 or re-searching) */}
+            {step === 1 && (
+                <Card>
+                    {/* ... Existing Search Form Logic ... */}
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Search className="h-5 w-5 text-blue-600" />
+                            البحث عن رحلات
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {/* Trip Type Toggle */}
+                        <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg w-fit">
+                            <button
+                                type="button"
+                                onClick={() => setTripType("ONE_WAY")}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${tripType === "ONE_WAY" ? "bg-white shadow text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                ذهاب فقط
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTripType("ROUND_TRIP")}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${tripType === "ROUND_TRIP" ? "bg-white shadow text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                ذهاب وعودة
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500">من (الانطلاق)</label>
+                                <Select value={fromId} onValueChange={setFromId}>
+                                    <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500">إلى (الوصول)</label>
+                                <Select value={toId} onValueChange={setToId}>
+                                    <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500">تاريخ الذهاب</label>
+                                <Input type="date" value={travelDate} onChange={e => setTravelDate(e.target.value)} />
+                            </div>
+                            {tripType === "ROUND_TRIP" && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                                    <label className="text-xs font-bold text-gray-500">تاريخ العودة</label>
+                                    <Input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
+                                </div>
+                            )}
+                        </div>
+                        <Button onClick={() => handleSearchTrips()} className="w-full bg-blue-600 hover:bg-blue-700">بحث</Button>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Results (Step 2 or 3) */}
+            {(step === 2 || step === 3) && hasSearched && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-center bg-blue-50 border border-blue-100 p-3 rounded-lg gap-3">
+                        <h3 className="font-bold text-blue-800 flex items-center gap-2">
+                            {step === 2 ? "نتائج البحث (الذهاب)" : "نتائج البحث (العودة)"}
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700">{availableTrips.length} رحلة</Badge>
+                        </h3>
+                        
+                        <div className="flex items-center gap-2">
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 bg-white border-blue-200 hover:bg-blue-100 px-3"
+                                disabled={loading}
+                                onClick={() => {
+                                    const curr = step === 2 ? travelDate : returnDate;
+                                    const d = new Date(curr);
+                                    d.setDate(d.getDate() - 1);
+                                    const nextDate = d.toISOString().split('T')[0];
+                                    if (step === 2) {
+                                        setTravelDate(nextDate);
+                                        handleSearchTrips(nextDate);
+                                    } else {
+                                        setReturnDate(nextDate);
+                                        handleSearchReturnTrips(nextDate);
+                                    }
+                                }}
+                            >
+                                ◀ اليوم السابق
+                            </Button>
+                            
+                            <span className="text-sm font-bold mx-2 hidden sm:block text-blue-900 border-x border-blue-200 px-3">
+                                {new Date(step === 2 ? travelDate : returnDate).toLocaleDateString("ar-EG", { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </span>
+                            
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 bg-white border-blue-200 hover:bg-blue-100 px-3"
+                                disabled={loading}
+                                onClick={() => {
+                                    const curr = step === 2 ? travelDate : returnDate;
+                                    const d = new Date(curr);
+                                    d.setDate(d.getDate() + 1);
+                                    const nextDate = d.toISOString().split('T')[0];
+                                    if (step === 2) {
+                                        setTravelDate(nextDate);
+                                        handleSearchTrips(nextDate);
+                                    } else {
+                                        setReturnDate(nextDate);
+                                        handleSearchReturnTrips(nextDate);
+                                    }
+                                }}
+                            >
+                                اليوم التالي ▶
+                            </Button>
+                            
+                            <div className="h-8 w-px bg-blue-200 mx-1 hidden sm:block"></div>
+                            
+                            {step === 2 && <Button variant="ghost" onClick={() => setStep(1)} size="sm" className="h-8 text-blue-700 hover:bg-blue-100">تغيير بحث</Button>}
+                            {step === 3 && <Button variant="ghost" onClick={() => { setStep(2); handleSearchTrips(travelDate); }} size="sm" className="h-8 text-blue-700 hover:bg-blue-100">رجوع للذهاب</Button>}
+                        </div>
+                    </div>
+
+                    {availableTrips.length === 0 && (
+                        <div className="text-center py-12 px-4 shadow-sm text-gray-500 bg-white rounded-lg border flex flex-col items-center justify-center gap-3">
+                            <Bus className="h-10 w-10 text-gray-300" />
+                            <p className="font-semibold text-gray-700">لا توجد رحلات متاحة في هذا اليوم</p>
+                            <p className="text-sm">يمكنك التنقل إلى اليوم التالي لمعرفة الرحلات المتاحة</p>
+                        </div>
+                    )}
+
+                    <div className="grid gap-4">
+                        {availableTrips.map(tripSegment => {
+                            const availableSeats = tripSegment.availableSeats || 0;
+                            const isFull = availableSeats <= 0;
+                            const departureTime = tripSegment.segmentDetails.departureTime;
+                            const arrivalTime = tripSegment.segmentDetails.arrivalTime;
+                            
+                            // Handle cases where arrival is next day
+                            const isNextDay = tripSegment.segmentDetails?.nextDayArrival || false;
+
+                            return (
+                                <Card key={tripSegment.tripId} className={`transition-all border shadow-sm border-r-4 ${isFull ? 'bg-gray-50 border-r-gray-300 opacity-80' : 'hover:border-blue-400 hover:shadow-md cursor-pointer border-r-blue-500'}`} onClick={() => {
+                                    if (isFull) return;
+                                    handleSelectTrip({
+                                        ...tripSegment,
+                                        id: tripSegment.tripId, 
+                                        date: tripSegment.segmentDetails.departureDate,
+                                        departureTime: tripSegment.segmentDetails.departureTime,
+                                        fromDestinationId: fromId,
+                                        toDestinationId: toId,
+                                        fromDestination: { name: tripSegment.segmentDetails.fromDestination },
+                                        toDestination: { name: tripSegment.segmentDetails.toDestination }
+                                    }, {
+                                        id: tripSegment.segmentDetails.toStopId,
+                                        price: tripSegment.segmentDetails.price
+                                    });
+                                }}>
+                                    <CardContent className="p-0">
+                                        <div className="p-5 flex flex-col md:flex-row justify-between items-center gap-6">
+                                            {/* Flight-style info row */}
+                                            <div className="flex-1 w-full flex items-center justify-between">
+                                                <div className="text-center md:text-right min-w-[80px]">
+                                                    <p className="text-2xl font-bold font-mono text-gray-800">{departureTime}</p>
+                                                    <p className="text-sm font-semibold text-gray-600 mt-1">{tripSegment.segmentDetails.fromDestination}</p>
+                                                </div>
+                                                
+                                                <div className="flex-1 flex flex-col items-center px-4 relative">
+                                                    <div className="w-full h-[2px] bg-gray-200 absolute top-1/2 -translate-y-1/2"></div>
+                                                    <Bus className={`h-6 w-6 bg-white px-1 relative z-10 ${isFull ? 'text-gray-400' : 'text-blue-500'}`} />
+                                                    <p className="text-[11px] font-bold text-gray-500 bg-white px-2 mt-1 relative z-10">
+                                                        {tripSegment.vehicle?.model || tripSegment.busClass || "حافلة اعتيادية"}
+                                                    </p>
+                                                </div>
+
+                                                <div className="text-center md:text-left min-w-[80px] relative">
+                                                    <p className="text-2xl font-bold font-mono text-gray-800 flex items-start justify-center md:justify-end">
+                                                        {arrivalTime}
+                                                        {isNextDay && <span className="text-[10px] text-red-500 font-bold ml-1 absolute leading-tight -left-8 top-1 bg-red-50 px-1 rounded border border-red-100">+1 يوم</span>}
+                                                    </p>
+                                                    <p className="text-sm font-semibold text-gray-600 mt-1">{tripSegment.segmentDetails.toDestination}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Separator */}
+                                            <div className="hidden md:block w-px h-16 bg-gray-200 mx-2"></div>
+
+                                            {/* Action & Status */}
+                                            <div className="w-full md:w-auto flex flex-col items-center justify-center gap-2">
+                                                <div className="flex flex-row md:flex-col justify-between md:justify-center items-center w-full gap-2">
+                                                    <div className="text-center">
+                                                        <p className="text-[11px] text-gray-500">المقاعد المتاحة</p>
+                                                        <p className={`text-lg leading-none font-bold ${isFull ? 'text-red-500' : (availableSeats < 5 ? 'text-orange-500' : 'text-green-600')}`}>
+                                                            {isFull ? "ممتلئة" : availableSeats}
+                                                        </p>
+                                                    </div>
+                                                    <Button size="sm" disabled={isFull} className={`w-32 rounded-full ${isFull ? 'bg-gray-200 text-gray-500' : 'bg-blue-600 hover:bg-blue-700 shadow-sm'}`}>
+                                                        {isFull ? "الرحلة ممكتلئة" : (step === 2 ? "اختيار للذهاب" : "اختيار للعودة")}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Route Banner */}
+                                        <div className="bg-gray-50/80 px-4 py-2 border-t text-[11px] text-gray-500 flex items-center gap-2 rounded-b-lg">
+                                            <MapPin className="h-3 w-3 text-blue-400" />
+                                            <span className="font-semibold text-gray-600">مسار الرحلة الكامل:</span> 
+                                            {tripSegment.mainRouteTitle}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Confirmation Sheet (Review - Step 4) */}
+            <Sheet open={showBookingSheet} onOpenChange={(open) => { setShowBookingSheet(open); if (!open) setStep(1); }}>
+                <SheetContent className="overflow-y-auto">
+                    <SheetHeader>
+                        <SheetTitle>ملخص والحجز</SheetTitle>
+                        <SheetDescription>تأكد من بيانات الرحلة قبل الإصدار</SheetDescription>
+                    </SheetHeader>
+
+                    <div className="py-6 space-y-6">
+                        {/* Outbound Summary */}
+                        {selectedTrip && (
+                            <div className="space-y-2">
+                                <h4 className="font-bold text-sm text-blue-800 pb-1 border-b border-blue-100">رحلة الذهاب</h4>
+                                <div className="text-sm">
+                                    <div className="font-semibold">{selectedTrip.fromDestination.name} ← {selectedTrip.toDestination.name}</div>
+                                    <div className="text-gray-500 flex justify-between mt-1">
+                                        <span>{format(new Date(selectedTrip.date), 'yyyy-MM-dd')}</span>
+                                        <span>{selectedTrip.departureTime}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Return Summary */}
+                        {selectedReturnTrip && (
+                            <div className="space-y-2">
+                                <h4 className="font-bold text-sm text-green-800 pb-1 border-b border-green-100">رحلة العودة</h4>
+                                <div className="text-sm">
+                                    <div className="font-semibold">{selectedReturnTrip.fromDestination.name} ← {selectedReturnTrip.toDestination.name}</div>
+                                    <div className="text-gray-500 flex justify-between mt-1">
+                                        <span>{format(new Date(selectedReturnTrip.date), 'yyyy-MM-dd')}</span>
+                                        <span>{selectedReturnTrip.departureTime}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Pricing */}
+                        <div className="border rounded p-3 border-green-200 bg-green-50">
+                            <div className="text-sm font-bold text-green-800 mb-2">تفاصيل السعر ({tripType === "ROUND_TRIP" ? "ذهاب وعودة" : "ذهاب فقط"})</div>
+
+                            <div className="space-y-1 mb-3 text-sm">
+                                {pricingBreakdown.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between text-gray-600">
+                                        <span>{item.label}</span>
+                                        <span dir="ltr">{item.amount > 0 ? `+${item.amount}` : item.amount}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex justify-between items-center border-t border-green-200 pt-2 pb-4">
+                                <div className="text-sm font-bold text-green-800">سعر التذكرة (للفرد)</div>
+                                <div className="flex items-center gap-2">
+                                    {isEditingPrice ? (
+                                        <Input
+                                            type="number"
+                                            className="h-8 w-24 bg-white"
+                                            value={manualPrice || 0}
+                                            onChange={e => setManualPrice(Number(e.target.value))}
+                                        />
+                                    ) : (
+                                        <div className="text-lg font-bold text-green-700">
+                                            {manualPrice} ريال
+                                        </div>
+                                    )}
+                                    <Button
+                                        size="icon" variant="ghost" className="h-6 w-6"
+                                        onClick={() => setIsEditingPrice(!isEditingPrice)}
+                                    >
+                                        <Edit className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            </div>
+                            
+                            {companions.length > 0 && (
+                                <div className="flex justify-between items-center border-t border-green-200 pt-3 pb-2">
+                                    <div className="text-sm font-bold text-green-800">إجمالي السعر (الأصيل + {companions.length} مرافقين)</div>
+                                    <div className="text-xl font-bold bg-green-100 px-3 py-1 rounded text-green-800 border border-green-300">
+                                        {(manualPrice || 0) * (1 + companions.length)} ريال
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Companions Section */}
+                        <div className="space-y-4 pt-2 border-t border-gray-100">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-sm text-gray-800 flex items-center gap-2">
+                                    إضافة مرافقين <Badge variant="secondary" className="text-xs">{(manualPrice||0)} ر.ي لكل مرافق</Badge>
+                                </h4>
+                                <Button size="sm" variant="outline" onClick={() => setCompanions([...companions, {name: ""}])} className="h-8 shadow-sm">
+                                    + إضافة مرافق
+                                </Button>
+                            </div>
+                            
+                            {companions.length > 0 ? (
+                                <div className="space-y-3">
+                                    {companions.map((comp, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
+                                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">
+                                                {idx + 1}
+                                            </div>
+                                            <Input 
+                                                placeholder="اسم المرافق الرباعي" 
+                                                value={comp.name} 
+                                                onChange={e => {
+                                                    const newComps = [...companions];
+                                                    newComps[idx].name = e.target.value;
+                                                    setCompanions(newComps);
+                                                }}
+                                                className="border-blue-100 focus-visible:ring-blue-400"
+                                            />
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
+                                                onClick={() => {
+                                                    const newComps = [...companions];
+                                                    newComps.splice(idx, 1);
+                                                    setCompanions(newComps);
+                                                }}
+                                            >
+                                                <XCircle className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-gray-400 p-2 bg-gray-50 rounded border border-dashed border-gray-200 text-center">لا يوجد مرافقين مضافين. سيتم إصدار التذكرة للمتقدم الأصيل فقط.</p>
+                            )}
+                        </div>
+
+                        {/* Custom Ticket Info */}
+                        <div className="space-y-4 pt-2 border-t border-gray-100">
+                            <h4 className="font-bold text-sm text-gray-800">تخصيص بيانات التذكرة (اختياري)</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500">اسم الوكيل</label>
+                                    <Input
+                                        placeholder="مثال: وكالة السفر الدولية"
+                                        value={agentName}
+                                        onChange={e => setAgentName(e.target.value)}
+                                        className="text-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500">موقع الانطلاق (نقطة التجمع)</label>
+                                    <Input
+                                        placeholder="مثال: صنعاء - شارع حده المجمع السينمائي"
+                                        value={boardingPoint}
+                                        onChange={e => setBoardingPoint(e.target.value)}
+                                        className="text-sm"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <SheetFooter>
+                        <Button onClick={confirmBooking} disabled={loading} className="w-full bg-green-600 hover:bg-green-700">
+                            {loading ? "جاري الإصدار..." : "تأكيد وإصدار التذكرة"}
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+        </div>
     );
 }
+
+// Helper types
+// ... (Assumed global types or from imports)

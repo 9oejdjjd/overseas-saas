@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Wallet, Truck, Plus, CheckCircle } from "lucide-react";
+import { DollarSign, Wallet, Truck, Plus, CheckCircle, Loader2 } from "lucide-react";
 import { ExtendedApplicant, Transaction } from "@/types/applicant";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -139,9 +139,9 @@ export function ApplicantFinanceTab({ applicant, transactions, pricingPackages, 
             if (transportRoute) {
                 const type = applicant.transportType || 'ONE_WAY';
                 if (type === 'ROUND_TRIP') {
-                    transportCost = Number(transportRoute.roundTripPrice) || 0;
+                    transportCost = Number(transportRoute.priceRoundTrip) || 0;
                 } else {
-                    transportCost = Number(transportRoute.oneWayPrice) || 0;
+                    transportCost = Number(transportRoute.price) || 0;
                 }
             } else if (pricingPackages.length > 0) {
                 const pkgWith = pricingPackages.find(p => p.location === applicant.examLocation && (p.name.includes('شامل') || p.name.includes('مواصلات')));
@@ -175,7 +175,15 @@ export function ApplicantFinanceTab({ applicant, transactions, pricingPackages, 
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full relative">
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-xl">
+                    <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        <span className="text-sm font-semibold text-blue-800">جاري معالجة المعاملة المالية...</span>
+                    </div>
+                </div>
+            )}
             {/* Left Column: Summary & Payments */}
             <div className="space-y-6">
                 <Card className="bg-gradient-to-br from-white to-gray-50 border-blue-100 shadow-sm">
@@ -321,20 +329,57 @@ export function ApplicantFinanceTab({ applicant, transactions, pricingPackages, 
                             لا توجد عمليات مالية مسجلة
                         </div>
                     ) : (
-                        transactions.map((tx) => (
-                            <div key={tx.id} className="bg-white p-3 rounded-lg border shadow-sm flex justify-between items-center group hover:border-blue-200 transition-colors">
-                                <div>
-                                    <p className="font-bold text-gray-800">{Number(tx.amount).toLocaleString()} ر.ي</p>
-                                    <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString('en-GB')}</p>
+                        transactions.map((tx) => {
+                            const isPayment = tx.type === "PAYMENT";
+                            const isExpense = tx.type === "EXPENSE";
+                            const isCharge = tx.type === "CHARGE";
+                            const isWithdrawal = tx.type === "WITHDRAWAL";
+
+                            const badgeColor = isPayment
+                                ? "bg-green-50 text-green-700 border-green-100"
+                                : isCharge
+                                    ? "bg-blue-50 text-blue-700 border-blue-100"
+                                    : isExpense
+                                        ? "bg-red-50 text-red-700 border-red-100"
+                                        : "bg-orange-50 text-orange-700 border-orange-100";
+
+                            const badgeLabel = isPayment
+                                ? "سند قبض"
+                                : isCharge
+                                    ? "استحقاق / فاتورة"
+                                    : isExpense
+                                        ? "مصروف تشغيلي"
+                                        : "مسحوبات / إرجاع";
+
+                            const amountColor = isPayment
+                                ? "text-green-700"
+                                : isCharge
+                                    ? "text-blue-600"
+                                    : isExpense
+                                        ? "text-red-600"
+                                        : "text-orange-600";
+
+                            return (
+                                <div key={tx.id} className="bg-white p-3 rounded-lg border shadow-sm group hover:border-blue-200 transition-colors">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className={`font-bold ${amountColor}`}>
+                                                {isPayment ? "+" : "-"}{Number(tx.amount).toLocaleString()} ر.ي
+                                            </p>
+                                            <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString('en-GB')}</p>
+                                        </div>
+                                        <span className={`px-2 py-1 text-[10px] rounded-full border ${badgeColor}`}>
+                                            {badgeLabel}
+                                        </span>
+                                    </div>
+                                    {(tx.description || tx.notes) && (
+                                        <p className="text-[11px] text-gray-500 mt-2 leading-relaxed border-t pt-2 border-dashed">
+                                            {tx.description || tx.notes}
+                                        </p>
+                                    )}
                                 </div>
-                                <div className="text-left">
-                                    <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] rounded-full border border-green-100">
-                                        سند قبض
-                                    </span>
-                                    {tx.notes && <p className="text-[10px] text-gray-400 mt-1 max-w-[150px] truncate">{tx.notes}</p>}
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
