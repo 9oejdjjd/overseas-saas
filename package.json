@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "db:reset-data": "tsx scripts/reset-data.ts"
+    "db:reset-data": "tsx scripts/reset-data.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
