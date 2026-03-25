@@ -35,18 +35,24 @@ export function ProfessionsManager() {
         fetchProfessions();
     }, []);
 
+    const openAddModal = () => {
+        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 20 });
+        setShowAdd(true);
+    };
+
     const handleSave = async () => {
-        if (!formData.name || !formData.slug) return alert("الاسم والرابط الإنجليزي مطلوبان");
+        if (!formData.name) return alert("اسم المهنة مطلوب");
+        const finalSlug = formData.slug.trim() || `job-${Math.random().toString(36).substring(2, 8)}`;
+        
         setSaving(true);
         try {
             const res = await fetch("/api/mock/admin/professions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData)
+                body: JSON.stringify({ ...formData, slug: finalSlug })
             });
             if (res.ok) {
                 setShowAdd(false);
-                setFormData({ name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 20 });
                 fetchProfessions();
             } else {
                 const data = await res.json();
@@ -100,7 +106,7 @@ export function ProfessionsManager() {
                 </div>
                 <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
                     <Button variant="outline" onClick={fetchProfessions}><RefreshCw className="h-4 w-4 ml-1" /> تحديث</Button>
-                    <Button onClick={() => setShowAdd(true)} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={openAddModal} className="bg-blue-600 hover:bg-blue-700">
                         <Plus className="h-4 w-4 ml-1" /> إضافة مهنة
                     </Button>
                 </div>
@@ -120,9 +126,9 @@ export function ProfessionsManager() {
                             <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="مثال: لحام، كهربائي..." className="bg-gray-50 focus:bg-white transition-colors" />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold block text-gray-700">الرابط الإنجليزي (Slug) <span className="text-red-500">*</span></label>
-                            <Input value={formData.slug} onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase() })} placeholder="مثال: plumber" className="dir-ltr text-left font-mono bg-gray-50 focus:bg-white transition-colors" />
-                            <p className="text-xs text-gray-400">حروف إنجليزية صغيرة بدون مسافات.</p>
+                            <label className="text-sm font-semibold block text-gray-700">الرابط الإنجليزي (Slug) <span className="text-gray-400 font-normal text-xs">(يتم توليده تلقائياً)</span></label>
+                            <Input value={formData.slug} onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase() })} placeholder="يتم توليده تلقائياً..." className="dir-ltr text-left font-mono bg-gray-50 focus:bg-white transition-colors" />
+                            <p className="text-xs text-gray-400">يمكنك تغييره إذا أردت، أو تركه كما هو.</p>
                         </div>
                         <div className="space-y-2 pt-2 border-t">
                             <label className="text-sm font-semibold block text-gray-700">درجة النجاح (%)</label>
