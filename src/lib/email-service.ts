@@ -2,17 +2,17 @@ import imaps from "imap-simple";
 import { simpleParser } from "mailparser";
 import prisma from "@/lib/prisma";
 
-// Configuration (Temporary Hardcoded for testing, move to .env later)
+// Configuration from environment variables
 const CONFIG = {
     imap: {
-        user: "alaa@overseas-travels.com",
-        password: "1r^3f9Ko5",
-        host: "overseas-travels.com",
-        port: 993,
+        user: process.env.IMAP_USER || "",
+        password: process.env.IMAP_PASSWORD || "",
+        host: process.env.IMAP_HOST || "",
+        port: parseInt(process.env.IMAP_PORT || "993"),
         tls: true,
         authTimeout: 3000,
     },
-    sourceDomain: "pacc.sa", // no-reply@pacc.sa
+    sourceDomain: process.env.IMAP_SOURCE_DOMAIN || "pacc.sa",
 };
 
 export type EmailSyncResult = {

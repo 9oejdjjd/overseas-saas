@@ -261,9 +261,12 @@ export default function ExamSessionPage() {
                             </div>
                         </div>
                         
-                        <Button onClick={() => setStatus("TERMS")} className="w-full h-14 text-lg font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3">
-                            التالي — الشروط والأحكام
-                            <ArrowLeft size={20} />
+                        <Button 
+                            onClick={() => isRegistered ? setStatus("TERMS") : startExam()} 
+                            className="w-full h-14 text-lg font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3"
+                        >
+                            {isRegistered ? "التالي — الشروط والأحكام" : "بدء الاختبار الآن"}
+                            {isRegistered ? <ArrowLeft size={20} /> : <Sparkles size={20} />}
                         </Button>
                     </motion.div>
                 </main>
@@ -453,37 +456,38 @@ export default function ExamSessionPage() {
 
     if (status === "RESULT") {
         return (
-            <div className="min-h-screen bg-[#fafafa] flex flex-col font-sans">
-                <MockExamNavbar title={`الاعتماد المهني - النتيجة`} />
-                <div className="flex-1 flex items-center justify-center p-6 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-opacity-5">
-                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-12 md:p-16 rounded-[3rem] shadow-2xl shadow-slate-200/50 max-w-2xl w-full text-center border border-slate-100 relative overflow-hidden">
-                        <div className={`absolute top-0 right-0 w-full h-3 ${result.passed ? 'bg-gradient-to-l from-[#5c9e45] to-green-400' : 'bg-gradient-to-l from-red-600 to-red-400'}`}></div>
-                        
-                        <div className={`w-32 h-32 mx-auto mb-10 rounded-[2rem] flex items-center justify-center shadow-inner border-2 ${result.passed ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-                            {result.passed ? <Trophy className="w-16 h-16 text-[#5c9e45]" /> : <XCircle className="w-16 h-16 text-red-500" />}
+            <div className="min-h-screen bg-[#0a0f1c] flex flex-col font-sans">
+                <MockExamNavbar title="الاعتماد المهني" />
+                <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.06] mix-blend-overlay pointer-events-none"></div>
+                    <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#16539a]/25 rounded-full blur-[120px] pointer-events-none" />
+                    <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-[#5c9e45]/15 rounded-full blur-[100px] pointer-events-none" />
+                    
+                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative z-10 text-center max-w-lg w-full">
+                        <div className="w-28 h-28 mx-auto mb-10 rounded-[2rem] bg-[#25D366]/10 border-2 border-[#25D366]/30 flex items-center justify-center shadow-lg shadow-green-500/10">
+                            <MessageCircle className="w-14 h-14 text-[#25D366]" />
                         </div>
                         
-                        <h1 className="text-3xl lg:text-4xl font-bold text-slate-800 mb-4">{result.passed ? "تهانينا! لقد اجتزت الاختبار" : "للأسف، لم يحالفك الحظ هذه المرة"}</h1>
-                        <p className="text-slate-500 mb-4 text-lg font-medium">النتيجة النهائية: <span className={`font-black tracking-widest px-3 py-1 rounded-xl mx-2 ${result.passed ? 'text-[#5c9e45] bg-green-50' : 'text-red-500 bg-red-50'}`} dir="ltr">{result.score.toFixed(1)}%</span></p>
-                        <div className="flex items-center justify-center gap-2 mb-10 text-sm text-slate-400 bg-slate-50 px-4 py-2 rounded-full inline-flex mx-auto">
-                            <MessageCircle size={14} className="text-[#25D366]" />
-                            ستصلك النتيجة أيضاً على الواتساب
-                        </div>
+                        <h1 className="text-3xl lg:text-4xl font-bold text-white mb-4 leading-tight">
+                            تم تسليم الاختبار بنجاح <span className="text-[#5c9e45]">✓</span>
+                        </h1>
                         
-                        <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 mb-12 flex justify-around shadow-sm">
-                            <div className="flex flex-col items-center">
-                                <div className="text-sm md:text-base text-slate-400 font-bold mb-3 uppercase tracking-wider">الإجابات الصحيحة</div>
-                                <div className="font-black text-5xl text-[#16539a]">{result.correctAnswers}</div>
+                        <p className="text-slate-300/90 text-lg mb-8 max-w-md mx-auto leading-relaxed">
+                            سيتم إرسال نتيجتك إلى رقم الواتساب الخاص بك خلال لحظات.
+                        </p>
+                        
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-10">
+                            <div className="flex items-center justify-center gap-3 text-[#25D366] mb-3">
+                                <Phone size={20} />
+                                <span className="font-bold text-lg">تابع رسائل الواتساب</span>
                             </div>
-                            <div className="w-px bg-slate-200 mx-4"></div>
-                            <div className="flex flex-col items-center">
-                                <div className="text-sm md:text-base text-slate-400 font-bold mb-3 uppercase tracking-wider">إجمالي الأسئلة</div>
-                                <div className="font-black text-5xl text-slate-800">{result.totalQuestions}</div>
-                            </div>
+                            <p className="text-slate-400 text-sm leading-relaxed">
+                                تأكد من أن رقم الواتساب الذي أدخلته صحيح ومفعّل لاستلام النتيجة. إذا لم تصلك الرسالة خلال دقائق، يرجى التواصل مع الدعم.
+                            </p>
                         </div>
 
-                        <Button onClick={() => router.push("/")} className="w-full h-16 md:h-20 text-xl font-bold bg-[#16539a] hover:bg-[#1e66b8] rounded-2xl flex items-center justify-center gap-4 shadow-2xl shadow-blue-900/20 transform hover:-translate-y-1 transition-all">
-                            العودة للرئيسية <ArrowLeft size={28} />
+                        <Button onClick={() => router.push("/")} className="w-full h-16 text-xl font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4">
+                            العودة للرئيسية <ArrowLeft size={24} />
                         </Button>
                     </motion.div>
                 </div>
@@ -519,7 +523,15 @@ export default function ExamSessionPage() {
                 
                 {/* Right Sidebar: Map & Progress (Visible on lg screens) */}
                 <aside className={`w-[22rem] bg-white border-l border-slate-200 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.03)] z-10 transition-transform ${showSidebar ? 'translate-x-0 absolute right-0 h-full' : 'hidden lg:flex'}`}>
-                    <div className="p-8 border-b border-slate-100">
+                    <div className="p-6 md:p-8 border-b border-slate-100 relative">
+                        {/* Mobile Close Button */}
+                        <button 
+                            className="lg:hidden absolute top-6 left-6 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"
+                            onClick={() => setShowSidebar(false)}
+                        >
+                            <XCircle size={20} />
+                        </button>
+                        
                         <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
                             <LayoutGrid className="text-[#16539a]" /> خريطة الأسئلة
                         </h3>
@@ -561,7 +573,7 @@ export default function ExamSessionPage() {
                         </div>
                     </div>
 
-                    <div className="p-6 border-t border-slate-100 bg-slate-50">
+                    <div className="p-6 border-t border-slate-100 bg-slate-50 hidden lg:block">
                         <Button 
                             onClick={submitExam}
                             disabled={isSubmitting || answers.length < questions.length - 5} // allow submitting if near end
@@ -597,14 +609,14 @@ export default function ExamSessionPage() {
                                     exit={{ opacity: 0, x: 20 }}
                                     transition={{ duration: 0.3 }}
                                 >
-                                    {/* Question Card */}
-                                    <div className="bg-white rounded-[2rem] p-10 md:p-14 lg:p-16 shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-slate-100 mb-8 relative overflow-hidden">
+                                     {/* Question Card */}
+                                    <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-14 lg:p-16 shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-slate-100 mb-6 md:mb-8 relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-2 h-full bg-[#16539a]"></div>
-                                        <div className="flex items-start gap-6">
-                                            <div className="w-16 h-16 shrink-0 bg-blue-50 text-[#16539a] rounded-2xl flex items-center justify-center font-black text-3xl shadow-sm border border-blue-100">
+                                        <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6">
+                                            <div className="w-12 h-12 md:w-16 md:h-16 shrink-0 bg-blue-50 text-[#16539a] rounded-xl md:rounded-2xl flex items-center justify-center font-black text-2xl md:text-3xl shadow-sm border border-blue-100">
                                                 {currentQuestionIdx + 1}
                                             </div>
-                                            <h2 className="text-3xl md:text-4xl font-black text-slate-800 leading-[1.6] pt-2">
+                                            <h2 className="text-xl md:text-3xl lg:text-4xl font-black text-slate-800 leading-[1.6] md:pt-2">
                                                 {currentQuestion?.question.text}
                                             </h2>
                                         </div>
@@ -620,7 +632,7 @@ export default function ExamSessionPage() {
                                                 <button
                                                     key={opt.id}
                                                     onClick={() => handleSelectOption(currentQuestion.questionId, opt.id)}
-                                                    className={`w-full text-right p-8 lg:p-10 rounded-[2rem] border-2 transition-all duration-200 flex items-center gap-6 group relative overflow-hidden
+                                                    className={`w-full text-right p-6 md:p-8 lg:p-10 rounded-2xl md:rounded-[2rem] border-2 transition-all duration-200 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 group relative overflow-hidden
                                                         ${isSelected 
                                                             ? "bg-blue-50/80 border-[#16539a] shadow-[0_8px_30px_rgba(22,83,154,0.12)]" 
                                                             : "bg-white border-slate-200 hover:border-[#16539a] hover:bg-slate-50 hover:shadow-md"
@@ -628,13 +640,13 @@ export default function ExamSessionPage() {
                                                     `}
                                                 >
                                                     {/* Letter Indicator (A, B, C...) */}
-                                                    <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center text-2xl font-black transition-all border-2
+                                                    <div className={`w-10 h-10 md:w-14 md:h-14 shrink-0 rounded-xl md:rounded-2xl flex items-center justify-center text-xl md:text-2xl font-black transition-all border-2
                                                         ${isSelected ? "bg-[#16539a] text-white border-[#16539a]" : "bg-slate-100 text-slate-400 border-slate-200 group-hover:border-[#16539a] group-hover:text-[#16539a]"}
                                                     `}>
                                                         {letters[index] || index + 1}
                                                     </div>
                                                     
-                                                    <span className={`text-2xl leading-[1.6] ${isSelected ? "text-[#16539a] font-black" : "text-slate-700 font-bold"}`}>
+                                                    <span className={`text-base md:text-xl lg:text-2xl leading-[1.6] ${isSelected ? "text-[#16539a] font-black" : "text-slate-700 font-bold"}`}>
                                                         {opt.text}
                                                     </span>
                                                 </button>
@@ -647,28 +659,39 @@ export default function ExamSessionPage() {
                     </div>
 
                     {/* Fixed Navigation Footer within Main Area (Full Width of Content) */}
-                    <div className="h-28 bg-white border-t border-slate-200 px-8 lg:px-16 flex items-center justify-between shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.02)] z-10 w-full">
+                    <div className="h-24 md:h-28 bg-white border-t border-slate-200 px-4 md:px-8 lg:px-16 flex items-center justify-between shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.02)] z-10 w-full">
                         <Button 
                             variant="outline"
                             onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))}
                             disabled={currentQuestionIdx === 0}
-                            className="h-16 px-10 text-xl font-black rounded-2xl border-2 border-slate-200 text-slate-500 hover:bg-slate-50 gap-3 hover:text-slate-800 disabled:opacity-40"
+                            className="h-14 md:h-16 px-6 md:px-10 text-base md:text-xl font-black rounded-xl md:rounded-2xl border-2 border-slate-200 text-slate-500 hover:bg-slate-50 gap-2 md:gap-3 hover:text-slate-800 disabled:opacity-40"
                         >
-                            السؤال السابق
+                            <span className="hidden sm:inline">السؤال</span> السابق
                         </Button>
                         
-                        <Button 
-                            onClick={() => {
-                                if (currentQuestionIdx < questions.length - 1) {
-                                  setCurrentQuestionIdx(prev => prev + 1);
-                                }
-                            }}
-                            disabled={currentQuestionIdx === questions.length - 1} // Can't go next if last. use submit button in sidebar.
-                            className="h-16 px-12 text-xl font-black bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/20 gap-3 flex-row-reverse disabled:opacity-40"
-                        >
-                            <ArrowLeft size={28} />
-                            السؤال التالي
-                        </Button>
+                        {currentQuestionIdx === questions.length - 1 ? (
+                            <Button 
+                                onClick={submitExam}
+                                disabled={isSubmitting || answers.length < questions.length - 5}
+                                className="h-14 md:h-16 px-6 md:px-12 text-base md:text-xl font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-xl md:rounded-2xl shadow-xl shadow-green-900/20 gap-2 md:gap-3 flex items-center justify-center disabled:opacity-50"
+                            >
+                                <Check size={24} className="hidden md:block" />
+                                {isSubmitting ? "جاري الإرسال..." : "إنهاء الاختبار"}
+                            </Button>
+                        ) : (
+                            <Button 
+                                onClick={() => {
+                                    if (currentQuestionIdx < questions.length - 1) {
+                                      setCurrentQuestionIdx(prev => prev + 1);
+                                    }
+                                }}
+                                disabled={currentQuestionIdx === questions.length - 1} // Can't go next if last. use submit button in sidebar.
+                                className="h-14 md:h-16 px-6 md:px-12 text-base md:text-xl font-black bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-xl md:rounded-2xl shadow-xl shadow-blue-900/20 gap-2 md:gap-3 flex-row-reverse disabled:opacity-40"
+                            >
+                                <ArrowLeft size={24} className="md:w-7 md:h-7" />
+                                <span className="hidden sm:inline">السؤال</span> التالي
+                            </Button>
+                        )}
                     </div>
 
                 </main>

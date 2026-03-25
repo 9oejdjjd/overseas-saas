@@ -211,12 +211,44 @@ export async function GET() {
             }
         }
 
-        // Sort by priority
+        // Sort computed messages by priority
         pendingMessages.sort((a, b) => a.priority - b.priority);
 
+        // Fetch actual PENDING messages from DB (Failed attempts)
+        const dbPendingMessages = await prisma.messageLog.findMany({
+            where: { status: "PENDING" },
+            include: {
+                applicant: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        whatsappNumber: true,
+                        applicantCode: true,
+                    }
+                }
+            },
+            orderBy: { createdAt: "desc" }
+        });
+
+        // Map DB messages to the same structure
+        const dbPendingFormatted = dbPendingMessages.map(msg => ({
+            messageLogId: msg.id, // Important: Include ID for retry/delete
+            applicantId: msg.applicantId,
+            applicant: msg.applicant,
+            trigger: msg.trigger,
+            triggerLabel: "إعادة إرسال: " + (msg.trigger.includes("MOCK") ? "اختبار تجريبي" : msg.trigger),
+            priority: -1, // Highest priority for failed retries
+            isRetry: true,
+            createdAt: msg.createdAt,
+        }));
+
+        // Combine both lists (DB retries first, then computed)
+        const allPending = [...dbPendingFormatted, ...pendingMessages];
+
         return NextResponse.json({
-            pending: pendingMessages,
-            count: pendingMessages.length,
+            pending: allPending,
+            count: allPending.length,
         });
     } catch (error) {
         console.error("Error fetching pending messages:", error);

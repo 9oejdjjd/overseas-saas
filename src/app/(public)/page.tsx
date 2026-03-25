@@ -116,11 +116,11 @@ export default function EnhancedLandingPage() {
                             className="text-4xl md:text-6xl lg:text-[4.2rem] font-bold mb-6 leading-[1.2] tracking-tight"
                         >
                             <span className="bg-clip-text text-transparent bg-gradient-to-l from-white via-white to-white/80">
-                                جاهز للعمل في السعودية؟
+                                هل أنت مستعد للعمل في السعودية؟
                             </span>
                             <br/>
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#5c9e45] via-[#6cc650] to-[#5c9e45] inline-block mt-3 drop-shadow-[0_0_30px_rgba(92,158,69,0.3)]">
-                                نجهّزك للاعتماد المهني
+                                نؤهلك لاجتياز فحص الاعتماد المهني
                             </span>
                         </motion.h1>
 
@@ -130,7 +130,7 @@ export default function EnhancedLandingPage() {
                             transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
                             className="text-base md:text-lg text-slate-300/90 mb-10 max-w-xl leading-relaxed"
                         >
-                            منصة تقدم لك اختبارات تجريبية تحاكي اختبار الاعتماد المهني السعودي لمهنتك — سواء كنت سائق، عامل تحميل، خياط، أو أي مهنة حرفية. جرّب مجاناً واعرف مستواك قبل الاختبار الحقيقي.
+                            منصة متخصصة تقدم اختبارات تجريبية تحاكي فحص الاعتماد المهني السعودي لمختلف المهن الحرفية. اختبر مستواك مجاناً وبكل موثوقية قبل الاختبار الحقيقي.
                         </motion.p>
 
                         {/* PROFESSION SEARCH */}
@@ -156,7 +156,7 @@ export default function EnhancedLandingPage() {
                                         setShowResults(true);
                                     }}
                                     onFocus={() => setShowResults(true)}
-                                    onBlur={() => setTimeout(() => setShowResults(false), 200)}
+                                    onBlur={() => setShowResults(false)}
                                     placeholder="مثال: عامل تحميل، سائق شاحنة، خياط..."
                                     className="w-full h-[60px] bg-white/[0.08] border border-white/15 focus:border-[#5c9e45]/60 rounded-2xl pl-6 pr-16 text-lg text-white placeholder-slate-400/60 backdrop-blur-xl transition-all shadow-xl focus:outline-none focus:ring-4 focus:ring-[#5c9e45]/15 focus:bg-white/[0.12]"
                                 />
@@ -183,24 +183,26 @@ export default function EnhancedLandingPage() {
                                         <div className="max-h-[300px] overflow-y-auto">
                                             {filteredProfessions.length > 0 ? (
                                                 filteredProfessions.map(prof => (
-                                                    <Link 
-                                                        href={`/${prof.slug}`} 
+                                                    <button 
                                                         key={prof.id}
-                                                        className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group"
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault(); // Prevent input onBlur
+                                                            router.push(`/${prof.slug}`);
+                                                        }}
+                                                        className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group"
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div className="w-10 h-10 rounded-full bg-blue-50 text-[#16539a] flex items-center justify-center font-bold">
                                                                 {prof.name.substring(0, 1)}
                                                             </div>
-                                                            <div>
+                                                            <div className="text-right">
                                                                 <h4 className="font-bold text-slate-800 text-base group-hover:text-[#16539a] transition-colors">{prof.name}</h4>
-                                                                <p className="text-sm text-slate-400">{prof.questionCount} سؤال • {prof.examDuration} دقيقة</p>
                                                             </div>
                                                         </div>
                                                         <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-[#5c9e45] group-hover:text-white transition-all transform group-hover:-translate-x-1">
                                                             <ChevronLeft size={18} />
                                                         </div>
-                                                    </Link>
+                                                    </button>
                                                 ))
                                             ) : (
                                                 <div className="p-8 text-center text-slate-500 flex flex-col items-center">

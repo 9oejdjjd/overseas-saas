@@ -42,6 +42,7 @@ interface MessageLog {
 }
 
 interface PendingMessage {
+    messageLogId?: string;
     applicantId: string;
     applicant: {
         fullName: string;
@@ -52,6 +53,8 @@ interface PendingMessage {
     trigger: string;
     triggerLabel: string;
     priority: number;
+    isRetry?: boolean;
+    createdAt?: string;
 }
 
 interface Stats {
@@ -128,14 +131,50 @@ export default function MessagingPage() {
 
     // ... (filters)
     const filteredMessages = messages.filter(m =>
-        m.applicant?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.applicant?.fullName || "زائر (اختبار تجريبي)").toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.trigger?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const filteredPending = pendingMessages.filter(m =>
-        m.applicant?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.applicant?.fullName || "زائر (اختبار تجريبي)").toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.triggerLabel?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const handleBulkAction = async (action: 'retry' | 'delete') => {
+        setLoading(true);
+        try {
+            const method = action === 'retry' ? 'POST' : 'DELETE';
+            const body = action === 'retry' ? JSON.stringify({ retryAll: true }) : undefined;
+            const url = action === 'delete' ? '/api/messages/retry?all=true' : '/api/messages/retry';
+            
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body
+            });
+            await fetchData();
+        } catch (error) {
+            console.error(`Bulk ${action} failed:`, error);
+            setLoading(false);
+        }
+    };
+
+    const handleSingleAction = async (action: 'retry' | 'delete', messageLogId: string) => {
+        try {
+            const method = action === 'retry' ? 'POST' : 'DELETE';
+            const body = action === 'retry' ? JSON.stringify({ messageLogId }) : undefined;
+            const url = action === 'delete' ? `/api/messages/retry?id=${messageLogId}` : '/api/messages/retry';
+
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body
+            });
+            fetchData(); // Don't block UI with loading state for single actions
+        } catch (error) {
+            console.error(`Single ${action} failed:`, error);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -258,40 +297,101 @@ export default function MessagingPage() {
                                     <p>لا توجد رسائل معلقة 🎉</p>
                                 </div>
                             ) : (
-                                <div className="divide-y">
-                                    {filteredPending.map((msg, idx) => (
-                                        <div
-                                            key={`${msg.applicantId}-${msg.trigger}-${idx}`}
-                                            className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
-                                                    {msg.applicant.fullName.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-gray-900">{msg.applicant.fullName}</p>
-                                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                                                        <span className="font-mono text-xs">{msg.applicant.applicantCode}</span>
-                                                        <span>•</span>
-                                                        <span>{msg.triggerLabel}</span>
-                                                    </div>
-                                                </div>
+                                <div>
+                                    {/* Bulk Actions Header (Only show if there are actual retry-able messages) */}
+                                    {filteredPending.some(m => m.isRetry) && (
+                                        <div className="bg-orange-50 border-b border-orange-100 p-4 flex items-center justify-between">
+                                            <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
+                                                <AlertCircle className="h-5 w-5 text-orange-500" />
+                                                يوجد {filteredPending.filter(m => m.isRetry).length} رسالة فاشلة بانتظار إعادة الإرسال
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">
-                                                    <Clock className="h-3 w-3 ml-1" />
-                                                    معلق
-                                                </Badge>
-                                                <ContextualMessageButton
-                                                    applicant={msg.applicant}
-                                                    trigger={msg.trigger}
-                                                    variant="inline"
-                                                    label="إرسال"
-                                                    onSuccess={fetchData}
-                                                />
+                                                <Button 
+                                                    onClick={() => handleBulkAction('delete')}
+                                                    variant="outline" 
+                                                    size="sm"
+                                                    className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 bg-white"
+                                                >
+                                                    <XCircle className="w-4 h-4 ml-2" /> حذف الكل
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => handleBulkAction('retry')}
+                                                    size="sm"
+                                                    className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
+                                                >
+                                                    <RefreshCw className="w-4 h-4 ml-2" /> إعادة إرسال الكل
+                                                </Button>
                                             </div>
                                         </div>
-                                    ))}
+                                    )}
+
+                                    <div className="divide-y">
+                                        {filteredPending.map((msg, idx) => (
+                                            <div
+                                                key={`${msg.applicantId}-${msg.trigger}-${idx}`}
+                                                className={`flex items-center justify-between p-4 transition-colors ${msg.isRetry ? 'bg-orange-50/30 hover:bg-orange-50' : 'hover:bg-gray-50'}`}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold ${msg.isRetry ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                        {msg.applicant?.fullName?.charAt(0) || "ز"}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-bold text-gray-900">{msg.applicant?.fullName || "زائر (اختبار تجريبي)"}</p>
+                                                            {msg.isRetry && <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">فشل الإرسال</span>}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-sm text-gray-500 mt-0.5">
+                                                            <span className="font-mono text-xs">{msg.applicant?.applicantCode || "VISITOR"}</span>
+                                                            <span>•</span>
+                                                            <span className={msg.isRetry ? 'text-orange-700 font-medium' : ''}>{msg.triggerLabel}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {msg.isRetry && msg.createdAt && (
+                                                         <span className="text-xs text-gray-400 hidden md:block" dir="ltr">
+                                                             {new Date(msg.createdAt).toLocaleTimeString('ar-EG', {hour: '2-digit', minute: '2-digit'})}
+                                                         </span>
+                                                    )}
+                                                    
+                                                    {!msg.isRetry && (
+                                                        <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 shrink-0">
+                                                            <Clock className="h-3 w-3 ml-1" /> جدولة
+                                                        </Badge>
+                                                    )}
+
+                                                    {msg.isRetry && msg.messageLogId ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <Button
+                                                                onClick={() => handleSingleAction('delete', msg.messageLogId!)}
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100"
+                                                                title="حذف"
+                                                            >
+                                                                <XCircle className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() => handleSingleAction('retry', msg.messageLogId!)}
+                                                                size="sm"
+                                                                className="h-8 gap-1 bg-orange-600 hover:bg-orange-700 font-bold px-3 text-xs"
+                                                            >
+                                                                <RefreshCw className="w-3.5 h-3.5" /> إعادة
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <ContextualMessageButton
+                                                            applicant={msg.applicant}
+                                                            trigger={msg.trigger}
+                                                            variant="inline"
+                                                            label="إرسال"
+                                                            onSuccess={fetchData}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </TabsContent>
@@ -319,7 +419,7 @@ export default function MessagingPage() {
                                                     {msg.applicant?.fullName?.charAt(0) || "?"}
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-gray-900">{msg.applicant?.fullName}</p>
+                                                    <p className="font-medium text-gray-900">{msg.applicant?.fullName || "زائر (اختبار تجريبي)"}</p>
                                                     <div className="flex items-center gap-2 text-sm text-gray-500">
                                                         <span>{TRIGGER_LABELS[msg.trigger] || msg.trigger}</span>
                                                         <span>•</span>
@@ -366,7 +466,7 @@ export default function MessagingPage() {
                                                     {msg.applicant?.fullName?.charAt(0) || "?"}
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-gray-900">{msg.applicant?.fullName}</p>
+                                                    <p className="font-medium text-gray-900">{msg.applicant?.fullName || "زائر (اختبار تجريبي)"}</p>
                                                     <div className="flex items-center gap-2 text-sm text-gray-500">
                                                         <span>{TRIGGER_LABELS[msg.trigger] || msg.trigger}</span>
                                                         <span>•</span>

@@ -34,9 +34,11 @@ export function MockExamNavbar({
                 {/* Center: Logo */}
                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center">
                     <img 
-                        src="/logo.png" 
+                        src="/logo1.png" 
                         alt="بوابة الاعتماد المهني" 
                         className="h-10 w-auto object-contain"
+                        width="180"
+                        height="40"
                         onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');

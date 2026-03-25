@@ -38,7 +38,7 @@ export async function POST(request: Request) {
             sendResult = await sendWhatsAppMessage(phone, message);
         }
 
-        const status = sendResult.success ? "SENT" : "FAILED";
+        const status = sendResult.success ? "SENT" : "PENDING"; // Save failed as PENDING for retry
 
         // 3. Log the message status in database
         const messageLog = await prisma.messageLog.create({

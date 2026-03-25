@@ -50,7 +50,7 @@ export async function autoSendMessage(
 
         // 4. Send via WPPConnect
         const sendResult = await sendWhatsAppMessage(phone, text);
-        const status = sendResult.success ? "SENT" : "FAILED";
+        const status = sendResult.success ? "SENT" : "PENDING"; // Saving failed as PENDING for retry
 
         // 5. Log to MessageLog
         await prisma.messageLog.create({
@@ -145,7 +145,44 @@ export async function autoSendDirectMessage(
         }
 
         const sendResult = await sendWhatsAppMessage(phone, text);
-        console.log(`[AutoSendDirect] ${trigger} → ${phone}: ${sendResult.success ? "SENT" : "FAILED"}`);
+        const status = sendResult.success ? "SENT" : "PENDING";
+        
+        console.log(`[AutoSendDirect] ${trigger} → ${phone}: ${status}`);
+
+        // Log to MessageLog for visitors so it can be retried 
+        // Since schema requires applicantId, we'll try to find an applicant with this phone, otherwise create a temporary one.
+        let applicant = await prisma.applicant.findFirst({
+            where: { OR: [{ whatsappNumber: phone }, { phone: phone }] }
+        });
+
+        if (!applicant) {
+            // Create a dummy applicant for the visitor so we can track their messages
+            applicant = await prisma.applicant.create({
+                data: {
+                    fullName: "زائر (اختبار تجريبي)",
+                    profession: "غير محدد",
+                    phone: phone,
+                    whatsappNumber: phone,
+                    status: "NEW_REGISTRATION",
+                    totalAmount: 0,
+                    remainingBalance: 0,
+                    notes: "تم الإنشاء تلقائياً لتتبع رسائل الاختبار التجريبي للزوار"
+                }
+            });
+        }
+
+        await prisma.messageLog.create({
+            data: {
+                applicantId: applicant.id,
+                templateId: template.id,
+                trigger,
+                channel: "WHATSAPP",
+                message: text,
+                status,
+                sentAt: sendResult.success ? new Date() : undefined,
+            }
+        });
+
         return { success: sendResult.success };
     } catch (error) {
         console.error(`[AutoSendDirect] Error:`, error);

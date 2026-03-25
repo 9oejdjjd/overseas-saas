@@ -82,32 +82,51 @@ Do NOT include backticks (e.g. \`\`\`json) in your response. Just the raw array.
 Ensure exactly 1 option is correct in each question, and exactly 4 options total per question.
 `;
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        role: "user",
-                        parts: [{ text: "You are a specialized JSON data generator. Output ONLY a valid JSON array, without any markdown formatting.\n\n" + promptTemplate }]
-                    }
-                ],
-                generationConfig: {
-                    temperature: 0.7,
-                    responseMimeType: "application/json"
-                }
-            })
-        });
+        // Auto-retry with exponential backoff for temporary Gemini errors (503, 429)
+        const MAX_RETRIES = 3;
+        const BASE_DELAY_MS = 3000; // 3 seconds
+        let res: Response | null = null;
 
-        if (!res.ok) {
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [{ text: "You are a specialized JSON data generator. Output ONLY a valid JSON array, without any markdown formatting.\n\n" + promptTemplate }]
+                        }
+                    ],
+                    generationConfig: {
+                        temperature: 0.7,
+                        responseMimeType: "application/json"
+                    }
+                })
+            });
+
+            if (res.ok) {
+                if (attempt > 1) console.log(`[AI Gen] Gemini succeeded on attempt ${attempt}/${MAX_RETRIES}`);
+                break;
+            }
+
+            // Retry only on 503 (overloaded) or 429 (rate limit)
+            if ((res.status === 503 || res.status === 429) && attempt < MAX_RETRIES) {
+                const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1); // 3s, 6s, 12s
+                console.warn(`[AI Gen] Gemini returned ${res.status}, retrying in ${delay / 1000}s (attempt ${attempt}/${MAX_RETRIES})...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+
+            // Non-retryable error or max retries exhausted
             const errBody = await res.text();
             console.error("Gemini Raw Error:", errBody);
             throw new Error(`Gemini API error: ${res.statusText} - ${errBody}`);
         }
 
-        const data = await res.json();
+        const data = await res!.json();
         let content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "[]";
 
         // Safety cleanup if model still returns markdown fences

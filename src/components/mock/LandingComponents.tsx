@@ -50,41 +50,56 @@ export const staggerContainer: Variants = {
 // ---------------------------------------------------------------------------
 export function ProblemsSection() {
     const problems = [
-        { icon: HelpCircle, title: "ما أعرف المطلوب مني", desc: "كثير من العمال لا يعرفون ما هو الاعتماد المهني أصلاً ولا الخطوات المطلوبة." },
-        { icon: FileWarning, title: "خايف من الاختبار", desc: "الخوف من الرسوب بسبب عدم معرفة نوعية الأسئلة وطريقة الاختبار." },
-        { icon: AlertCircle, title: "لغة الأسئلة صعبة", desc: "الأسئلة قد تحتوي مصطلحات تقنية غير مفهومة لبعض المهن الحرفية." },
-        { icon: Calendar, title: "ما أعرف أتسجل", desc: "منصة التسجيل معقدة والخطوات غير واضحة بدون مساعدة متخصصة." }
+        { icon: HelpCircle, title: "الغموض في المتطلبات", desc: "الكثير من العاملين لا يدركون أهمية الاعتماد المهني أو الخطوات الرسمية المطلوبة لاجتيازه." },
+        { icon: FileWarning, title: "رهبة الاختبار", desc: "القلق من عدم اجتياز الاختبار بسبب عدم الإلمام بطبيعة الأسئلة وصيغتها المطروحة." },
+        { icon: AlertCircle, title: "صعوبة المصطلحات", desc: "قد يحتوي الاختبار على مصطلحات تقنية أو لغوية تبدو معقدة لبعض المهن الحرفية." },
+        { icon: Calendar, title: "تعقيد إجراءات التسجيل", desc: "منصة التسجيل تتطلب دقة في إدخال البيانات، مما قد يشكل عائقاً بدون توجيه متخصص." }
     ];
 
     return (
-        <section className="py-20 md:py-24 bg-white relative">
-            <div className="max-w-7xl mx-auto px-6 md:px-10">
+        <section className="py-20 md:py-24 bg-white relative overflow-hidden">
+            {/* Floating Background Elements */}
+            <motion.div 
+                animate={{ y: [0, -20, 0], x: [0, 15, 0] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-10 right-10 w-64 h-64 bg-slate-50 rounded-full blur-3xl opacity-50 pointer-events-none"
+            />
+            <motion.div 
+                animate={{ y: [0, 30, 0], x: [0, -20, 0] }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                className="absolute bottom-10 left-10 w-72 h-72 bg-blue-50/50 rounded-full blur-3xl opacity-50 pointer-events-none"
+            />
+
+            <div className="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
                 <motion.div
                     initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }}
                     variants={fadeUp}
                     className="text-center max-w-3xl mx-auto mb-14"
                 >
                     <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
-                        ليش كثير من العمال <span className="text-[#16539a]">يواجهون صعوبة في الاعتماد المهني؟</span>
+                        لماذا يواجه الكثيرون <span className="text-[#16539a]">صعوبة في الاعتماد المهني؟</span>
                     </h2>
-                    <p className="text-slate-500 text-base md:text-lg">إذا كنت تنوي السفر للعمل في السعودية، لازم تعرف إن الاعتماد المهني خطوة إلزامية — وبدون تحضير ممكن تواجه مشاكل.</p>
+                    <p className="text-slate-500 text-base md:text-lg leading-relaxed">
+                        إذا كنت تنوي السفر للعمل في المملكة العربية السعودية، فالاعتماد المهني خطوة إلزامية. تشير إحصائيات سوق العمل إلى أن <strong className="text-slate-800">أكثر من 68% من المتقدمين</strong> يواجهون صعوبات أو إخفاق في المحاولة الأولى بسبب عدم الإلمام الكافي بطبيعة الأسئلة النظرية أو الإجراءات الرسمية.
+                    </p>
                 </motion.div>
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
                     {problems.map((prob, i) => (
                         <motion.div
                             key={i}
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 30 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            transition={{ delay: i * 0.08, duration: 0.4 }}
-                            className="group bg-slate-50 border border-slate-100 p-7 rounded-2xl hover:shadow-lg hover:shadow-[#16539a]/5 hover:-translate-y-1 transition-all duration-300"
+                            transition={{ delay: i * 0.1, duration: 0.5, type: "spring", stiffness: 100 }}
+                            className="group bg-slate-50 border border-slate-100 p-7 rounded-2xl hover:shadow-xl hover:shadow-[#16539a]/5 hover:-translate-y-2 hover:bg-white transition-all duration-300 relative overflow-hidden"
                         >
-                            <div className="w-11 h-11 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-600 group-hover:text-[#e11d48] group-hover:scale-110 transition-all mb-5">
-                                <prob.icon size={22} />
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-slate-100 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 rounded-bl-full" />
+                            <div className="w-12 h-12 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-600 group-hover:text-[#e11d48] group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 mb-5 relative z-10">
+                                <prob.icon size={24} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">{prob.title}</h3>
-                            <p className="text-slate-500 text-sm leading-relaxed">{prob.desc}</p>
+                            <h3 className="text-lg font-bold text-slate-800 mb-3 relative z-10">{prob.title}</h3>
+                            <p className="text-slate-500 text-sm leading-relaxed relative z-10">{prob.desc}</p>
                         </motion.div>
                     ))}
                 </div>
@@ -98,26 +113,36 @@ export function ProblemsSection() {
 // ---------------------------------------------------------------------------
 export function SolutionSection() {
     const steps = [
-        { title: "نسجّلك في الاعتماد المهني", desc: "نقوم بكل إجراءات التسجيل في المنصة بدلاً عنك بشكل دقيق ومطابق للشروط." },
-        { title: "نوضّح لك كل شي", desc: "نشرح لك خطوات الاختبار ونوعية الأسئلة بأسلوب بسيط وسهل تفهمه." },
-        { title: "نحجز لك موعد الاختبار", desc: "نختار لك الوقت و المكان الأنسب ونتابع الحجوزات حتى تأكيد الموعد." },
-        { title: "نجهّزك باختبار تجريبي", desc: "تختبر نفسك بأسئلة تحاكي الاختبار الحقيقي حسب مهنتك — مجاناً." },
-        { title: "نتابعك حتى تنجح", desc: "نبقى معك خطوة بخطوة حتى تجتاز الاختبار وتستلم الاعتماد." }
+        { title: "نتولى إجراءات التسجيل", desc: "نقوم بكافة إجراءات التسجيل في المنصة الرسمية بدلاً عنك بشكل دقيق ومطابق للشروط." },
+        { title: "شرح شامل وواضح", desc: "نوضح لك طبيعة الاختبار ونوعية الأسئلة بأسلوب احترافي ومبسط يسهل استيعابه." },
+        { title: "حجز مواعيد الاختبار", desc: "نختار لك الوقت والمكان الأنسب وندير الحجوزات بدقة حتى يتم تأكيد الموعد النهائي." },
+        { title: "تأهيل عبر اختبار تجريبي", desc: "نقيم مستواك من خلال أسئلة محاكية للاختبار الحقيقي ومطابقة لمهنتك تماماً." },
+        { title: "متابعة مستمرة للنجاح", desc: "نقف بجانبك خطوة بخطوة، ونقدم الدعم اللازم حتى تجتاز الاختبار وتستلم الاعتماد." }
     ];
 
     return (
         <section className="py-20 md:py-24 bg-[#0f172a] text-white relative overflow-hidden">
-            <div className="absolute top-0 right-1/4 w-80 h-80 bg-[#16539a]/25 rounded-full blur-[100px] pointer-events-none" />
-            <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-[#5c9e45]/15 rounded-full blur-[100px] pointer-events-none" />
+            <motion.div 
+                animate={{ scale: [1, 1.1, 1], opacity: [0.25, 0.35, 0.25] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-0 right-1/4 w-80 h-80 bg-[#16539a]/30 rounded-full blur-[100px] pointer-events-none" 
+            />
+            <motion.div 
+                animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+                className="absolute bottom-0 left-1/4 w-80 h-80 bg-[#5c9e45]/20 rounded-full blur-[100px] pointer-events-none" 
+            />
+            {/* Ambient particles */}
+            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay"></div>
 
-            <div className="max-w-7xl mx-auto px-6 md:px-10 grid lg:grid-cols-2 gap-14 items-center">
-                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer}>
+            <div className="max-w-7xl mx-auto px-6 md:px-10 grid lg:grid-cols-2 gap-14 items-center relative z-10">
+                <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer} className="relative">
                     <motion.h2 variants={fadeUp} className="text-3xl lg:text-4xl font-bold mb-5 leading-tight">
-                        لا تشيل هم — <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#5c9e45] to-[#3b82f6]">نحن نتولى كل شي عنك</span>
+                        دع الأمر لنا — <br />
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#5c9e45] to-[#3b82f6]">نكفيك عناء الإجراءات بالكامل</span>
                     </motion.h2>
-                    <motion.p variants={fadeUp} className="text-slate-400 text-base md:text-lg mb-10">
-                        سواء كنت عامل تحميل، سائق، خياط أو أي مهنة — نساعدك من الصفر حتى تحصل على الاعتماد المهني وتكون جاهز للسفر.
+                    <motion.p variants={fadeUp} className="text-slate-400 text-base md:text-lg mb-10 leading-relaxed">
+                        أياً كانت مهنتك — سواء كنت عامل تحميل، سائق، أو خياط — نحن نوفر لك الدعم الشامل للتوافق بشكل كامل مع اشتراطات ومسار <a href="https://hrsd.gov.sa/ar/labor-market-services/84042" target="_blank" rel="nofollow external noopener noreferrer" className="text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-4">وزارة الموارد البشرية والتنمية الاجتماعية</a> وبرنامج الفحص المهني السعودي.
                     </motion.p>
 
                     <div className="space-y-6 relative before:absolute before:inset-y-2 before:right-[17px] before:w-[2px] before:bg-slate-800">
@@ -125,14 +150,15 @@ export function SolutionSection() {
                             <motion.div
                                 key={i}
                                 variants={fadeUp}
-                                className="relative flex gap-5 pl-4"
+                                whileHover={{ x: -5 }}
+                                className="relative flex gap-5 pl-4 group cursor-default"
                             >
-                                <div className="relative z-10 w-9 h-9 rounded-full bg-slate-800 border-2 border-[#16539a] flex items-center justify-center shrink-0">
-                                    <div className="w-2 h-2 rounded-full bg-[#5c9e45]" />
+                                <div className="relative z-10 w-9 h-9 rounded-full bg-slate-800 border-2 border-[#16539a] flex items-center justify-center shrink-0 group-hover:border-[#5c9e45] group-hover:bg-[#16539a] transition-colors duration-300">
+                                    <div className="w-2 h-2 rounded-full bg-[#5c9e45] group-hover:bg-white group-hover:scale-125 transition-transform" />
                                 </div>
                                 <div>
-                                    <h4 className="text-lg font-semibold text-white mb-1">{step.title}</h4>
-                                    <p className="text-slate-400 text-sm">{step.desc}</p>
+                                    <h4 className="text-lg font-semibold text-white mb-1 group-hover:text-[#5c9e45] transition-colors">{step.title}</h4>
+                                    <p className="text-slate-400 text-sm leading-relaxed">{step.desc}</p>
                                 </div>
                             </motion.div>
                         ))}
@@ -191,28 +217,35 @@ export function SolutionSection() {
 // ---------------------------------------------------------------------------
 export function TimelineSection() {
     const process = [
-        { title: "تتواصل معنا", desc: "أرسل لنا رسالة واتساب أو سجّل بياناتك." },
-        { title: "نسجّلك بالمنصة", desc: "نقوم بإنشاء حسابك وإتمام كل الإجراءات." },
-        { title: "نحدد الموعد", desc: "نختار لك الوقت والمكان الأنسب لاختبارك." },
-        { title: "تجتاز الاختبار", desc: "تدخل الاختبار وأنت مستعد ومتدرب عليه." }
+        { title: "التواصل وتقديم الطلب", desc: "أرسل بياناتك عبر الواتساب للبدء الفوري." },
+        { title: "تسجيل حساب المنصة", desc: "نتولى عنك إنشاء الحساب وإتمام الإجراءات بدقة." },
+        { title: "تحديد موعد الاختبار", desc: "نحجز لك الوقت والمكان الأنسب لاختبارك النهائي." },
+        { title: "الاجتياز والاعتماد", desc: "استعد جيداً واجتز الاختبار بثقة تامة." }
     ];
 
     return (
-        <section className="py-20 md:py-24 bg-white border-t border-slate-100">
-            <div className="max-w-7xl mx-auto px-6 md:px-10">
-                <div className="text-center mb-16">
-                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900">كيف تسير رحلتك معنا؟</h2>
-                    <p className="text-slate-500 mt-3">أربع خطوات بسيطة تفصلك عن الاعتماد المهني</p>
-                </div>
+        <section className="py-20 md:py-24 bg-white border-y border-slate-100 relative overflow-hidden">
+            {/* Background elements */}
+            <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50/50 via-transparent to-transparent pointer-events-none" />
+
+            <div className="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
+                <motion.div 
+                    initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-50px" }}
+                    variants={fadeUp}
+                    className="text-center mb-16"
+                >
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900">آلية العمل وخطوات الاعتماد</h2>
+                    <p className="text-slate-500 mt-3 text-lg">أربع خطوات مبسطة وموثوقة تفصلك عن الاعتماد المهني الرسمي</p>
+                </motion.div>
 
                 <div className="relative">
-                    <div className="hidden md:block absolute top-1/2 right-0 w-full h-1 bg-slate-100 -translate-y-1/2 rounded-full overflow-hidden">
+                    <div className="hidden md:block absolute top-1/2 right-0 w-full h-1.5 bg-slate-100 -translate-y-1/2 rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: "0%" }}
                             whileInView={{ width: "100%" }}
                             viewport={{ once: true }}
-                            transition={{ duration: 1.2, ease: "easeInOut" }}
-                            className="h-full bg-gradient-to-l from-[#16539a] to-[#5c9e45]"
+                            transition={{ duration: 1.5, ease: "easeInOut" }}
+                            className="h-full bg-gradient-to-l from-[#16539a] via-[#3b82f6] to-[#5c9e45]"
                         />
                     </div>
 
@@ -220,18 +253,21 @@ export function TimelineSection() {
                         {process.map((step, i) => (
                             <motion.div
                                 key={i}
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={{ opacity: 0, y: 30 }}
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
-                                transition={{ delay: i * 0.15 }}
-                                className="relative flex flex-col items-center text-center"
+                                transition={{ delay: i * 0.2, type: "spring", stiffness: 100 }}
+                                className="relative flex flex-col items-center text-center group"
                             >
-                                <div className="w-14 h-14 rounded-2xl bg-white border-2 border-[#16539a] shadow-lg flex items-center justify-center text-lg font-bold text-[#16539a] mb-5 relative group">
+                                <motion.div 
+                                    whileHover={{ scale: 1.1, rotate: 5 }}
+                                    className="w-16 h-16 rounded-2xl bg-white border border-slate-200 shadow-xl shadow-slate-200/50 flex items-center justify-center text-xl font-bold text-[#16539a] mb-6 relative group-hover:border-[#16539a] group-hover:text-white group-hover:bg-[#16539a] transition-all duration-300 z-10"
+                                >
                                     {i + 1}
-                                    <div className="absolute inset-0 bg-[#16539a] rounded-2xl opacity-0 group-hover:opacity-10 transition-opacity"></div>
-                                </div>
-                                <h3 className="text-base font-bold text-slate-800 mb-2">{step.title}</h3>
-                                <p className="text-sm text-slate-500">{step.desc}</p>
+                                    <div className="absolute inset-0 rounded-2xl bg-[#16539a] opacity-0 group-hover:opacity-10 transition-opacity blur-md -z-10" />
+                                </motion.div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-[#16539a] transition-colors">{step.title}</h3>
+                                <p className="text-sm text-slate-500 leading-relaxed px-2">{step.desc}</p>
                             </motion.div>
                         ))}
                     </div>
@@ -246,28 +282,34 @@ export function TimelineSection() {
 // ---------------------------------------------------------------------------
 export function TrustSection() {
     const stats = [
-        { label: "عامل تم تجهيزهم", value: "+٢٠٠٠" },
-        { label: "نسبة اجتياز", value: "٩٥٪" },
-        { label: "دقة في التسجيل", value: "١٠٠٪" }
+        { label: "اختبار تجريبي تم تقييمه", value: "+٥٠,٠٠٠" },
+        { label: "نسبة اجتياز أعلى لمن تدرب", value: "+٧٠٪" },
+        { label: "مهنة وحرفة فنية مدعومة", value: "٢٥" }
     ];
 
     return (
-        <section className="py-16 md:py-20 bg-slate-900 text-white">
-            <div className="max-w-7xl mx-auto px-6 md:px-10">
+        <section className="py-16 md:py-20 bg-slate-900 text-white relative overflow-hidden">
+            {/* Ambient Background */}
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#16539a]/20 rounded-full blur-[100px] pointer-events-none" />
+
+            <div className="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
                 <div className="grid md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-slate-800">
                     {stats.map((stat, i) => (
                         <motion.div
                             key={i}
-                            initial={{ opacity: 0, scale: 0.9 }}
+                            initial={{ opacity: 0, scale: 0.8 }}
                             whileInView={{ opacity: 1, scale: 1 }}
                             viewport={{ once: true }}
-                            transition={{ delay: i * 0.1 }}
-                            className="text-center pt-6 md:pt-0"
+                            transition={{ delay: i * 0.15, type: "spring", stiffness: 100 }}
+                            className="text-center pt-8 md:pt-0 flex flex-col items-center justify-center group"
                         >
-                            <div className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-[#5c9e45] mb-2">
+                            <motion.div 
+                                className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-[#16539a] to-[#5c9e45] mb-3 group-hover:scale-110 transition-transform duration-300"
+                            >
                                 {stat.value}
-                            </div>
-                            <div className="text-slate-400 font-medium">{stat.label}</div>
+                            </motion.div>
+                            <div className="text-slate-400 font-medium text-lg lg:text-xl group-hover:text-slate-200 transition-colors">{stat.label}</div>
                         </motion.div>
                     ))}
                 </div>
@@ -281,41 +323,53 @@ export function TrustSection() {
 // ---------------------------------------------------------------------------
 export function FAQSection() {
     const faqs = [
-        { q: "ما هو الاعتماد المهني؟", a: "هو تصريح إلزامي تطلبه السعودية من العمالة الوافدة يثبت أن العامل يملك المهارات المطلوبة لمهنته. بدونه لا تقدر تشتغل رسمياً." },
-        { q: "هل الاختبار التجريبي مجاني؟", a: "نعم، الاختبار التجريبي مجاني بالكامل. تقدر تعرف مستواك وتتدرب على نوعية الأسئلة قبل ما تدخل الاختبار الحقيقي." },
-        { q: "هل الأسئلة نفسها اللي في الاختبار الحقيقي؟", a: "الأسئلة مصممة لتحاكي أسلوب ومستوى أسئلة الاعتماد المهني السعودي. لكن هذا اختبار تجريبي تدريبي وليس الاختبار الرسمي." },
-        { q: "كيف أبدأ التسجيل معكم؟", a: "ببساطة تواصل معنا عبر الواتساب أو ابحث عن مهنتك في الموقع وابدأ الاختبار التجريبي. وفريقنا يقدر يساعدك في كل الإجراءات." },
-        { q: "كم يوم أحتاج عشان أتجهز؟", a: "يعتمد على مستواك. بعض العمال يجتازون من أول مرة بعد التدريب، وبعضهم يحتاجون أسبوع إلى أسبوعين. نحن نتابعك حتى تنجح." },
+        { q: "ما هو الاعتماد المهني؟", a: "هو تصريح إلزامي من المملكة العربية السعودية للعمالة الوافدة، يثبت كفاءة العامل وامتلاكه المهارات المطلوبة لمزاولة مهنته بشكل رسمي." },
+        { q: "هل الاختبار التجريبي مجاني بالكامل؟", a: "نعم، نقدم الاختبار التجريبي مجاناً لتتمكن من تقييم مستواك والتدرب على صياغة الأسئلة قبل التقدم للاختبار النهائي." },
+        { q: "هل أسئلة الاختبار التجريبي مطابقة للاختبار الفعلي؟", a: "الأسئلة مصممة بعناية لتحاكي أسلوب ومستوى أسئلة الاعتماد المهني السعودي، لتهيئتك بأفضل طريقة ممكنة، لكنها لا تمثل تسريباً للاختبار الرسمي." },
+        { q: "كيف يمكنني بدء إجراءات التسجيل معكم؟", a: "الأمر في غاية البساطة. يمكنك التواصل معنا عبر الواتساب أو البدء بالبحث عن مهنتك في الموقع وتجربة الاختبار؛ وسيقوم فريقنا بمتابعة كافة إجراءاتك." },
+        { q: "كم يستغرق التحضير لاجتياز الاختبار؟", a: "تختلف المدة بناءً على خبرتك والمستوى الفني. يجتاز البعض من المحاولة الأولى بعد تدريب قصير، بينما يحتاج البعض لمزيد من المتابعة الدقيقة التي نوفرها بكل احترافية." },
     ];
 
     const [openIndex, setOpenIndex] = useState<number | null>(0);
 
     return (
-        <section className="py-20 md:py-24 bg-[#f8fafc]">
-            <div className="max-w-3xl mx-auto px-6 md:px-10">
-                <div className="text-center mb-14">
-                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900">أسئلة شائعة</h2>
-                    <p className="text-slate-500 mt-3">أجوبة على أكثر الأسئلة اللي تجينا من العمال</p>
-                </div>
+        <section className="py-20 md:py-24 bg-[#f8fafc] relative overflow-hidden">
+            {/* Soft background decor */}
+            <div className="absolute top-0 right-0 w-[800px] h-[400px] bg-gradient-to-tl from-slate-200/40 to-transparent -rotate-12 transform origin-top-right mix-blend-multiply pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-gradient-to-tr from-blue-50/60 to-transparent rounded-full blur-3xl pointer-events-none" />
 
-                <div className="space-y-3">
+            <div className="max-w-3xl mx-auto px-6 md:px-10 relative z-10">
+                <motion.div 
+                    initial="hidden" whileInView="visible" viewport={{ once: true }}
+                    variants={fadeUp}
+                    className="text-center mb-14"
+                >
+                    <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900">الأسئلة الشائعة</h2>
+                    <p className="text-slate-500 mt-4 text-lg">إجابات وافية لأكثر الاستفسارات التي تهمك حول الاعتماد المهني</p>
+                </motion.div>
+
+                <div className="space-y-4">
                     {faqs.map((faq, i) => (
                         <motion.div
                             key={i}
-                            initial={{ opacity: 0, y: 10 }}
+                            initial={{ opacity: 0, y: 15 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
+                            transition={{ delay: i * 0.1 }}
+                            className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden hover:border-[#16539a]/30 transition-colors shadow-sm hover:shadow-md"
                         >
                             <button
                                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                                className="w-full flex items-center justify-between p-5 text-right focus:outline-none"
+                                className="w-full flex items-center justify-between p-5 md:p-6 text-right focus:outline-none"
                             >
-                                <span className="font-semibold text-slate-800">{faq.q}</span>
-                                <ChevronDown
-                                    className={`text-slate-400 transition-transform duration-300 shrink-0 ml-3 ${openIndex === i ? 'rotate-180' : ''}`}
-                                    size={20}
-                                />
+                                <span className={`font-semibold md:text-lg transition-colors ${openIndex === i ? 'text-[#16539a]' : 'text-slate-800'}`}>{faq.q}</span>
+                                <motion.div 
+                                    animate={{ rotate: openIndex === i ? 180 : 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className={`shrink-0 ml-3 w-8 h-8 rounded-full flex items-center justify-center ${openIndex === i ? 'bg-blue-50 text-[#16539a]' : 'bg-slate-50 text-slate-400'}`}
+                                >
+                                    <ChevronDown size={20} />
+                                </motion.div>
                             </button>
                             <AnimatePresence>
                                 {openIndex === i && (
@@ -323,9 +377,11 @@ export function FAQSection() {
                                         initial={{ height: 0, opacity: 0 }}
                                         animate={{ height: 'auto', opacity: 1 }}
                                         exit={{ height: 0, opacity: 0 }}
-                                        className="px-5 pb-5 text-slate-500 leading-relaxed"
+                                        transition={{ duration: 0.3, ease: "easeInOut" }}
                                     >
-                                        {faq.a}
+                                        <div className="px-5 md:px-6 pb-6 text-slate-600 leading-relaxed text-base border-t border-slate-50 pt-4">
+                                            {faq.a}
+                                        </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -342,43 +398,73 @@ export function FAQSection() {
 // ---------------------------------------------------------------------------
 export function CTASection() {
     return (
-        <section id="whatsapp" className="py-20 md:py-24 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#16539a] to-[#0f172a]" />
+        <section id="whatsapp" className="py-24 md:py-32 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#16539a] via-[#1e3a8a] to-[#0f172a]" />
             <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#ffffff12_1px,transparent_1px),linear-gradient(to_bottom,#ffffff12_1px,transparent_1px)] bg-[size:24px_24px]" />
+            
+            <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+                className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-gradient-to-bl from-blue-400/20 to-transparent rounded-full blur-3xl pointer-events-none"
+            />
 
             <div className="max-w-4xl mx-auto px-6 md:px-10 relative z-10 text-center text-white">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6, type: "spring" }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-8"
+                >
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-sm font-semibold tracking-wide text-blue-100">نحن هنا لخدمتك دائماً</span>
+                </motion.div>
+
                 <motion.h2
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    className="text-3xl md:text-4xl lg:text-5xl font-bold mb-5"
+                    className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight"
                 >
-                    جاهز تبدأ طريقك للسعودية؟
+                    هل أنت مستعد لبدء مسيرتك المهنية؟
                 </motion.h2>
                 <motion.p
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    transition={{ delay: 0.1 }}
-                    className="text-base md:text-lg text-slate-300 mb-10"
+                    transition={{ delay: 0.15 }}
+                    className="text-lg md:text-xl text-blue-100/90 mb-12 max-w-2xl mx-auto leading-relaxed"
                 >
-                    لا تضيع وقتك في الإجراءات المعقدة. تواصل معنا الآن ودعنا نتولى كل شي عنك.
+                    لا تهدر وقتك في الإجراءات المعقدة والمربكة. تواصل معنا الآن لنتولى كافة الترتيبات ونضمن لك القبول بنجاح.
                 </motion.p>
 
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    transition={{ delay: 0.2 }}
-                    className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                    transition={{ delay: 0.3 }}
+                    className="flex flex-col sm:flex-row items-center justify-center gap-5"
                 >
-                    <a href="https://wa.me/967777263111" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto px-8 py-4 bg-[#25D366] hover:bg-[#1ebd5b] text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-lg shadow-green-900/20 active:scale-95">
-                        <MessageCircle size={22} />
-                        تواصل معنا واتساب
-                    </a>
-                    <a href="#search" className="w-full sm:w-auto px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl font-bold text-lg transition-all backdrop-blur-md flex items-center justify-center">
-                        جرّب الاختبار التجريبي
-                    </a>
+                    <motion.a 
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        href="https://wa.me/967777263111" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="w-full sm:w-auto px-10 py-4 bg-[#25D366] hover:bg-[#1ebd5b] text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-green-900/30"
+                    >
+                        <MessageCircle size={24} />
+                        تواصل معنا عبر الواتساب
+                    </motion.a>
+                    <motion.a 
+                        whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.15)" }}
+                        whileTap={{ scale: 0.95 }}
+                        href="#search" 
+                        className="w-full sm:w-auto px-10 py-4 bg-white/5 border-2 border-white/20 text-white rounded-2xl font-bold text-lg transition-all backdrop-blur-md flex items-center justify-center group"
+                    >
+                        جرب الاختبار التجريبي 
+                        <ArrowLeft className="ml-2 w-5 h-5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                    </motion.a>
                 </motion.div>
             </div>
         </section>
@@ -395,13 +481,14 @@ export function Footer() {
 
                 {/* Brand */}
                 <div className="lg:col-span-2">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#16539a] to-[#5c9e45] flex items-center justify-center text-white">
-                            <Award size={18} />
-                        </div>
-                        <span className="text-lg font-bold text-white">
-                            بوابة الاعتماد المهني
-                        </span>
+                    <div className="flex items-center mb-6">
+                        <img 
+                            src="/logo2.png" 
+                            alt="بوابة الاعتماد المهني" 
+                            className="h-12 w-auto object-contain"
+                            width="200"
+                            height="48"
+                        />
                     </div>
                     <p className="text-sm leading-relaxed mb-4 max-w-sm">
                         نساعد العمالة اليمنية في إجراءات الاعتماد المهني للعمل في المملكة العربية السعودية. من التسجيل إلى الاختبار — نرافقك خطوة بخطوة.

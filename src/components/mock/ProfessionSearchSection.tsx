@@ -33,9 +33,9 @@ export function ProfessionSearchSection() {
 
     const handleStart = () => {
         if (selectedSlug) {
-            router.push(`/${selectedSlug}`);
+            router.push(`/professions/${selectedSlug}`);
         } else if (filtered.length > 0) {
-            router.push(`/${filtered[0].slug}`);
+            router.push(`/professions/${filtered[0].slug}`);
         }
     };
 
@@ -55,11 +55,11 @@ export function ProfessionSearchSection() {
                     <div className="relative z-10 grid lg:grid-cols-2 gap-10 items-center">
                         <div className="text-white text-right">
                             <h2 className="text-3xl md:text-4xl font-bold mb-5 leading-tight">
-                                ابحث عن مهنتك <br />
-                                <span className="text-[#5c9e45]">وابدأ اختبارك التجريبي</span>
+                                ابحث عن تصنيفك المهني <br />
+                                <span className="text-[#5c9e45]">وبادر بتجربة التقييم الآن</span>
                             </h2>
                             <p className="text-base md:text-lg text-slate-300 mb-6 max-w-lg leading-relaxed">
-                                نوفر اختبارات تجريبية لمختلف المهن الحرفية والمهنية. ابحث عن مهنتك وجرّب مستواك مجاناً قبل الاختبار الحقيقي.
+                                نوفر بيئة اختبار تحاكي المعايير الرسمية للاعتماد المهني في مختلف التخصصات. ابحث عن مهنتك، وقيّم جاهزيتك مجاناً وبكل موثوقية.
                             </p>
                         </div>
 
@@ -78,7 +78,8 @@ export function ProfessionSearchSection() {
                                             setSelectedSlug("");
                                         }}
                                         onFocus={() => setShowResults(true)}
-                                        placeholder="ابحث: عامل تحميل، سائق شاحنة، خياط..."
+                                        onBlur={() => setShowResults(false)}
+                                        placeholder="مثال: عامل تحميل، سائق شاحنة، ميكانيكي..."
                                         className="w-full h-14 bg-white border-2 border-transparent focus:border-[#5c9e45] rounded-xl pl-4 pr-11 text-base text-slate-800 placeholder-slate-400 shadow-xl transition-all focus:outline-none"
                                     />
                                     
@@ -95,7 +96,10 @@ export function ProfessionSearchSection() {
                                                     filtered.map((prof) => (
                                                         <button 
                                                             key={prof.id}
-                                                            onClick={() => handleSelect(prof.slug, prof.name)}
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault(); // Prevent onBlur from hiding the list before click is processed
+                                                                handleSelect(prof.slug, prof.name);
+                                                            }}
                                                             className="w-full text-right flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors group"
                                                         >
                                                             <div className="font-bold text-slate-700 group-hover:text-[#16539a]">{prof.name}</div>
