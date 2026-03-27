@@ -7,7 +7,7 @@ import { arSA } from "date-fns/locale";
 import {
     Users, DollarSign, TrendingUp, Calendar,
     ArrowUpRight, ArrowDownRight, MoreHorizontal, FileText,
-    MapPin, Activity, CheckCircle2, XCircle, Printer, Bus, ChevronLeft, ChevronRight, Clock
+    MapPin, Activity, CheckCircle2, XCircle, Printer, Bus, ChevronLeft, ChevronRight, Clock, Plus
 } from "lucide-react";
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -112,17 +112,25 @@ export default function DashboardPage() {
         ? Math.round((data.overview.passedCount / (data.overview.passedCount + data.overview.failedCount || 1)) * 100)
         : 0;
 
+    const currentHour = new Date().getHours();
+    const greeting = currentHour >= 5 && currentHour < 17 ? "صباح الخير" : "مساء الخير";
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-10">
             {/* Header */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-                        صباح الخير، {session?.user?.name || 'مستخدم'} 
+                        {greeting}، {session?.user?.name || 'مستخدم'} 
                     </h1>
-                    <p className="text-gray-500 mt-1">إليك نظرة سريعة على ما يحدث في نظامك اليوم.</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    <Link href="/dashboard/applicants/new">
+                        <Button className="bg-[#16539a] hover:bg-[#12427a] text-white flex items-center gap-2 shadow-sm font-medium">
+                            <Plus className="h-4 w-4" />
+                            إضافة متقدم جديد
+                        </Button>
+                    </Link>
                     <div className="bg-white border px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 shadow-sm flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-400" />
                         {new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

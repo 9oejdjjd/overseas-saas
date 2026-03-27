@@ -21,9 +21,9 @@ export function ProfessionSearchSection() {
             .catch(err => console.error(err));
     }, []);
 
-    const filtered = professions.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase())
-    ).slice(0, 4);
+    const filtered = professions
+        .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
     const handleSelect = (slug: string, name: string) => {
         setSearchQuery(name);
@@ -79,7 +79,7 @@ export function ProfessionSearchSection() {
                                         }}
                                         onFocus={() => setShowResults(true)}
                                         onBlur={() => setShowResults(false)}
-                                        placeholder="مثال: عامل تحميل، سائق شاحنة، ميكانيكي..."
+                                        placeholder="ابحث عن مهنتك..."
                                         className="w-full h-14 bg-white border-2 border-transparent focus:border-[#5c9e45] rounded-xl pl-4 pr-11 text-base text-slate-800 placeholder-slate-400 shadow-xl transition-all focus:outline-none"
                                     />
                                     
@@ -90,7 +90,7 @@ export function ProfessionSearchSection() {
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: 8 }}
                                                 transition={{ duration: 0.2 }}
-                                                className="absolute top-full right-0 left-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-50 p-2"
+                                                className="absolute top-full right-0 left-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-50 p-2 max-h-60 overflow-y-auto"
                                             >
                                                 {filtered.length > 0 ? (
                                                     filtered.map((prof) => (

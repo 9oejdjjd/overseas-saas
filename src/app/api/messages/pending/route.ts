@@ -48,7 +48,7 @@ export async function GET() {
 
         for (const applicant of applicants) {
             const sentTriggers = applicant.messageLogs
-                .filter(m => m.status === "SENT")
+                .filter(m => m.status === "SENT" || m.status === "DISMISSED")
                 .map(m => m.trigger);
 
 

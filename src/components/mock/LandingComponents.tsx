@@ -481,13 +481,13 @@ export function Footer() {
 
                 {/* Brand */}
                 <div className="lg:col-span-2">
-                    <div className="flex items-center mb-6">
+                    <div className="flex items-center mb-6 mr-6 md:mr-12">
                         <img 
                             src="/logo2.png" 
                             alt="بوابة الاعتماد المهني" 
-                            className="h-12 w-auto object-contain"
-                            width="200"
-                            height="48"
+                            className="h-32 md:h-40 w-auto object-contain transform scale-110 origin-right"
+                            width="500"
+                            height="160"
                         />
                     </div>
                     <p className="text-sm leading-relaxed mb-4 max-w-sm">

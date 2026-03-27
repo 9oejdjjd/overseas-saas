@@ -8,7 +8,7 @@ export async function GET(request: Request) {
         const status = searchParams.get("status"); // SENT, PENDING
         const trigger = searchParams.get("trigger");
         const applicantId = searchParams.get("applicantId");
-        const limit = parseInt(searchParams.get("limit") || "100");
+        const limit = parseInt(searchParams.get("limit") || "500");
 
         const where: any = {};
         if (status) where.status = status;

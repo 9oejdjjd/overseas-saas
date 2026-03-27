@@ -24,6 +24,7 @@ export default function EnhancedLandingPage() {
     const [professions, setProfessions] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
+    const [selectedSlug, setSelectedSlug] = useState("");
 
     useEffect(() => {
         fetch("/api/mock/public/professions")
@@ -36,10 +37,12 @@ export default function EnhancedLandingPage() {
             .catch(err => console.error("Failed to fetch professions", err));
     }, []);
 
-    const filteredProfessions = professions.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase()))
-    ).slice(0, 5);
+    const filteredProfessions = professions
+        .filter(p => 
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
     return (
         <main className="min-h-screen bg-[#fafafa] font-sans selection:bg-[#16539a] selection:text-white pb-0 overflow-x-hidden">
@@ -154,13 +157,20 @@ export default function EnhancedLandingPage() {
                                     onChange={(e) => {
                                         setSearchQuery(e.target.value);
                                         setShowResults(true);
+                                        setSelectedSlug("");
                                     }}
                                     onFocus={() => setShowResults(true)}
                                     onBlur={() => setShowResults(false)}
-                                    placeholder="مثال: عامل تحميل، سائق شاحنة، خياط..."
+                                    placeholder="ابحث عن مهنتك..."
                                     className="w-full h-[60px] bg-white/[0.08] border border-white/15 focus:border-[#5c9e45]/60 rounded-2xl pl-6 pr-16 text-lg text-white placeholder-slate-400/60 backdrop-blur-xl transition-all shadow-xl focus:outline-none focus:ring-4 focus:ring-[#5c9e45]/15 focus:bg-white/[0.12]"
                                 />
-                                <button className="absolute left-3 top-1/2 -translate-y-1/2 bg-gradient-to-l from-[#16539a] to-[#2563eb] w-11 h-11 flex items-center justify-center rounded-xl shadow-lg border border-white/10 hover:scale-105 transition-transform pointer-events-none">
+                                <button 
+                                    onClick={() => {
+                                        if (selectedSlug) router.push(`/${selectedSlug}`);
+                                        else if (filteredProfessions.length > 0) router.push(`/${filteredProfessions[0].slug}`);
+                                    }}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 bg-gradient-to-l from-[#16539a] to-[#2563eb] w-11 h-11 flex items-center justify-center rounded-xl shadow-lg border border-white/10 hover:scale-105 transition-transform pointer-events-auto"
+                                >
                                     <ArrowLeft size={18} className="text-white" />
                                 </button>
                             </div>
@@ -187,7 +197,9 @@ export default function EnhancedLandingPage() {
                                                         key={prof.id}
                                                         onMouseDown={(e) => {
                                                             e.preventDefault(); // Prevent input onBlur
-                                                            router.push(`/${prof.slug}`);
+                                                            setSearchQuery(prof.name);
+                                                            setSelectedSlug(prof.slug);
+                                                            setShowResults(false);
                                                         }}
                                                         className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group"
                                                     >

@@ -19,6 +19,7 @@ import {
     AlertCircle,
     MessageSquare,
     XCircle,
+    Trash2,
 } from "lucide-react";
 import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
 
@@ -170,9 +171,28 @@ export default function MessagingPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body
             });
-            fetchData(); // Don't block UI with loading state for single actions
+            fetchData();
         } catch (error) {
             console.error(`Single ${action} failed:`, error);
+        }
+    };
+
+    const handleDismissPending = async (applicantId: string, trigger: string) => {
+        try {
+            await fetch('/api/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    applicantId,
+                    trigger,
+                    message: 'تم التخطي يدوياً',
+                    status: 'DISMISSED',
+                    channel: 'WHATSAPP',
+                })
+            });
+            fetchData();
+        } catch (error) {
+            console.error('Dismiss pending failed:', error);
         }
     };
 
@@ -380,13 +400,24 @@ export default function MessagingPage() {
                                                             </Button>
                                                         </div>
                                                     ) : (
-                                                        <ContextualMessageButton
-                                                            applicant={msg.applicant}
-                                                            trigger={msg.trigger}
-                                                            variant="inline"
-                                                            label="إرسال"
-                                                            onSuccess={fetchData}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <Button
+                                                                onClick={() => handleDismissPending(msg.applicantId, msg.trigger)}
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100"
+                                                                title="تخطي هذه الرسالة"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                            <ContextualMessageButton
+                                                                applicant={msg.applicant}
+                                                                trigger={msg.trigger}
+                                                                variant="inline"
+                                                                label="إرسال"
+                                                                onSuccess={fetchData}
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

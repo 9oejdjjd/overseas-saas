@@ -53,7 +53,7 @@ export function TemplatesManager() {
         setIsSaving(true);
         try {
             const res = await fetch(`/api/settings/templates`, {
-                method: "PUT",
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(selectedTemplate)
             });
