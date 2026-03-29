@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { MapPin, Bus, User, FileText, Smartphone, Wallet, ArrowRight, Search } from "lucide-react";
 import { CustomDatePicker } from "@/components/ui/custom-date-picker";
 import { useToast } from "@/components/ui/simple-toast";
+import { OCRUploader } from "@/components/applicants/OCRUploader";
 
 // Types corresponding to our API responses
 type Location = {
@@ -338,7 +339,25 @@ export default function NewApplicantPage() {
                         {/* ID & Passport Section */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
                             <div className="space-y-2">
-                                <Label>رقم الجواز</Label>
+                                <div className="flex justify-between items-center">
+                                    <Label>رقم الجواز</Label>
+                                    <OCRUploader
+                                        type="PASSPORT"
+                                        onScanComplete={(data) => {
+                                            const updates: any = {};
+                                            if (data.passportNumber) updates.passportNumber = data.passportNumber;
+                                            if (data.firstName) updates.firstName = data.firstName;
+                                            if (data.lastName) updates.lastName = data.lastName;
+                                            if (data.passportExpiry) updates.passportExpiry = new Date(data.passportExpiry);
+                                            if (data.dob) updates.dob = new Date(data.dob);
+                                            if (data.profession) updates.profession = data.profession;
+                                            if (data.nationalId) updates.nationalId = data.nationalId;
+                                            setFormData(prev => ({ ...prev, ...updates }));
+                                        }}
+                                        label="مسح"
+                                        className="scale-90"
+                                    />
+                                </div>
                                 <Input required value={formData.passportNumber} onChange={e => setFormData({ ...formData, passportNumber: e.target.value })} className="dir-ltr font-mono uppercase bg-white" placeholder="P0000000" />
                             </div>
                             <div className="space-y-2">
@@ -349,7 +368,17 @@ export default function NewApplicantPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>رقم البطاقة الشخصية</Label>
+                                <div className="flex justify-between items-center">
+                                    <Label>رقم البطاقة الشخصية</Label>
+                                    <OCRUploader
+                                        type="NATIONAL_ID"
+                                        onScanComplete={(data) => {
+                                            if (data.nationalId) setFormData(prev => ({ ...prev, nationalId: data.nationalId }));
+                                        }}
+                                        label="مسح"
+                                        className="scale-90"
+                                    />
+                                </div>
                                 <Input value={formData.nationalId} onChange={e => setFormData({ ...formData, nationalId: e.target.value })} className="bg-white" placeholder="رقم الهوية الوطنية" />
                             </div>
                         </div>

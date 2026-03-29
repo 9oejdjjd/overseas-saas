@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
     try {
@@ -33,7 +35,10 @@ export async function POST(request: Request) {
         });
 
         // Trigger asynchronous generation so we don't block the request timeout
-        triggerAIGenerationBg(job.id, profession.name, profession.id);
+        // Wrapped in after() to ensure Vercel does not terminate the background process
+        after(async () => {
+            await triggerAIGenerationBg(job.id, profession.name, profession.id);
+        });
 
         return NextResponse.json({ success: true, jobId: job.id });
     } catch (error) {
