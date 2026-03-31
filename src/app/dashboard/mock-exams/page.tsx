@@ -284,14 +284,16 @@ export default function MockExamsAdminPage() {
                                                                 <span className="text-gray-400 block mb-1">الاسم: {sName}</span>
                                                                 <span className="text-gray-400">الرقم: {sPhone}</span>
                                                             </td>
-                                                            <td className="px-6 py-3 text-xs text-gray-500">
-                                                                محاولة رقم: {session.attemptNumber}
+                                                            <td className="px-6 py-3 text-xs">
+                                                                <span className="bg-slate-100/50 text-slate-600 px-2 py-1 rounded truncate max-w-[120px] inline-block">
+                                                                    {session.profession?.name || group.profession?.name || "غير محدد"}
+                                                                </span>
                                                             </td>
                                                             <td className="px-6 py-3">
                                                                 {session.status === "SUBMITTED" ? (
-                                                                    <span className="text-xs text-green-600">مكتمل</span>
+                                                                    <span className="text-xs text-green-600 font-medium">مكتمل</span>
                                                                 ) : (
-                                                                    <span className="text-xs text-orange-500">جاري</span>
+                                                                    <span className="text-xs text-orange-500 font-medium">جاري</span>
                                                                 )}
                                                             </td>
                                                             <td className="px-6 py-3">
@@ -301,9 +303,13 @@ export default function MockExamsAdminPage() {
                                                                             {session.score}%
                                                                         </span>
                                                                     </div>
-                                                                ) : "-"}
+                                                                ) : <span className="text-gray-400">-</span>}
                                                             </td>
-                                                            <td colSpan={2} className="px-6 py-3 text-left text-xs text-gray-500" dir="ltr">
+                                                            <td className="px-6 py-3 text-xs text-gray-500">
+                                                                <Badge variant="secondary" className="text-[10px] ml-2 font-normal scale-90 origin-right">{session.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
+                                                                رقم: {session.attemptNumber}
+                                                            </td>
+                                                            <td className="px-6 py-3 text-left text-xs text-gray-400" dir="ltr">
                                                                 {new Date(session.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
                                                             </td>
                                                             <td className="px-6 py-3">

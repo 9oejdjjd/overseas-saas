@@ -60,8 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             data: {
                 status: "SUBMITTED",
                 completedAt: new Date(),
-                score: scorePercentage,
-                isPassed: passed
+                score: scorePercentage
             }
         });
 
