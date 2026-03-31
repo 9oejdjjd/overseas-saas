@@ -222,7 +222,7 @@ export default function MockExamsAdminPage() {
                                                         <div className="flex items-center gap-3">
                                                             <div className="font-medium text-gray-900 flex items-center gap-2">
                                                                 {group.displayName}
-                                                                {group.isSuspicious && <AlertCircle className="w-4 h-4 text-red-500" title="عدة أسماء أو أرقام من نفس الجهاز" />}
+                                                                {group.isSuspicious && <span title="عدة أسماء أو أرقام من نفس الجهاز"><AlertCircle className="w-4 h-4 text-red-500" /></span>}
                                                             </div>
                                                         </div>
                                                         <div className="text-xs text-gray-500 font-mono mt-0.5">{group.displayPhone}</div>
