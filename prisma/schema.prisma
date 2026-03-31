@@ -668,6 +668,7 @@ model ExamSession {
   applicant    Applicant? @relation(fields: [applicantId], references: [id], onDelete: SetNull)
   visitorName  String? // For PUBLIC anonymous exams
   visitorPhone String? // For capturing WhatsApp number in PUBLIC exams
+  deviceFingerprint String? // Fingerprint of the visitor's device to prevent retakes
 
   // Metrics
   startedAt     DateTime?
@@ -684,6 +685,7 @@ model ExamSession {
 
   @@index([token])
   @@index([professionId])
+  @@index([deviceFingerprint])
 }
 
 model ExamSessionQuestion {

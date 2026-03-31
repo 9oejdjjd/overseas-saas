@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { CheckCircle, User, Phone, ShieldCheck, AlertCircle, BookOpen, Clock, Activity, ChevronDown, Search } from "lucide-react";
 import { MockExamNavbar } from "@/components/mock/MockExamNavbar";
+import { getDeviceFingerprint } from "@/lib/fingerprint";
 
 const countries = [
     { code: "+966", flag: "🇸🇦", name: "السعودية" },
@@ -111,6 +112,8 @@ export default function MockRegistrationPage() {
         setError("");
 
         try {
+            const fingerprint = await getDeviceFingerprint();
+
             const res = await fetch("/api/mock/public/init", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -118,6 +121,7 @@ export default function MockRegistrationPage() {
                     visitorName: formData.visitorName,
                     visitorPhone: `${countryCode}${formData.visitorPhone}`, // Combine code + number
                     professionSlug: slug,
+                    deviceFingerprint: fingerprint
                 })
             });
 

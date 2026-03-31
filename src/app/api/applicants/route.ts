@@ -265,7 +265,12 @@ export async function GET(request: NextRequest) {
         const ticketStatus = searchParams.get("ticketStatus"); // HAS_TICKET, NO_TICKET
 
         // Build Where Clause
-        const whereClause: any = {};
+        const whereClause: any = {
+            // Exclude dummy visitors created for mock exam result tracking
+            fullName: {
+                not: "زائر (اختبار تجريبي)"
+            }
+        };
 
         if (search) {
             whereClause.OR = [

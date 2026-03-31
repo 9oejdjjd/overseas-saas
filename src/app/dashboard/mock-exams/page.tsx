@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Search, CheckCircle2, XCircle, Clock, GraduationCap, Users, RefreshCw, Eye, MoreHorizontal, Ban, PlusCircle } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Clock, GraduationCap, Users, RefreshCw, Eye, MoreHorizontal, Ban, PlusCircle, AlertCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ProfessionsManager } from "@/components/mock/admin/ProfessionsManager";
 import { QuestionsManager } from "@/components/mock/admin/QuestionsManager";
@@ -15,6 +15,11 @@ export default function MockExamsAdminPage() {
     const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+
+    const toggleGroup = (id: string) => {
+        setExpandedGroups(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
 
     const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
     const [reviewData, setReviewData] = useState<any>(null);
@@ -90,10 +95,10 @@ export default function MockExamsAdminPage() {
     }, [searchTerm]);
 
     // Stats
-    const total = sessions.length;
-    const passed = sessions.filter(s => s.status === "SUBMITTED" && s.score >= s.passingScore).length;
-    const failed = sessions.filter(s => s.status === "SUBMITTED" && s.score < s.passingScore).length;
-    const pending = sessions.filter(s => s.status === "STARTED").length;
+    const total = sessions.reduce((acc, g) => acc + g.totalAttempts, 0);
+    const passed = sessions.filter(g => g.isPassed).length;
+    const failed = sessions.filter(g => !g.isPassed && g.status === "SUBMITTED").length;
+    const pending = sessions.reduce((acc, g) => acc + g.sessions.filter((s:any) => s.status === "STARTED").length, 0);
 
     return (
         <div className="space-y-6">
@@ -207,73 +212,124 @@ export default function MockExamsAdminPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    sessions.map((session) => {
-                                        const name = session.applicant ? session.applicant.fullName : session.visitorName;
-                                        const phone = session.applicant ? (session.applicant.whatsappNumber || session.applicant.phone) : session.visitorPhone;
-                                        const isPassed = session.status === "SUBMITTED" && session.score >= session.passingScore;
-                                        const isFailed = session.status === "SUBMITTED" && session.score < session.passingScore;
+                                    sessions.map((group) => {
+                                        const isExpanded = expandedGroups.includes(group.id);
 
                                         return (
-                                            <tr key={session.id} className="hover:bg-gray-50/50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="font-medium text-gray-900">{name}</div>
-                                                    <div className="text-xs text-gray-500 font-mono mt-0.5">{phone}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-bold border border-blue-100">
-                                                        {session.profession?.name || "غير محدد"}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {session.status === "SUBMITTED" ? (
-                                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">مكتمل</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">جاري الاختبار</Badge>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {session.status === "SUBMITTED" ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`font-bold ${isPassed ? 'text-green-600' : 'text-red-500'}`}>
-                                                                {session.score}%
-                                                            </span>
-                                                            <span className="text-xs text-gray-400">/ {session.passingScore}%</span>
+                                            <React.Fragment key={group.id}>
+                                                <tr className={`hover:bg-gray-50/50 transition-colors border-l-4 ${group.isSuspicious ? 'border-red-400' : 'border-transparent'}`}>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                                                                {group.displayName}
+                                                                {group.isSuspicious && <AlertCircle className="w-4 h-4 text-red-500" title="عدة أسماء أو أرقام من نفس الجهاز" />}
+                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <span className="text-gray-400">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex gap-2 items-center">
-                                                        <Badge variant="secondary" className="text-[10px]">{session.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
-                                                        <span className="text-xs text-gray-500">مُحاولة #{session.attemptNumber}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-500 text-xs text-left" dir="ltr">
-                                                    {new Date(session.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-gray-100">
-                                                                <span className="sr-only">إجراءات</span>
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end" className="text-right">
-                                                            <DropdownMenuItem onClick={() => fetchReview(session.id)} disabled={session.status !== "SUBMITTED"} className="flex justify-end gap-2 cursor-pointer">
-                                                                المراجعة والتفاصيل <Eye className="h-4 w-4 text-blue-600" />
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => grantAttempt(session)} className="flex justify-end gap-2 text-green-600 cursor-pointer">
-                                                                منح محاولة إضافية <PlusCircle className="h-4 w-4" />
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => stopAttempts(session)} className="flex justify-end gap-2 text-red-600 cursor-pointer">
-                                                                إيقاف المحاولات <Ban className="h-4 w-4" />
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </td>
-                                            </tr>
+                                                        <div className="text-xs text-gray-500 font-mono mt-0.5">{group.displayPhone}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-bold border border-blue-100">
+                                                            {group.profession?.name || "غير محدد"}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {group.status === "SUBMITTED" ? (
+                                                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">مكتمل</Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">الأخيرة قيد الاختبار</Badge>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-2 text-sm">
+                                                                <span className="text-gray-500 text-xs">أفضل:</span>
+                                                                <span className={`font-bold ${group.isPassed ? 'text-green-600' : 'text-red-500'}`}>
+                                                                    {group.bestScore}%
+                                                                </span>
+                                                            </div>
+                                                            {group.totalAttempts > 1 && (
+                                                                <div className="flex items-center gap-2 text-xs">
+                                                                    <span className="text-gray-400">أحدث:</span>
+                                                                    <span className="text-gray-600">{group.lastScore}%</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex gap-2 items-center">
+                                                            <Badge variant="secondary" className="text-[10px]">{group.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
+                                                            <span className="text-xs font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
+                                                                {group.totalAttempts} / {group.profession?.maxAttempts || 3}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-gray-500 text-xs text-left" dir="ltr">
+                                                        {new Date(group.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <Button variant="outline" size="sm" onClick={() => toggleGroup(group.id)} className="gap-2 text-xs">
+                                                            <Eye className="w-3 h-3" /> التقييمات {group.totalAttempts}
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                                {isExpanded && group.sessions.map((session: any) => {
+                                                    const sPassed = session.status === "SUBMITTED" && session.score >= session.passingScore;
+                                                    const sName = session.applicant?.fullName || session.visitorName || "غير معروف";
+                                                    const sPhone = session.applicant?.whatsappNumber || session.visitorPhone || "لا يوجد";
+                                                    
+                                                    return (
+                                                        <tr key={session.id} className="bg-slate-50/70 border-b border-slate-100">
+                                                            <td className="px-6 py-3 pl-8 text-xs relative">
+                                                                <div className="absolute right-0 top-0 bottom-0 w-1 bg-slate-200"></div>
+                                                                <span className="text-gray-400 block mb-1">الاسم: {sName}</span>
+                                                                <span className="text-gray-400">الرقم: {sPhone}</span>
+                                                            </td>
+                                                            <td className="px-6 py-3 text-xs text-gray-500">
+                                                                محاولة رقم: {session.attemptNumber}
+                                                            </td>
+                                                            <td className="px-6 py-3">
+                                                                {session.status === "SUBMITTED" ? (
+                                                                    <span className="text-xs text-green-600">مكتمل</span>
+                                                                ) : (
+                                                                    <span className="text-xs text-orange-500">جاري</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-3">
+                                                                {session.status === "SUBMITTED" ? (
+                                                                    <div className="flex items-center gap-2 text-sm">
+                                                                        <span className={`font-bold ${sPassed ? 'text-green-600' : 'text-red-500'}`}>
+                                                                            {session.score}%
+                                                                        </span>
+                                                                    </div>
+                                                                ) : "-"}
+                                                            </td>
+                                                            <td colSpan={2} className="px-6 py-3 text-left text-xs text-gray-500" dir="ltr">
+                                                                {new Date(session.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                                                            </td>
+                                                            <td className="px-6 py-3">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" size="sm" className="h-7 px-2">
+                                                                            <MoreHorizontal className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end" className="text-right">
+                                                                        <DropdownMenuItem onClick={() => fetchReview(session.id)} disabled={session.status !== "SUBMITTED"} className="flex justify-end gap-2 cursor-pointer">
+                                                                            المراجعة والتفاصيل <Eye className="h-4 w-4 text-blue-600" />
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => grantAttempt(session)} className="flex justify-end gap-2 text-green-600 cursor-pointer">
+                                                                            منح محاولة إضافية <PlusCircle className="h-4 w-4" />
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => stopAttempts(session)} className="flex justify-end gap-2 text-red-600 cursor-pointer">
+                                                                            إيقاف المحاولات <Ban className="h-4 w-4" />
+                                                                        </DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </React.Fragment>
                                         );
                                     })
                                 )}

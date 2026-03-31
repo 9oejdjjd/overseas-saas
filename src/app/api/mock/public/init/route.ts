@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { visitorName, visitorPhone, professionSlug } = body;
+        const { visitorName, visitorPhone, professionSlug, deviceFingerprint } = body;
 
         if (!visitorName || !visitorPhone || !professionSlug) {
             return NextResponse.json({ error: "Name, WhatsApp number, and profession are required" }, { status: 400 });
@@ -24,13 +24,26 @@ export async function POST(request: Request) {
         }
 
         // Check attempt limits - count previous SUBMITTED sessions for this visitor+profession
-        const previousAttempts = await prisma.examSession.count({
+        const previousAttemptsByPhone = await prisma.examSession.count({
             where: {
                 professionId: profession.id,
                 visitorPhone: visitorPhone,
                 status: "SUBMITTED"
             }
         });
+
+        let previousAttemptsByFingerprint = 0;
+        if (deviceFingerprint) {
+            previousAttemptsByFingerprint = await prisma.examSession.count({
+                where: {
+                    professionId: profession.id,
+                    deviceFingerprint: deviceFingerprint,
+                    status: "SUBMITTED"
+                }
+            });
+        }
+
+        const previousAttempts = Math.max(previousAttemptsByPhone, previousAttemptsByFingerprint);
 
         if (previousAttempts >= profession.maxAttempts) {
             return NextResponse.json({
@@ -44,6 +57,7 @@ export async function POST(request: Request) {
                 professionId: profession.id,
                 visitorName: visitorName,
                 visitorPhone: visitorPhone,
+                deviceFingerprint: deviceFingerprint || null,
                 passingScore: profession.passingScore,
                 attemptNumber: previousAttempts + 1
             }
