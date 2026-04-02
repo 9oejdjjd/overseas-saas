@@ -131,13 +131,22 @@ export async function sendWhatsAppFile(phone: string, base64: string, fileName: 
         let cleanedBase64 = base64;
         let mimeType = '';
 
-        // Extract mimetype from base64 string if it contains the data uri prefix.
+        // Extract mimetype from base64 but KEEP the Data URI prefix in the base64 string payload!
+        // WPPConnect server expects the 'base64' param to be a complete Data URI (data:mimeType;base64,...).
         if (base64.startsWith('data:')) {
             const parts = base64.split(';base64,');
             if (parts.length === 2) {
-                cleanedBase64 = parts[1];
                 mimeType = parts[0].replace('data:', '');
+                // Do NOT strip the prefix: cleanedBase64 = base64;
             }
+        } else {
+            // If it doesn't have the prefix, construct an appropriate one
+            const extension = fileName.split('.').pop()?.toLowerCase();
+            let predictedMimeType = 'application/octet-stream';
+            if (extension === 'pdf') predictedMimeType = 'application/pdf';
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension || '')) predictedMimeType = `image/${extension === 'jpg' ? 'jpeg' : extension}`;
+            
+            cleanedBase64 = `data:${predictedMimeType};base64,${base64}`;
         }
 
         const response = await axios.post(
