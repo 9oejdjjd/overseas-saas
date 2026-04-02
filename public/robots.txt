@@ -1,0 +1,17 @@
+# بوابة الاعتماد المهني - robots.txt
+User-agent: *
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /login
+Disallow: /session/
+
+# Sitemap
+Sitemap: https://local-pacc.sa/sitemap.xml
+
+# Crawl-delay for polite crawling
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /

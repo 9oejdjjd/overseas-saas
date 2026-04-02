@@ -12,30 +12,38 @@ export function PublicNavbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const pathname = usePathname();
+    const isHomePage = pathname === '/';
 
     useMotionValueEvent(scrollY, "change", (latest) => {
         setScrolled(latest > 50);
     });
 
-    if (pathname !== '/') return null;
-
     const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
         e.preventDefault();
         setMobileOpen(false);
-        const element = document.getElementById(id);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (window.location.pathname !== '/') {
+        
+        if (isHomePage) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        } else {
+            // Navigate to homepage with hash
             window.location.href = `/#${id}`;
         }
     };
 
-    const navLinks = [
+    const navLinks = isHomePage ? [
         { id: "hero", label: "الرئيسية" },
         { id: "about", label: "خدماتنا" },
         { id: "search", label: "ابدأ اختبارك" },
         { id: "achievements", label: "إنجازاتنا" },
         { id: "faq", label: "أسئلة شائعة" },
+        { id: "contact", label: "تواصل معنا" },
+    ] : [
+        { id: "hero", label: "الرئيسية" },
+        { id: "about", label: "خدماتنا" },
+        { id: "search", label: "ابدأ اختبارك" },
         { id: "contact", label: "تواصل معنا" },
     ];
 
