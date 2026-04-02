@@ -268,7 +268,7 @@ async function replaceVariables(
 
         if (activeSession) {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"));
-            text = text.replace(/{examLink}|{mockLink}/g, `${baseUrl}/mock/session/${activeSession.token}`);
+            text = text.replace(/{examLink}|{mockLink}/g, `${baseUrl}/session/${activeSession.token}`);
         } else {
             text = text.replace(/{examLink}|{mockLink}/g, "رابط الاختبار غير متاح حالياً");
         }

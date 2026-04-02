@@ -141,7 +141,7 @@ export async function POST(request: Request) {
                 }
             });
 
-            return NextResponse.json({ token: newSession.token, url: `/mock/session/${newSession.token}` });
+            return NextResponse.json({ token: newSession.token, url: `/session/${newSession.token}` });
         }
 
         // Generate Private session for registered applicant
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
             }
         });
 
-        return NextResponse.json({ token: newSession.token, url: `/mock/session/${newSession.token}` });
+        return NextResponse.json({ token: newSession.token, url: `/session/${newSession.token}` });
     } catch (error) {
         console.error("POST Session Error:", error);
         return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
