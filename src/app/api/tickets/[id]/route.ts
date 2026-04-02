@@ -71,6 +71,36 @@ export async function PATCH(
 
                     const fineAmount = Number(finalPolicy?.feeAmount || 0);
 
+                    const route = await tx.transportRouteDefault.findFirst({
+                        where: {
+                            fromDestination: { name: currentTicket.departureLocation },
+                            toDestination: { name: currentTicket.arrivalLocation }
+                        }
+                    });
+                    const ticketPrice = Number(route?.price || 0);
+
+                    // 1. Revert Full Ticket Price
+                    if (ticketPrice > 0) {
+                        await tx.applicant.update({
+                            where: { id: currentTicket.applicantId },
+                            data: {
+                                totalAmount: { decrement: ticketPrice },
+                                remainingBalance: { decrement: ticketPrice }
+                            }
+                        });
+
+                        await tx.transaction.create({
+                            data: {
+                                applicantId: currentTicket.applicantId,
+                                amount: ticketPrice,
+                                type: "WITHDRAWAL",
+                                category: "TICKET_REFUND",
+                                notes: `استرجاع قيمة تذكرة (عدم حضور) رقم #${currentTicket.ticketNumber}`,
+                            }
+                        });
+                    }
+
+                    // 2. Log Fine Charge
                     if (fineAmount > 0) {
                         await tx.applicant.update({
                             where: { id: currentTicket.applicantId },
@@ -79,35 +109,14 @@ export async function PATCH(
                                 remainingBalance: { increment: fineAmount }
                             }
                         });
-                    }
 
-                    // 2. Create Compensation Voucher
-                    const route = await tx.transportRouteDefault.findFirst({
-                        where: {
-                            fromDestination: { name: currentTicket.departureLocation },
-                            toDestination: { name: currentTicket.arrivalLocation }
-                        }
-                    });
-                    const ticketPrice = Number(route?.price || 0);
-                    const refundable = ticketPrice - fineAmount;
-
-                    if (refundable > 0) {
-                        const metadata = {
-                            category: "COMPENSATION",
-                            amount: refundable,
-                            balance: refundable,
-                            realType: "COMP_NO_SHOW",
-                            sourceTicketId: id, // Linking to source ticket
-                            reason: "Ticket No-Show"
-                        };
-                        // Use the [META:...] pattern required by Voucher API
-                        const notes = `تعويض التخلف عن الرحلة - تذكرة #${currentTicket.ticketNumber} [META:${JSON.stringify(metadata)}]`;
-
-                        await tx.voucher.create({
+                        await tx.transaction.create({
                             data: {
                                 applicantId: currentTicket.applicantId,
-                                type: "EXAM_RETAKE", // Generic type usually used for compensation
-                                notes: notes,
+                                amount: fineAmount,
+                                type: "CHARGE",
+                                category: "TRANSPORT_FINE",
+                                notes: `غرامة عدم حضور لرحلة النقل - تذكرة #${currentTicket.ticketNumber}`,
                             }
                         });
                     }
@@ -116,7 +125,7 @@ export async function PATCH(
                     await tx.activityLog.create({
                         data: {
                             action: "TICKET_NO_SHOW",
-                            details: `Marked as No Show. Fine: ${fineAmount} YER. Voucher Created: ${refundable > 0 ? refundable + ' YER' : 'None'} (${finalPolicy?.name || 'Default'})`,
+                            details: `Marked as No Show. Fine: ${fineAmount} YER. Refunded: ${ticketPrice} YER.`,
                             applicantId: currentTicket.applicantId,
                             ...(validUserId ? { userId: validUserId } : {}),
                         }
@@ -209,6 +218,28 @@ export async function PATCH(
 
                 const fine = Number(fineAmount) || 0;
 
+                // 1. Revert Full Ticket Price
+                if (ticketPrice > 0) {
+                    await tx.applicant.update({
+                        where: { id: updatedTicket.applicantId },
+                        data: {
+                            totalAmount: { decrement: ticketPrice },
+                            remainingBalance: { decrement: ticketPrice }
+                        }
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            applicantId: updatedTicket.applicantId,
+                            amount: ticketPrice,
+                            type: "WITHDRAWAL",
+                            category: "TICKET_REFUND",
+                            notes: `استرجاع قيمة تذكرة (إلغاء رحلة) رقم #${updatedTicket.ticketNumber}`,
+                        }
+                    });
+                }
+
+                // 2. Log Fine Charge
                 if (fine > 0) {
                     await tx.applicant.update({
                         where: { id: updatedTicket.applicantId },
@@ -217,26 +248,14 @@ export async function PATCH(
                             remainingBalance: { increment: fine }
                         }
                     });
-                }
 
-                const refundable = ticketPrice - fine;
-
-                if (refundable > 0) {
-                    const metadata = {
-                        category: "COMPENSATION",
-                        amount: refundable,
-                        balance: refundable,
-                        realType: "COMP_CANCEL",
-                        sourceTicketId: id,
-                        reason: "Ticket Cancellation"
-                    };
-                    const notes = `تعويض إلغاء التذكرة #${updatedTicket.ticketNumber} - الغرامة: ${fine} ر.ي [META:${JSON.stringify(metadata)}]`;
-
-                    await tx.voucher.create({
+                    await tx.transaction.create({
                         data: {
                             applicantId: updatedTicket.applicantId,
-                            type: "EXAM_RETAKE",
-                            notes: notes,
+                            amount: fine,
+                            type: "CHARGE",
+                            category: "TRANSPORT_FINE",
+                            notes: `غرامة إلغاء رحلة نقل - تذكرة #${updatedTicket.ticketNumber}`,
                         }
                     });
                 }
@@ -244,7 +263,7 @@ export async function PATCH(
                 await tx.activityLog.create({
                     data: {
                         action: "TICKET_CANCELLED",
-                        details: `Cancelled with fine: ${fine}. Refund Voucher: ${refundable}`,
+                        details: `Cancelled with fine: ${fine}. Refunded to Balance: ${ticketPrice}`,
                         applicantId: updatedTicket.applicantId,
                         ...(validUserId ? { userId: validUserId } : {}),
                     }
@@ -263,6 +282,16 @@ export async function PATCH(
                         data: {
                             totalAmount: { increment: totalCost },
                             remainingBalance: { increment: totalCost }
+                        }
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            applicantId: updatedTicket.applicantId,
+                            amount: totalCost,
+                            type: "CHARGE",
+                            category: "TICKET_UPDATE_FEE",
+                            notes: `رسوم تعديل أو غرامة تذكرة #${updatedTicket.ticketNumber}`,
                         }
                     });
                 }

@@ -198,16 +198,43 @@ export async function POST(request: NextRequest) {
                 },
             });
 
-            // 3. Create Initial Payment Transaction if amount paid > 0
+            // 3. Create Ledgers (Transactions) for clear accounting
             if (amountPaid > 0) {
                 await tx.transaction.create({
                     data: {
                         applicantId: applicant.id,
                         amount: amountPaid,
                         type: "PAYMENT",
-                        notes: "دفعة أولى عند التسجيل",
-                        locationId: body.locationId // Link payment to the location
+                        notes: "إيداع دفعة نقدية مقدمة (رصيد للمتقدم)",
+                        category: "ADVANCE_PAYMENT",
+                        locationId: body.locationId 
                     },
+                });
+            }
+
+            if (basePrice > 0) {
+                await tx.transaction.create({
+                    data: {
+                        applicantId: applicant.id,
+                        amount: basePrice,
+                        type: "CHARGE",
+                        notes: "رسوم التسجيل وفتح الملف الأساسية",
+                        category: "REGISTRATION_FEE",
+                        locationId: body.locationId
+                    }
+                });
+            }
+
+            if (transportPrice > 0) {
+                await tx.transaction.create({
+                    data: {
+                        applicantId: applicant.id,
+                        amount: transportPrice,
+                        type: "CHARGE",
+                        notes: `رسوم النقل (الوجهة: ${body.locationId})`,
+                        category: "TRANSPORT_FEE",
+                        locationId: body.locationId
+                    }
                 });
             }
 
