@@ -131,6 +131,15 @@ export async function PATCH(
                         }
                     });
 
+                    // 3. Revert Operational Expense (Delete the transport cost from system ledger)
+                    await tx.transaction.deleteMany({
+                        where: {
+                            applicantId: currentTicket.applicantId,
+                            category: "TRANSPORT_COST",
+                            notes: { contains: currentTicket.ticketNumber }
+                        }
+                    });
+
                     // Auto-send NO_SHOW notification
                     autoSendMessage(currentTicket.applicantId, "ON_TICKET_NO_SHOW", { ticketId: id })
                         .catch(e => console.error("[AutoSend] ON_TICKET_NO_SHOW error:", e));
@@ -266,6 +275,15 @@ export async function PATCH(
                         details: `Cancelled with fine: ${fine}. Refunded to Balance: ${ticketPrice}`,
                         applicantId: updatedTicket.applicantId,
                         ...(validUserId ? { userId: validUserId } : {}),
+                    }
+                });
+
+                // 3. Revert Operational Expense (Delete the transport cost from system ledger)
+                await tx.transaction.deleteMany({
+                    where: {
+                        applicantId: updatedTicket.applicantId,
+                        category: "TRANSPORT_COST",
+                        notes: { contains: updatedTicket.ticketNumber }
                     }
                 });
 

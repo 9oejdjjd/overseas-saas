@@ -227,6 +227,7 @@ export async function POST(request: Request) {
                         description: expenseDesc,
                         notes: `تذكرة: ${ticketNumber}`,
                         locationId: applicant.locationId || null,
+                        isPending: true,
                     }
                 });
             }

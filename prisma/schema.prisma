@@ -314,6 +314,7 @@ model Transaction {
   notes           String?
   category        String?
   description     String?
+  isPending       Boolean         @default(false)
   relatedLocation ExamLocation?
   locationId      String?
   applicant       Applicant?      @relation(fields: [applicantId], references: [id])

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
         // Calculate date range
         const now = new Date();
-        let startDate: Date;
+        let startDate: Date | null = null;
 
         switch (period) {
             case "today":
@@ -21,15 +21,21 @@ export async function GET(request: Request) {
                 startDate = new Date(now.getFullYear(), now.getMonth(), diff);
                 break;
             case "month":
-            default:
                 startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                break;
+            case "all":
+            default:
+                startDate = null; // No date filter for all time
                 break;
         }
 
-        // Build where clause for transactions
+        // Build where clause for regular (approved) transactions
         const transactionWhere: any = {
-            date: { gte: startDate },
+            isPending: false,
         };
+        if (startDate) {
+            transactionWhere.date = { gte: startDate };
+        }
 
         if (locationId) {
             transactionWhere.OR = [
@@ -71,10 +77,24 @@ export async function GET(request: Request) {
 
         const netProfit = revenue - expenses - withdrawals;
 
+        // Fetch Pending Expenses separately
+        const pendingExpenses = await prisma.transaction.findMany({
+            where: {
+                isPending: true,
+                ...(startDate ? { date: { gte: startDate } } : {}),
+                ...(locationId ? { OR: [{ locationId }, { applicant: { locationId } }] } : {}),
+            },
+            include: {
+                applicant: { select: { fullName: true } }
+            },
+            orderBy: { date: "desc" },
+        });
+
         // Get applicants with dynamic locations for profit analysis
-        const applicantWhere: any = {
-            createdAt: { gte: startDate },
-        };
+        const applicantWhere: any = {};
+        if (startDate) {
+            applicantWhere.createdAt = { gte: startDate };
+        }
         if (locationId) {
             applicantWhere.locationId = locationId;
         }
@@ -93,9 +113,9 @@ export async function GET(request: Request) {
                 .filter((t) => t.type === "PAYMENT")
                 .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
 
-            // Real cost from actual EXPENSE transactions
+            // Real cost from actual EXPENSE transactions (excluding pending)
             const realCost = app.transactions
-                .filter((t) => t.type === "EXPENSE")
+                .filter((t) => t.type === "EXPENSE" && !t.isPending)
                 .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
 
             const profit = paid - realCost;
@@ -175,6 +195,7 @@ export async function GET(request: Request) {
                 overdueCount: overdueApplicants.length,
             },
             transactions,
+            pendingExpenses,
             applicantProfits,
             profitByLocation,
             overdueApplicants,

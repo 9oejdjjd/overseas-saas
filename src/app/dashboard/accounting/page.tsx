@@ -34,6 +34,7 @@ type AccountingData = {
         netProfit: number;
     };
     transactions: any[];
+    pendingExpenses: any[];
     applicantProfits: any[];
     profitByLocation: any[];
     locations: { id: string; name: string }[];
@@ -75,7 +76,7 @@ export default function AccountingPage() {
     }, [period, locationId]);
 
     const getPeriodLabel = (p: string) => {
-        return { today: "اليوم", week: "هذا الأسبوع", month: "هذا الشهر" }[p] || p;
+        return { all: "البيان بالكامل", today: "اليوم", week: "هذا الأسبوع", month: "هذا الشهر" }[p] || p;
     };
 
     if (loading) {
@@ -123,8 +124,18 @@ export default function AccountingPage() {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-                <TabsList className="grid w-full grid-cols-1 lg:w-[200px] mb-8">
+                <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-8">
                     <TabsTrigger value="dashboard" className="gap-2"><TrendingUp className="h-4 w-4" /> المركز المالي</TabsTrigger>
+                    <TabsTrigger value="pending" className="gap-2 relative">
+                        <TrendingDown className="h-4 w-4" /> 
+                        مصروفات مستحقة
+                        {data.pendingExpenses?.length > 0 && (
+                            <span className="absolute top-1 left-1 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                        )}
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="dashboard" className="space-y-8">
@@ -136,7 +147,7 @@ export default function AccountingPage() {
                         </div>
 
                         <div className="flex bg-gray-100 p-1 rounded-lg">
-                            {["today", "week", "month"].map((p) => (
+                            {["all", "today", "week", "month"].map((p) => (
                                 <button
                                     key={p}
                                     onClick={() => setPeriod(p)}
@@ -296,6 +307,40 @@ export default function AccountingPage() {
 
                     </div>
                 </TabsContent>
+
+                <TabsContent value="pending" className="space-y-6 mt-6">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                    المصروفات التشغيلية المستحقة (النقل)
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-1">مصروفات تم رصدها آلياً وتنتظر اعتمادك النهائي لتُخصم من الأرباح.</p>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right">
+                                <thead className="bg-orange-50 text-orange-800">
+                                    <tr>
+                                        <th className="px-6 py-3 font-medium">التاريخ</th>
+                                        <th className="px-6 py-3 font-medium">البيان الأساسي</th>
+                                        <th className="px-6 py-3 font-medium">المبلغ المقدر (ر.ي)</th>
+                                        <th className="px-6 py-3 font-medium">الإجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {data.pendingExpenses?.length === 0 ? (
+                                        <tr><td colSpan={4} className="text-center py-8 text-gray-400">لا توجد مصروفات مستحقة حالياً</td></tr>
+                                    ) : (
+                                        data.pendingExpenses?.map((ex: any) => (
+                                            <PendingExpenseRow key={ex.id} expense={ex} onRefresh={fetchData} />
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </TabsContent>
             </Tabs>
 
             {/* Quick Transaction Modal */}
@@ -345,4 +390,72 @@ function UserIcon({ className }: { className?: string }) {
             <circle cx="12" cy="7" r="4" />
         </svg>
     )
+}
+
+function PendingExpenseRow({ expense, onRefresh }: any) {
+    const [loading, setLoading] = useState(false);
+    const [amount, setAmount] = useState(expense.amount);
+    const [notes, setNotes] = useState(expense.notes || "");
+
+    const handleApprove = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`/api/accounting/transactions/${expense.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount, notes, isPending: false })
+            });
+            if (res.ok) {
+                onRefresh();
+            } else {
+                alert("فشل في الاعتماد");
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <tr className="hover:bg-gray-50/50 transition-colors">
+            <td className="px-6 py-4 text-gray-500 whitespace-nowrap">
+                {new Date(expense.date).toLocaleDateString("ar-EG")}
+                <span className="block text-xs text-gray-400 mt-0.5">{new Date(expense.date).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}</span>
+            </td>
+            <td className="px-6 py-4">
+                <p className="font-medium text-gray-900">{expense.description}</p>
+                {expense.applicant && <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><UserIcon className="h-3 w-3" /> {expense.applicant.fullName}</p>}
+                
+                <div className="mt-3">
+                     <Input 
+                        placeholder="رقم الفاتورة / ملاحظات إضافية" 
+                        value={notes} 
+                        onChange={e => setNotes(e.target.value)}
+                        className="h-8 text-xs w-full max-w-sm"
+                     />
+                </div>
+            </td>
+            <td className="px-6 py-4">
+                <div className="flex items-center gap-2">
+                    <Input 
+                        type="number" 
+                        value={amount} 
+                        onChange={e => setAmount(e.target.value)}
+                        className="h-8 w-24 text-red-600 font-bold"
+                    />
+                </div>
+            </td>
+            <td className="px-6 py-4">
+                <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700 h-8 text-xs"
+                    onClick={handleApprove}
+                    disabled={loading}
+                >
+                    {loading ? "..." : "اعتماد وصرف"}
+                </Button>
+            </td>
+        </tr>
+    );
 }
