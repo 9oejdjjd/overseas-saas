@@ -64,9 +64,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             }
         });
 
-        // Fire-and-forget: send result via WhatsApp
-        sendMockResultNotification(session, session.profession, passed)
-            .catch(e => console.error("[CRON] Mock result notification error:", e));
+        // Send result via WhatsApp before returning response to prevent serverless function freeze
+        try {
+            await sendMockResultNotification(session, session.profession, passed);
+        } catch (e) {
+            console.error("Mock result notification error:", e);
+        }
 
         return NextResponse.json({
             success: true,

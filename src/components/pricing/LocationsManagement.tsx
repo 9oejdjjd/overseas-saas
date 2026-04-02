@@ -22,8 +22,6 @@ export function LocationsManagement() {
     const [locations, setLocations] = useState<Location[]>([]);
     const [newName, setNewName] = useState("");
     const [newCode, setNewCode] = useState("");
-    const [newAddress, setNewAddress] = useState("");
-    const [newUrl, setNewUrl] = useState("");
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -46,20 +44,18 @@ export function LocationsManagement() {
                 // Update existing
                 await fetch(`/api/locations/${editingId}`, {
                     method: "PATCH",
-                    body: JSON.stringify({ name: newName, code: newCode, address: newAddress, locationUrl: newUrl }),
+                    body: JSON.stringify({ name: newName, code: newCode }),
                 });
             } else {
                 // Create new
                 await fetch("/api/locations", {
                     method: "POST",
-                    body: JSON.stringify({ name: newName, code: newCode, address: newAddress, locationUrl: newUrl }),
+                    body: JSON.stringify({ name: newName, code: newCode }),
                 });
             }
 
             setNewName("");
             setNewCode("");
-            setNewAddress("");
-            setNewUrl("");
             setEditingId(null);
             fetchLocations();
         } catch (e) { alert("حدث خطأ"); }
@@ -69,16 +65,12 @@ export function LocationsManagement() {
         setEditingId(loc.id);
         setNewName(loc.name);
         setNewCode(loc.code || "");
-        setNewAddress(loc.address || "");
-        setNewUrl(loc.locationUrl || "");
     };
 
     const handleCancelEdit = () => {
         setEditingId(null);
         setNewName("");
         setNewCode("");
-        setNewAddress("");
-        setNewUrl("");
     };
 
     const toggleActive = async (loc: Location) => {
@@ -108,26 +100,16 @@ export function LocationsManagement() {
                         </div>
                     </div>
 
-                    <div className="flex gap-4 items-end">
-                        <div className="space-y-2 flex-1">
-                            <label className="text-sm font-medium">العنوان النصي</label>
-                            <Input value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="مثال: شارع صنعاء - جوار..." />
-                        </div>
-                        <div className="space-y-2 flex-1">
-                            <label className="text-sm font-medium">رابط خرائط جوجل</label>
-                            <Input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://maps.app.goo.gl/..." dir="ltr" />
-                        </div>
-                        <div className="flex gap-2">
-                            {editingId && (
-                                <Button onClick={handleCancelEdit} variant="outline" className="text-gray-500">
-                                    <X className="h-4 w-4 ml-1" /> إلغاء
-                                </Button>
-                            )}
-                            <Button onClick={handleAdd} className={`${editingId ? "bg-orange-600 hover:bg-orange-700" : "bg-blue-600 hover:bg-blue-700"} text-white`}>
-                                {editingId ? <Save className="h-4 w-4 ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
-                                {editingId ? "حفظ التعديلات" : "إضافة"}
+                    <div className="flex justify-end gap-2 mt-4">
+                        {editingId && (
+                            <Button onClick={handleCancelEdit} variant="outline" className="text-gray-500">
+                                <X className="h-4 w-4 ml-1" /> إلغاء
                             </Button>
-                        </div>
+                        )}
+                        <Button onClick={handleAdd} className={`${editingId ? "bg-orange-600 hover:bg-orange-700" : "bg-blue-600 hover:bg-blue-700"} text-white px-8`}>
+                            {editingId ? <Save className="h-4 w-4 ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
+                            {editingId ? "حفظ التعديلات" : "إضافة المدينة"}
+                        </Button>
                     </div>
                 </div>
 
@@ -137,7 +119,6 @@ export function LocationsManagement() {
                             <tr>
                                 <th className="px-4 py-3 font-medium text-gray-700">الاسم</th>
                                 <th className="px-4 py-3 font-medium text-gray-700">الكود</th>
-                                <th className="px-4 py-3 font-medium text-gray-700">العنوان</th>
                                 <th className="px-4 py-3 font-medium text-gray-700 text-center">المراكز</th>
                                 <th className="px-4 py-3 font-medium text-gray-700 text-center">تعديل</th>
                                 <th className="px-4 py-3 font-medium text-gray-700 text-center">الحالة</th>
@@ -148,7 +129,6 @@ export function LocationsManagement() {
                                 <tr key={loc.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 font-medium">{loc.name}</td>
                                     <td className="px-4 py-3 font-mono text-gray-500">{loc.code || "-"}</td>
-                                    <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]" title={loc.address || ""}>{loc.address || "-"}</td>
                                     <td className="px-4 py-3 text-center">
                                         <ManageCentersDialog location={loc} onUpdate={fetchLocations} />
                                     </td>
