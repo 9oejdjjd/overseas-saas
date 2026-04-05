@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search } from "lucide-react";
+import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ export function ProfessionsManager() {
     });
     const [saving, setSaving] = useState(false);
     const [aiLoading, setAiLoading] = useState<string | null>(null);
+    const [purging, setPurging] = useState(false);
 
     const fetchProfessions = async () => {
         setLoading(true);
@@ -86,6 +87,27 @@ export function ProfessionsManager() {
         }
     };
 
+    const purgeAllQuestions = async () => {
+        if (!confirm("⚠️ تحذير: سيتم حذف جميع الأسئلة والخيارات والجلسات المرتبطة نهائياً.\nهل أنت متأكد تماماً؟")) return;
+        if (!confirm("تأكيد نهائي: هذا الإجراء لا يمكن التراجع عنه. اضغط OK للمتابعة.")) return;
+        setPurging(true);
+        try {
+            const res = await fetch("/api/mock/admin/questions", { method: "DELETE" });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`تم الحذف بنجاح:\n- ${data.deleted.questions} سؤال\n- ${data.deleted.options} خيار\n- ${data.deleted.sessionQuestions} ارتباط جلسة\n- ${data.deleted.aiJobs} وظيفة توليد`);
+                fetchProfessions();
+            } else {
+                alert(data.error || "حدث خطأ");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("فشل في الاتصال بالخادم");
+        } finally {
+            setPurging(false);
+        }
+    };
+
     if (loading) return <div className="p-12 flex justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
 
     return (
@@ -104,8 +126,12 @@ export function ProfessionsManager() {
                         className="pr-9 bg-white"
                     />
                 </div>
-                <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
+                <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0 flex-wrap">
                     <Button variant="outline" onClick={fetchProfessions}><RefreshCw className="h-4 w-4 ml-1" /> تحديث</Button>
+                    <Button variant="destructive" onClick={purgeAllQuestions} disabled={purging} className="gap-1">
+                        {purging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        حذف جميع الأسئلة
+                    </Button>
                     <Button onClick={openAddModal} className="bg-blue-600 hover:bg-blue-700">
                         <Plus className="h-4 w-4 ml-1" /> إضافة مهنة
                     </Button>

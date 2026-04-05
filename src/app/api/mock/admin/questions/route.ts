@@ -77,3 +77,36 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Failed to create question" }, { status: 500 });
     }
 }
+
+// DELETE all questions (bulk purge for regeneration)
+export async function DELETE(request: Request) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
+        // Delete in correct order due to foreign key constraints
+        // 1. Delete all exam session question links
+        const deletedSessionQuestions = await prisma.examSessionQuestion.deleteMany({});
+        // 2. Delete all question options
+        const deletedOptions = await prisma.questionOption.deleteMany({});
+        // 3. Delete all questions
+        const deletedQuestions = await prisma.question.deleteMany({});
+        // 4. Delete all AI generation job records
+        const deletedJobs = await prisma.aIGenerationJob.deleteMany({});
+
+        return NextResponse.json({
+            success: true,
+            deleted: {
+                questions: deletedQuestions.count,
+                options: deletedOptions.count,
+                sessionQuestions: deletedSessionQuestions.count,
+                aiJobs: deletedJobs.count
+            }
+        });
+    } catch (error) {
+        console.error("DELETE All Questions Error:", error);
+        return NextResponse.json({ error: "Failed to delete questions" }, { status: 500 });
+    }
+}

@@ -38,25 +38,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 include: { options: true }
             });
 
-            // We need 10 per axis: 2 hard, 8 easy/medium
+            // Saudi Professional Exam style: 7 HARD + 2 MEDIUM + 1 EASY per axis = 10
             const axes = ["HEALTH_SAFETY", "PROFESSION_KNOWLEDGE", "GENERAL_SKILLS"] as const;
             let selectedQuestions: any[] = [];
 
             for (const axis of axes) {
                 const axisQs = questionBank.filter(q => q.axis === axis);
                 const hardQs = axisQs.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
-                const otherQs = axisQs.filter(q => q.difficulty !== "HARD").sort(() => 0.5 - Math.random());
+                const mediumQs = axisQs.filter(q => q.difficulty === "MEDIUM").sort(() => 0.5 - Math.random());
+                const easyQs = axisQs.filter(q => q.difficulty === "EASY").sort(() => 0.5 - Math.random());
 
-                // Try to get 2 hard questions, fill the rest with others to reach 10 total
-                const pickedHard = hardQs.slice(0, 2);
-                const neededOthers = 10 - pickedHard.length;
-                const pickedOthers = otherQs.slice(0, neededOthers);
+                // Target: 7 hard, 2 medium, 1 easy per axis
+                const pickedHard = hardQs.slice(0, 7);
+                const pickedMedium = mediumQs.slice(0, 2);
+                const pickedEasy = easyQs.slice(0, 1);
 
-                // If we STILL don't have 10, just take any remaining hard questions (fallback)
-                const totalPicked = [...pickedHard, ...pickedOthers];
+                const totalPicked = [...pickedHard, ...pickedMedium, ...pickedEasy];
+
+                // Fallback: if we don't have enough of each difficulty, fill from remaining
                 if (totalPicked.length < 10) {
-                    const remainingHard = hardQs.slice(2);
-                    totalPicked.push(...remainingHard.slice(0, 10 - totalPicked.length));
+                    const pickedIds = new Set(totalPicked.map(q => q.id));
+                    const remaining = axisQs.filter(q => !pickedIds.has(q.id)).sort(() => 0.5 - Math.random());
+                    totalPicked.push(...remaining.slice(0, 10 - totalPicked.length));
                 }
 
                 selectedQuestions.push(...totalPicked);

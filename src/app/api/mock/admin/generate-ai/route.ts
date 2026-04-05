@@ -47,44 +47,77 @@ export async function POST(request: Request) {
     }
 }
 
-// Background Processor (Mockable/Pluggable with real AI)
+// Background Processor — Saudi Professional Exam (SBA) Style
 async function triggerAIGenerationBg(jobId: string, professionName: string, professionId: string) {
     try {
         const geminiKey = process.env.GEMINI_API_KEY;
         if (!geminiKey) throw new Error("Missing GEMINI_API_KEY");
 
         const promptTemplate = `
-You are an expert examiner creating highly professional, difficult, and rigorous certification exams in Arabic for the profession: "${professionName}".
-Please generate exactly 30 multiple choice questions.
+أنت خبير في تصميم اختبارات الفحص المهني السعودي (pacc.sa) — اختبارات الاعتماد المهني للعمالة الوافدة.
+مطلوب منك توليد 30 سؤال اختيار من متعدد بتنسيق "أفضل إجابة واحدة" (Single Best Answer - SBA) لمهنة: "${professionName}".
 
-CRITICAL DIFFICULTY INSTRUCTIONS:
-- These questions must be VERY DIFFICULT and meant for advanced practitioners, not beginners.
-- Make 50% of questions strictly "HARD", 30% "MEDIUM", and 20% "EASY".
-- For "HARD" questions, DO NOT ask definitions. Instead, use Scenario-Based questions (e.g., "أثناء عملك في منشأة، حدث تسريب غاز بضغط 50 bar... ما هو الإجراء المباشر والصحيح وفقاً لكود السلامة؟").
-- The incorrect options (distractors) MUST be highly plausible. Use common industry mistakes, outdated standards, or partially correct answers that fail in the specific scenario given. Do NOT make distractors obviously wrong.
-- Include deep technical details, precise measurements (voltages, pressures, dimensions), and strict industry standards where applicable to the profession.
+═══════════════════════════════════════════════════════
+⚠️  قواعد حاسمة — يجب اتباعها حرفياً:
+═══════════════════════════════════════════════════════
 
-The questions MUST be strictly divided into three categories (axes):
-1. 10 questions for "HEALTH_SAFETY" (Occupational Health and Safety).
-2. 10 questions for "PROFESSION_KNOWLEDGE" (Core Professional Knowledge).
-3. 10 questions for "GENERAL_SKILLS" (General Professional Skills).
+🔴 القاعدة #1: أسلوب SBA (أفضل إجابة واحدة)
+   - جميع الخيارات الأربعة يجب أن تبدو صحيحة ومنطقية لشخص يعمل في المهنة.
+   - الفرق بين الإجابة الصحيحة والخاطئة هو أن الصحيحة هي "الأفضل والأدق" وفقاً للمعايير الدولية والسعودية.
+   - المشتتات (الخيارات الخاطئة) = ممارسات مقبولة جزئياً لكنها ليست الأفضل، أو أخطاء شائعة يقع فيها العمال يومياً، أو ممارسات قديمة كانت معتمدة سابقاً.
+   - ⛔ ممنوع أن يكون أي خيار واضح الخطأ أو سخيف.
 
-Output the response EXACTLY as a valid JSON array of objects, with no markdown formatting around it.
-Do NOT include backticks (e.g. \`\`\`json) in your response. Just the raw array.
+🔴 القاعدة #2: السيناريوهات العملية (95% من الأسئلة)
+   - 28 سؤال من 30 يجب أن يبدأ بسيناريو عملي واقعي من بيئة العمل الفعلية.
+   - مثال سيناريو: "أثناء عملك في ورشة لحام، لاحظت أن لون اللهب تحول إلى الأصفر المتقطع مع صوت فرقعة عند ضغط أسيتيلين 0.5 bar وأوكسجين 2.5 bar. ما هو الإجراء الأصح؟"
+   - يجب أن تتضمن السيناريوهات أرقاماً دقيقة (درجات حرارة، ضغط، فولت، أمبير، أبعاد، مسافات) حسب طبيعة المهنة.
+   - سؤالان فقط (2) يمكن أن يكونا أسئلة معلومات مباشرة (K1 - تذكر).
+
+🔴 القاعدة #3: المستوى المعرفي (Cognitive Level)
+   - K1 (تذكر واسترجاع): 2 سؤال فقط — معلومة مباشرة يحفظها المهني.
+   - K2 (تطبيق وتحليل): 28 سؤال — تتطلب تحليل موقف واتخاذ قرار.
+
+🔴 القاعدة #4: توزيع الصعوبة
+   - HARD: 21 سؤال (70%) — سيناريو معقد مع متغيرات متعددة ومشتتات قوية جداً.
+   - MEDIUM: 8 أسئلة (27%) — سيناريو متوسط يتطلب تحليل ومعرفة تقنية.
+   - EASY: 1 سؤال (3%) — معلومة أساسية حرجة للسلامة.
+
+🔴 القاعدة #5: المحاور (يجب توزيع 10 أسئلة لكل محور بالتساوي)
+   1. "HEALTH_SAFETY" — 10 أسئلة: الصحة والسلامة المهنية (معدات الوقاية PPE، إجراءات الطوارئ، المواد الخطرة، إسعافات أولية، لوائح OSHA).
+   2. "PROFESSION_KNOWLEDGE" — 10 أسئلة: المعرفة المهنية الأساسية (تقنيات العمل، المعايير الفنية، أدوات ومعدات، مواصفات المواد، حسابات فنية).
+   3. "GENERAL_SKILLS" — 10 أسئلة: المهارات العامة (قراءة المخططات، إدارة الوقت، التواصل المهني، الجودة، التعامل مع العميل، مبادئ البيئة).
+
+🔴 القاعدة #6: الشرح المفصّل (explanation)
+   - لكل سؤال، اكتب شرحاً يوضح:
+     (أ) لماذا الإجابة الصحيحة هي الأفضل.
+     (ب) لماذا كل خيار من الثلاثة الخاطئة ليس الأفضل (اذكر السبب التقني لكل واحد).
+   - مثال: "الإجابة (أ) صحيحة لأن... أما (ب) فخاطئة لأنها تتجاهل... و(ج) كانت ممارسة قديمة قبل تحديث المعيار... و(د) صحيحة جزئياً لكنها لا تراعي..."
+
+═══════════════════════════════════════════════════════
+📋 تنسيق الإخراج:
+═══════════════════════════════════════════════════════
+
+أخرج البيانات كمصفوفة JSON صالحة فقط، بدون أي تنسيق markdown أو backticks.
 
 [{
-  "text": "نص السؤال الدقيق والمهني هنا الدال على سيناريو محدد؟",
-  "explanation": "شرح علمي دقيق يوضح سبب الاستحقاق ولماذا المشتتات خاطئة.",
-  "difficulty": "EASY" | "MEDIUM" | "HARD",
-  "axis": "HEALTH_SAFETY" | "PROFESSION_KNOWLEDGE" | "GENERAL_SKILLS",
+  "text": "سيناريو عملي مفصّل ينتهي بسؤال: ما هو الإجراء الأصح / الأفضل / الأنسب؟",
+  "explanation": "شرح مفصّل يتضمن: لماذا (أ) صحيحة ولماذا (ب)(ج)(د) خاطئة مع السبب التقني لكل منها.",
+  "difficulty": "HARD",
+  "axis": "HEALTH_SAFETY",
+  "cognitiveLevel": "K2",
   "options": [
-    { "text": "الخيار الأصح والأدق", "isCorrect": true },
-    { "text": "مشتت قوي جداً يبدو صحيحاً", "isCorrect": false },
-    { "text": "خطأ مهني شائع", "isCorrect": false },
-    { "text": "ممارسة قديمة غير معتمدة", "isCorrect": false }
+    { "text": "إجراء دقيق وفقاً للمعيار الحالي (هذا هو الأصح)", "isCorrect": true },
+    { "text": "إجراء شائع الاستخدام لكنه ليس الأمثل في هذا السيناريو تحديداً", "isCorrect": false },
+    { "text": "إجراء كان معتمداً في نسخة قديمة من المعيار ولم يعد صالحاً", "isCorrect": false },
+    { "text": "إجراء صحيح جزئياً لكنه يغفل عامل حرج في السيناريو المذكور", "isCorrect": false }
   ]
 }]
-Ensure exactly 1 option is correct in each question, and exactly 4 options total per question.
+
+تأكد أن:
+- كل سؤال يحتوي 4 خيارات بالضبط.
+- خيار واحد فقط isCorrect: true.
+- جميع الأسئلة باللغة العربية.
+- الأسئلة مخصصة تحديداً لمهنة "${professionName}" وليست عامة.
 `;
 
         // Auto-retry with exponential backoff for temporary Gemini errors (503, 429)
@@ -102,11 +135,11 @@ Ensure exactly 1 option is correct in each question, and exactly 4 options total
                     contents: [
                         {
                             role: "user",
-                            parts: [{ text: "You are a specialized JSON data generator. Output ONLY a valid JSON array, without any markdown formatting.\n\n" + promptTemplate }]
+                            parts: [{ text: "You are a specialized JSON data generator for Saudi professional certification exams. Output ONLY a valid JSON array, without any markdown formatting.\n\n" + promptTemplate }]
                         }
                     ],
                     generationConfig: {
-                        temperature: 0.7,
+                        temperature: 0.3,
                         responseMimeType: "application/json"
                     }
                 })
@@ -154,7 +187,8 @@ Ensure exactly 1 option is correct in each question, and exactly 4 options total
                             professionId,
                             text: q.text,
                             explanation: q.explanation,
-                            difficulty: q.difficulty || "MEDIUM",
+                            difficulty: q.difficulty || "HARD",
+                            cognitiveLevel: q.cognitiveLevel || "K2",
                             axis: q.axis || "PROFESSION_KNOWLEDGE",
                             options: {
                                 create: q.options.map((opt: any) => ({

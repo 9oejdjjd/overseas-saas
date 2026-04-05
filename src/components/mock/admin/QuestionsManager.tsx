@@ -144,6 +144,11 @@ export function QuestionsManager() {
                                         <Layers className="h-3 w-3" />
                                         {axisLabels[q.axis] || q.axis}
                                     </Badge>
+                                    <Badge variant="outline" className={q.cognitiveLevel === "K1" 
+                                        ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                        : "bg-purple-50 text-purple-700 border-purple-200"}>
+                                        {q.cognitiveLevel === "K1" ? "K1 تذكر" : "K2 تطبيق"}
+                                    </Badge>
                                 </div>
                                 <h3 className="font-bold text-gray-900 mb-4">{q.text}</h3>
                                 
@@ -155,6 +160,17 @@ export function QuestionsManager() {
                                         </div>
                                     ))}
                                 </div>
+
+                                {q.explanation && (
+                                    <details className="mt-3 group">
+                                        <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium select-none">
+                                            عرض الشرح التفصيلي
+                                        </summary>
+                                        <div className="mt-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                            {q.explanation}
+                                        </div>
+                                    </details>
+                                )}
                             </div>
                         );
                     })}
