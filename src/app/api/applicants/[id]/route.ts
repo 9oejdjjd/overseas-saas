@@ -16,8 +16,28 @@ export async function GET(
         examCenter: true,
         ticket: {
           include: {
-            trip: true,
-            returnTrip: true,
+            trip: {
+              include: {
+                stops: {
+                  include: {
+                    destination: true,
+                    routeStop: true
+                  },
+                  orderBy: { orderIndex: 'asc' }
+                }
+              }
+            },
+            returnTrip: {
+              include: {
+                stops: {
+                  include: {
+                    destination: true,
+                    routeStop: true
+                  },
+                  orderBy: { orderIndex: 'asc' }
+                }
+              }
+            },
           }
         }
       }

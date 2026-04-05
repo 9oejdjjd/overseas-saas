@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Ticket as TicketIcon, Printer, Download, XCircle, Search, Save, Lock, AlertTriangle, Edit, Settings, Bus, RefreshCw, ArrowRight, MapPin, Clock, Loader2 } from "lucide-react";
 import { ExtendedApplicant, Ticket } from "@/types/applicant";
-import { TicketTemplate } from "@/components/TicketTemplate";
+import { PrintableTicketsWrapper } from "@/components/PrintableTicketsWrapper";
 import { ContextualMessageButton } from "@/components/messaging/ContextualMessageButton";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -358,18 +358,33 @@ export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "ad
     const handleDownloadPDF = async () => {
         if (!ticketRef.current || !ticket) return;
         try {
-            const canvas = await html2canvas(ticketRef.current, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: "#ffffff",
-            } as any);
+            const pages = Array.from(ticketRef.current.querySelectorAll('.ticket-page'));
+            if (pages.length === 0) return;
 
-            const imgData = canvas.toDataURL("image/png");
             const pdf = new jsPDF("p", "mm", "a4");
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            const pdfHeight = pdf.internal.pageSize.getHeight();
 
-            pdf.addImage(imgData, "PNG", 0, 20, pdfWidth, pdfHeight);
+            for (let i = 0; i < pages.length; i++) {
+                const pageElement = pages[i] as HTMLElement;
+                const canvas = await html2canvas(pageElement, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: "#ffffff",
+                } as any);
+
+                const imgData = canvas.toDataURL("image/png");
+                const imgProps = pdf.getImageProperties(imgData);
+                const printHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                if (i > 0) pdf.addPage();
+                
+                // Center vertically if it doesn't take the full height
+                // or just place at top with small margin
+                const margin = 10;
+                pdf.addImage(imgData, "PNG", 0, margin, pdfWidth, printHeight);
+            }
+            
             pdf.save(`Ticket-${applicant.fullName}.pdf`);
         } catch (err) {
             console.error("PDF generation failed", err);
@@ -382,8 +397,8 @@ export function ApplicantTicketTab({ applicant, ticket, onUpdate, viewMode = "ad
         return (
             <div className="space-y-6">
                 {/* Hidden Ticket Template for Printing */}
-                <div className="absolute top-[-9999px] left-[-9999px]">
-                    <TicketTemplate
+                <div className="absolute top-[-9999px] left-[-9999px] print:static print:block w-full">
+                    <PrintableTicketsWrapper
                         ref={ticketRef}
                         ticket={{
                             ...ticket,
