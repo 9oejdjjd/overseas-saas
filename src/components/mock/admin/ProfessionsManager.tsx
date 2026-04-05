@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +13,9 @@ export function ProfessionsManager() {
     const [showAdd, setShowAdd] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [formData, setFormData] = useState({
-        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 20
+        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 20, description: ""
     });
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [aiLoading, setAiLoading] = useState<string | null>(null);
     const [purging, setPurging] = useState(false);
@@ -37,7 +38,21 @@ export function ProfessionsManager() {
     }, []);
 
     const openAddModal = () => {
-        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 20 });
+        setEditingId(null);
+        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 20, description: "" });
+        setShowAdd(true);
+    };
+
+    const openEditModal = (prof: any) => {
+        setEditingId(prof.id);
+        setFormData({
+            name: prof.name,
+            slug: prof.slug,
+            passingScore: prof.passingScore,
+            examDuration: prof.examDuration,
+            questionCount: prof.questionCount,
+            description: prof.description || ""
+        });
         setShowAdd(true);
     };
 
@@ -47,8 +62,11 @@ export function ProfessionsManager() {
         
         setSaving(true);
         try {
-            const res = await fetch("/api/mock/admin/professions", {
-                method: "POST",
+            const endpoint = editingId ? `/api/mock/admin/professions/${editingId}` : "/api/mock/admin/professions";
+            const method = editingId ? "PUT" : "POST";
+            
+            const res = await fetch(endpoint, {
+                method: method,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ...formData, slug: finalSlug })
             });
@@ -142,8 +160,8 @@ export function ProfessionsManager() {
                 <SheetContent className="w-[400px] sm:w-[500px] overflow-y-auto" dir="rtl">
                     <SheetHeader className="pb-6 border-b text-right">
                         <SheetTitle className="text-xl font-bold flex items-center gap-2">
-                            <Plus className="h-5 w-5 text-blue-600" />
-                            إضافة مهنة جديدة
+                            {editingId ? <Edit2 className="h-5 w-5 text-blue-600" /> : <Plus className="h-5 w-5 text-blue-600" />}
+                            {editingId ? "تعديل المهنة" : "إضافة مهنة جديدة"}
                         </SheetTitle>
                     </SheetHeader>
                     <div className="py-6 space-y-5">
@@ -164,6 +182,16 @@ export function ProfessionsManager() {
                             <label className="text-sm font-semibold block text-gray-700">مدة الاختبار (دقيقة)</label>
                             <Input type="number" value={formData.examDuration} onChange={e => setFormData({ ...formData, examDuration: Number(e.target.value) })} className="bg-gray-50 focus:bg-white transition-colors" />
                         </div>
+                        <div className="space-y-2 pt-2 border-t">
+                            <label className="text-sm font-semibold block text-gray-700">التوجيهات والوصف (للذكاء الاصطناعي)</label>
+                            <textarea 
+                                value={formData.description} 
+                                onChange={e => setFormData({ ...formData, description: e.target.value })} 
+                                placeholder="مثال: ركز على أسئلة حول المواد الكيميائية الخطرة، ممنوع أسئلة الزراعة..." 
+                                className="w-full min-h-[100px] p-3 text-sm rounded-md border bg-gray-50 focus:bg-white resize-y" 
+                            />
+                            <p className="text-xs text-gray-500">سوف يقرأها الذكاء الاصطناعي ويجبر نفسه على توليد أسئلة تخص هذا الوصف فقط.</p>
+                        </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-6 border-t mt-4">
                         <Button variant="outline" onClick={() => setShowAdd(false)} className="w-24">إلغاء</Button>
@@ -183,7 +211,12 @@ export function ProfessionsManager() {
                                 <h3 className="font-bold text-lg text-gray-900">{prof.name}</h3>
                                 <p className="text-xs text-gray-500 font-mono mt-0.5">{prof.slug}</p>
                             </div>
-                            <Badge variant={prof.isActive ? "default" : "secondary"}>{prof.isActive ? "نشط" : "معطل"}</Badge>
+                            <div className="flex items-center gap-2">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEditModal(prof)}>
+                                    <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Badge variant={prof.isActive ? "default" : "secondary"}>{prof.isActive ? "نشط" : "معطل"}</Badge>
+                            </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-3 mb-5 border-t border-gray-100 pt-4">
