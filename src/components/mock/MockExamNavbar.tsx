@@ -36,9 +36,9 @@ export function MockExamNavbar({
                     <img 
                         src="/logo1.png" 
                         alt="بوابة الاعتماد المهني" 
-                        className="h-16 md:h-20 w-auto object-contain max-w-[300px] transform scale-110"
-                        width="300"
-                        height="80"
+                        className="h-8 md:h-10 w-auto object-contain"
+                        width="180"
+                        height="40"
                         onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');

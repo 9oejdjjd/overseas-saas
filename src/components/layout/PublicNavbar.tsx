@@ -65,12 +65,12 @@ export function PublicNavbar() {
                     onClick={(e) => scrollToSection(e, 'hero')} 
                     className="flex items-center gap-3 shrink-0 h-full py-2 group"
                 >
-                    <div className="relative h-full w-[280px] md:w-[350px] flex items-center justify-start transition-transform duration-300 group-hover:scale-105">
+                    <div className="relative h-full flex items-center transition-transform duration-300 group-hover:scale-105">
                         <img 
                             src="/logo1.png" 
                             alt="شعار بوابة الاعتماد المهني" 
-                            className="max-h-[150%] max-w-full object-contain transform scale-[1.4] origin-right -mr-4 md:-mr-8"
-                            width="280" 
+                            className="h-10 md:h-12 w-auto object-contain"
+                            width="180" 
                             onError={(e) => {
                                 // Fallback if logo not found
                                 (e.target as HTMLImageElement).style.display = 'none';

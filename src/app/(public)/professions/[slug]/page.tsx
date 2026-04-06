@@ -26,9 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     return {
         title: `دليلك الشامل واختبار الاعتماد المهني التجريبي - مهنة ${profession.name}`,
-        description: profession.description 
-            ? `استعد لاختبار الاعتماد المهني السعودي لمهنة ${profession.name}. ${profession.description}`
-            : `دليلك الكامل للتدريب على أسئلة ومحاور اختبار الاعتماد المهني الخاص بمهنة ${profession.name}. جرب وتدرب مجاناً في بوابة الاعتماد المهني.`,
+        description: `دليلك الكامل للتدريب على أسئلة ومحاور اختبار الاعتماد المهني الخاص بمهنة ${profession.name}. جرب وتدرب مجاناً في بوابة الاعتماد المهني.`,
         keywords: `الاعتماد المهني ${profession.name}, اسئلة اختبار ${profession.name}, امتحان ${profession.name} السعودية, اختبار الفحص المهني ${profession.name}, ${profession.slug} test saudi`,
         openGraph: {
             title: `اختبار الاعتماد المهني - مهنة ${profession.name}`,
@@ -76,7 +74,7 @@ export default async function ProfessionLandingPage({ params }: Props) {
                     </h1>
                     
                     <p className="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-12">
-                        {profession.description || `هل تبحث عن فرصة عمل في السعودية وتود اجتياز الفحص المهني الخاص بمهنة ${profession.name}؟ هذا الدليل وضع خصيصاً ليضعك على أول طريق النجاح المهني، متضمناً اختباراً تجريبياً يحاكي الأساسيات الفنية.`}
+                        {`هل تبحث عن فرصة عمل في السعودية وتود اجتياز الفحص المهني الخاص بمهنة ${profession.name}؟ هذا الدليل وضع خصيصاً ليضعك على أول طريق النجاح المهني، متضمناً اختباراً تجريبياً يحاكي الأساسيات الفنية.`}
                     </p>
 
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
