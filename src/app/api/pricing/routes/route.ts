@@ -18,7 +18,18 @@ export async function GET(request: NextRequest) {
             orderBy: { createdAt: 'desc' }
         });
 
-        return NextResponse.json(routes);
+        const mappedRoutes = routes.map(r => ({
+            id: r.id,
+            fromId: r.fromDestinationId,
+            toId: r.toDestinationId,
+            oneWayPrice: Number(r.price),
+            roundTripPrice: Number(r.priceRoundTrip || r.price),
+            isActive: true,
+            fromDestination: r.fromDestination,
+            toDestination: r.toDestination
+        }));
+
+        return NextResponse.json(mappedRoutes);
     } catch (error) {
         return NextResponse.json({ error: "Failed to fetch routes" }, { status: 500 });
     }
