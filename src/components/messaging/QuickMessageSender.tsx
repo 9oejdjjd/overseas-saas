@@ -208,11 +208,11 @@ export function QuickMessageSender({ open, onClose }: QuickMessageProps) {
 
             if (!sendResponse.ok) {
                 const errData = await sendResponse.json();
-                toast(errData.error || "فشل إرسال الرسالة عبر WPPConnect", "error");
+                toast(errData.error || "فشل إرسال الرسالة عبر Evolution API", "error");
                 return;
             }
 
-            toast("تم إرسال الرسالة بنجاح عبر WPPConnect", "success");
+            toast("تم إرسال الرسالة بنجاح عبر Evolution API", "success");
             onClose();
 
         } catch (e) {

@@ -188,12 +188,12 @@ export function ContextualMessageButton({
 
             if (!sendResponse.ok) {
                 const errData = await sendResponse.json();
-                toast(errData.error || "فشل إرسال الرسالة عبر WPPConnect", "error");
+                toast(errData.error || "فشل إرسال الرسالة عبر Evolution API", "error");
                 setLoading(false);
                 return;
             }
 
-            toast("تم إرسال الرسالة بنجاح عبر WPPConnect", "success");
+            toast("تم إرسال الرسالة بنجاح عبر Evolution API", "success");
             setIsOpen(false);
             setAlreadySent(true);
             if (onSuccess) onSuccess();

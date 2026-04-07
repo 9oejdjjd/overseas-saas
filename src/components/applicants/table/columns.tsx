@@ -79,7 +79,7 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
             if (!genRes.ok) throw new Error("Failed to generate");
             const { message, phone } = await genRes.json();
 
-            // Send via WPPConnect
+            // Send via Evolution API
             const sendRes = await fetch("/api/messages/send", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

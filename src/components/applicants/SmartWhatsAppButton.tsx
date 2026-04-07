@@ -111,7 +111,7 @@ export function SmartWhatsAppButton({ applicant, ticket, activityLogs = [], mini
 
             if (!sendResponse.ok) {
                 const errData = await sendResponse.json();
-                toast(errData.error || "فشل إرسال الرسالة عبر WPPConnect", "error");
+                toast(errData.error || "فشل إرسال الرسالة عبر Evolution API", "error");
                 setLoading(false);
                 return;
             }

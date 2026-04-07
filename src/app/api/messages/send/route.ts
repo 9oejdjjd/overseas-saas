@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage, sendWhatsAppFile } from "@/lib/wppconnect";
+import { sendWhatsAppMessage, sendWhatsAppFile } from "@/lib/evolution";
 
 export async function POST(request: Request) {
     try {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Applicant has no phone number" }, { status: 400 });
         }
 
-        // 2. Send via WPPConnect Backup Service
+        // 2. Send via Evolution API Service
         let sendResult;
 
         if (customAttachmentBase64) {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         if (!sendResult.success) {
             // Include messageLog so UI can refresh, but returning 500 error status
             return NextResponse.json({
-                error: sendResult.error || "Failed to send message via WPPConnect",
+                error: sendResult.error || "Failed to send message via Evolution API",
                 messageLog
             }, { status: 500 });
         }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         await prisma.activityLog.create({
             data: {
                 action: "MESSAGE_SENT",
-                details: `تم الإرسال عبر WPPConnect: ${trigger}`,
+                details: `تم الإرسال عبر Evolution API: ${trigger}`,
                 applicantId: applicantId
             }
         });

@@ -1,10 +1,10 @@
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/wppconnect";
+import { sendWhatsAppMessage } from "@/lib/evolution";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
 /**
- * Server-side auto-send: generates a message from a template and sends it via WPPConnect.
+ * Server-side auto-send: generates a message from a template and sends it via Evolution API.
  * Designed to be called from any API route or server action as fire-and-forget.
  * 
  * @param applicantId - The applicant's ID
@@ -48,7 +48,7 @@ export async function autoSendMessage(
         let text = template.body;
         text = await replaceVariables(text, applicant, options?.ticketId, options?.customVars);
 
-        // 4. Send via WPPConnect
+        // 4. Send via Evolution API
         const sendResult = await sendWhatsAppMessage(phone, text);
         const status = sendResult.success ? "SENT" : "PENDING"; // Saving failed as PENDING for retry
 
@@ -81,7 +81,7 @@ export async function autoSendMessage(
         // 7. Follow-up chain (e.g. ON_PASS → ON_FEEDBACK)
         if (sendResult.success && options?.followUpTriggers?.length) {
             for (const followUp of options.followUpTriggers) {
-                // Small delay to avoid overwhelming WPPConnect
+                // Small delay to avoid overwhelming Evolution API
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 await autoSendMessage(applicantId, followUp, {
                     customVars: options?.customVars

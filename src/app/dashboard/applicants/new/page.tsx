@@ -29,6 +29,8 @@ type TransportRoute = {
     oneWayPrice: number;
     roundTripPrice: number;
     isActive: boolean;
+    fromDestination?: { id: string; name: string };
+    toDestination?: { id: string; name: string };
 };
 
 type ServiceConfig = {
@@ -117,16 +119,21 @@ export default function NewApplicantPage() {
         let transport = 0;
 
         if (formData.hasTransportation && formData.locationId && formData.transportFromId) {
-            // Find matching route
-            const route = routes.find(r =>
-                r.toId === formData.locationId &&
-                r.fromId === formData.transportFromId
-            );
+            // Match by destination name since Location and TransportDestination are different tables
+            const selectedLocation = locations.find(l => l.id === formData.locationId);
+            const selectedFrom = locations.find(l => l.id === formData.transportFromId);
 
-            if (route) {
-                transport = formData.transportType === "ROUND_TRIP"
-                    ? Number(route.roundTripPrice)
-                    : Number(route.oneWayPrice);
+            if (selectedLocation && selectedFrom) {
+                const route = routes.find(r =>
+                    r.toDestination?.name === selectedLocation.name &&
+                    r.fromDestination?.name === selectedFrom.name
+                );
+
+                if (route) {
+                    transport = formData.transportType === "ROUND_TRIP"
+                        ? Number(route.roundTripPrice)
+                        : Number(route.oneWayPrice);
+                }
             }
         }
 
@@ -177,9 +184,13 @@ export default function NewApplicantPage() {
                         // Calculate expected transport
                         let transport = 0;
                         if (formData.hasTransportation && formData.locationId && formData.transportFromId) {
-                            const route = routes.find(r => r.toId === formData.locationId && r.fromId === formData.transportFromId);
-                            if (route) {
-                                transport = formData.transportType === "ROUND_TRIP" ? Number(route.roundTripPrice) : Number(route.oneWayPrice);
+                            const selectedLoc = locations.find(l => l.id === formData.locationId);
+                            const selectedFromLoc = locations.find(l => l.id === formData.transportFromId);
+                            if (selectedLoc && selectedFromLoc) {
+                                const route = routes.find(r => r.toDestination?.name === selectedLoc.name && r.fromDestination?.name === selectedFromLoc.name);
+                                if (route) {
+                                    transport = formData.transportType === "ROUND_TRIP" ? Number(route.roundTripPrice) : Number(route.oneWayPrice);
+                                }
                             }
                         }
                         const gross = currentBase + transport;

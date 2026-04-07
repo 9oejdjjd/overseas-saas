@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/wppconnect";
+import { sendWhatsAppMessage } from "@/lib/evolution";
 
 // POST - Retry failed (PENDING) messages
 export async function POST(request: Request) {
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
             let successCount = 0;
             let failCount = 0;
 
-            // Process sequentially to avoid overwhelming WPPConnect
+            // Process sequentially to avoid overwhelming Evolution API
             for (const msg of pendingMessages) {
                 const phone = msg.applicant?.whatsappNumber || msg.applicant?.phone;
                 if (!phone) {

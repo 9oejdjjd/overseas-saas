@@ -3,7 +3,6 @@ import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/simple-toast";
 import { GlobalSchema } from "@/components/seo/GlobalSchema";
-import { ProfessionsSchema } from "@/components/seo/ProfessionsSchema";
 
 const ibmPlexArabic = IBM_Plex_Sans_Arabic({
   subsets: ["arabic"],
@@ -58,7 +57,6 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <body className={`${ibmPlexArabic.className} ${ibmPlexArabic.variable} antialiased bg-gray-50 text-gray-900`}>
         <GlobalSchema />
-        <ProfessionsSchema />
         <ToastProvider>
           {children}
         </ToastProvider>
