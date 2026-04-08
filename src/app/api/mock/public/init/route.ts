@@ -23,12 +23,49 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Not enough questions in bank for this profession to start exam." }, { status: 400 });
         }
 
-        // Check attempt limits - count previous SUBMITTED sessions for this visitor+profession
+        // 1. Look for an existing UNFINISHED session (NEW, STARTED, RESUMED) for this phone/fingerprint
+        const existingSession = await prisma.examSession.findFirst({
+            where: {
+                professionId: profession.id,
+                status: { in: ["NEW", "STARTED", "RESUMED"] },
+                OR: [
+                    { visitorPhone: visitorPhone },
+                    ...(deviceFingerprint ? [{ deviceFingerprint }] : [])
+                ]
+            },
+            orderBy: { createdAt: "desc" }
+        });
+
+        // 2. Auto-resume logic
+        if (existingSession) {
+            if (existingSession.status === "STARTED" || existingSession.status === "RESUMED") {
+                // Check if time has expired
+                if (existingSession.startedAt) {
+                    const elapsed = new Date().getTime() - existingSession.startedAt.getTime();
+                    const durationMs = (profession.examDuration || 60) * 60 * 1000;
+                    if (elapsed < durationMs) {
+                        // Still active, return it directly!
+                        return NextResponse.json({ token: existingSession.token, professionName: profession.name });
+                    } else {
+                        // Time is up, mark as TIMEOUT and fall back to create new if limits allow
+                        await prisma.examSession.update({
+                            where: { id: existingSession.id },
+                            data: { status: "TIMEOUT" }
+                        });
+                    }
+                }
+            } else if (existingSession.status === "NEW") {
+                // Just a fresh session the user (or admin) created but never started. Resume it!
+                return NextResponse.json({ token: existingSession.token, professionName: profession.name });
+            }
+        }
+
+        // 3. Check attempt limits - count ONLY fully consumed sessions (SUBMITTED, EXPIRED, TIMEOUT)
         const previousAttemptsByPhone = await prisma.examSession.count({
             where: {
                 professionId: profession.id,
                 visitorPhone: visitorPhone,
-                status: "SUBMITTED"
+                status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
             }
         });
 
@@ -38,7 +75,7 @@ export async function POST(request: Request) {
                 where: {
                     professionId: profession.id,
                     deviceFingerprint: deviceFingerprint,
-                    status: "SUBMITTED"
+                    status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
                 }
             });
         }
@@ -63,7 +100,6 @@ export async function POST(request: Request) {
             }
         });
 
-        // Redirect URL format handled by frontend, just return token
         return NextResponse.json({ token: session.token, professionName: profession.name });
     } catch (error) {
         console.error("Public Session Init Error:", error);

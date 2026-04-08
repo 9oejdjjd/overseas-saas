@@ -651,8 +651,10 @@ enum ExamSessionType {
 enum ExamSessionStatus {
   NEW
   STARTED
+  RESUMED
   SUBMITTED
   EXPIRED
+  TIMEOUT
 }
 
 model ExamSession {

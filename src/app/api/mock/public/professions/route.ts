@@ -13,11 +13,22 @@ export async function GET() {
                 examDuration: true,
                 questionCount: true,
                 passingScore: true,
+                _count: {
+                    select: {
+                        questions: {
+                            where: { isActive: true }
+                        }
+                    }
+                }
             },
             orderBy: { createdAt: 'desc' }
         });
 
-        return NextResponse.json(professions);
+        const availableProfessions = professions
+            .filter(p => p._count.questions >= p.questionCount)
+            .map(({ _count, ...rest }) => rest);
+
+        return NextResponse.json(availableProfessions);
     } catch (error) {
         console.error("Public GET Professions Error:", error);
         return NextResponse.json({ error: "Failed to fetch professions" }, { status: 500 });

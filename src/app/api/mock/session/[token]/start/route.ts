@@ -17,18 +17,59 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             body = parsed.data;
         } catch (e) { }
 
-        // Retrieve session with profession details
         const session = await prisma.examSession.findUnique({
             where: { token },
-            include: { profession: true, questions: true, applicant: true }
+            include: { 
+                profession: true, 
+                applicant: true,
+                questions: {
+                    include: {
+                        question: {
+                            include: { options: true }
+                        }
+                    }
+                }
+            }
         });
 
         if (!session) {
             return NextResponse.json({ error: "Invalid session" }, { status: 404 });
         }
 
-        if (session.status === "SUBMITTED" || session.status === "EXPIRED") {
+        if (session.status === "SUBMITTED" || session.status === "EXPIRED" || session.status === "TIMEOUT") {
             return NextResponse.json({ error: "Session is already completed or expired" }, { status: 400 });
+        }
+
+        // If session is already STARTED or RESUMED, just transition status and return existing data
+        if (session.status === "STARTED" || session.status === "RESUMED") {
+            // Update status to RESUMED to log that they came back
+            await prisma.examSession.update({
+                where: { id: session.id },
+                data: { status: "RESUMED" }
+            });
+            
+            // Format existing questions to match frontend expectation
+            const existingQuestions = session.questions.map((sq: any) => ({
+                questionId: sq.question.id,
+                question: {
+                    text: sq.question.text,
+                    options: sq.question.options.map((opt: any) => ({ id: opt.id, text: opt.text }))
+                },
+                selectedOptionId: sq.selectedOptionId
+            }));
+
+            // Return existing questions without regenerating
+            return NextResponse.json({
+                session: {
+                    id: session.id,
+                    status: "RESUMED",
+                    professionName: session.profession.name,
+                    visitorName: session.visitorName || session.applicant?.fullName,
+                    duration: session.profession.examDuration,
+                    startedAt: session.startedAt,
+                },
+                questions: existingQuestions
+            });
         }
 
         // If it's a NEW session, we must select random questions and link them

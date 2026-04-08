@@ -84,11 +84,14 @@ export default function ExamSessionPage() {
                 setEditablePhone(rawPhone.replace(/^\+?\d{1,3}/, '')); // Just a rough fallback
             }
 
-            if (data.status === "STARTED") {
+            if (data.status === "STARTED" || data.status === "RESUMED") {
                 startExam(false); // Resume
             } else if (data.status === "SUBMITTED") {
                 setStatus("ERROR");
                 setErrorMsg("لقد قمت بتسليم هذا الاختبار مسبقاً.");
+            } else if (data.status === "EXPIRED" || data.status === "TIMEOUT") {
+                setStatus("ERROR");
+                setErrorMsg("لقد انتهى وقت هذا الاختبار المسموح.");
             } else {
                 setStatus("WELCOME");
             }
