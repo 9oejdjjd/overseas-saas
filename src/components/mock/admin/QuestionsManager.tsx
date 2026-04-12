@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, RefreshCw, Layers, CheckCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { QuestionsImportModal } from "./QuestionsImportModal";
 
 export function QuestionsManager() {
     const [questions, setQuestions] = useState<any[]>([]);
@@ -45,7 +46,12 @@ export function QuestionsManager() {
     const axisLabels: any = {
         "HEALTH_SAFETY": "الصحة والسلامة",
         "PROFESSION_KNOWLEDGE": "المعرفة المهنية",
-        "GENERAL_SKILLS": "المهارات العامة"
+        "GENERAL_SKILLS": "المهارات العامة",
+        "OCCUPATIONAL_SAFETY": "السلامة المهنية",
+        "CORRECT_METHODS": "الطرق الصحيحة",
+        "PROFESSIONAL_BEHAVIOR": "السلوك المهني",
+        "TOOLS_AND_EQUIPMENT": "الأدوات والمعدات",
+        "EMERGENCIES_FIRST_AID": "الطوارئ والإسعافات"
     };
 
     const diffColors: any = {
@@ -56,16 +62,17 @@ export function QuestionsManager() {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <div>
                     <h2 className="text-lg font-bold text-gray-900">بنك الأسئلة</h2>
                     <p className="text-sm text-gray-500">عرض وإدارة الأسئلة المولدة أو المضافة لكل مهنة</p>
                 </div>
-                <div>
-                    <button onClick={fetchQuestions} className="flex items-center gap-2 text-sm text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <button onClick={fetchQuestions} className="flex items-center gap-2 text-sm text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-blue-100 flex-1 justify-center sm:flex-none">
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         تحديث
                     </button>
+                    <QuestionsImportModal professions={professions} onSuccess={fetchQuestions} />
                 </div>
             </div>
 

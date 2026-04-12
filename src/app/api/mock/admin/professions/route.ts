@@ -25,6 +25,14 @@ export async function GET(request: Request) {
             include: {
                 _count: {
                     select: { questions: true, examSessions: true }
+                },
+                aiJobs: {
+                    where: { 
+                        status: "PROCESSING",
+                        updatedAt: { gte: new Date(Date.now() - 15 * 60 * 1000) } // Ignore ghost jobs stuck for over 15 mins
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
                 }
             },
             orderBy: { createdAt: 'desc' }

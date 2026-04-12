@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
+import { callOpenAIWithRetry, sleep } from "@/lib/ai-rate-limiter";
 
 export const maxDuration = 60;
 
@@ -28,14 +29,13 @@ export async function POST(request: Request) {
         const job = await prisma.aIGenerationJob.create({
             data: {
                 professionId,
-                questionsRequested: 30,
+                questionsRequested: 32,
                 status: "PROCESSING",
-                prompt: `Generate exactly 30 structured professional questions for a ${profession.name}.`,
+                prompt: `Generate 32 structured professional questions for a ${profession.name} evenly across 8 axes (4 per axis).`,
             }
         });
 
         // Trigger asynchronous generation so we don't block the request timeout
-        // Wrapped in after() to ensure Vercel does not terminate the background process
         after(async () => {
             await triggerAIGenerationBg(job.id, profession.name, profession.description || "", profession.id);
         });
@@ -47,175 +47,202 @@ export async function POST(request: Request) {
     }
 }
 
-// Background Processor — Saudi Professional Exam (SBA) Style
+// Background Processor — Saudi Professional Exam (SBA) Style - Batch Generation
 async function triggerAIGenerationBg(jobId: string, professionName: string, professionDescription: string, professionId: string) {
     try {
-        const geminiKey = process.env.GEMINI_API_KEY;
-        if (!geminiKey) throw new Error("Missing GEMINI_API_KEY");
-        const promptTemplate = `
+        const openAiKey = process.env.OPENAI_API_KEY;
+        if (!openAiKey) throw new Error("Missing OPENAI_API_KEY");
+
+        const axes = [
+            "HEALTH_SAFETY", "PROFESSION_KNOWLEDGE", "GENERAL_SKILLS",
+            "OCCUPATIONAL_SAFETY", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR",
+            "TOOLS_AND_EQUIPMENT", "EMERGENCIES_FIRST_AID"
+        ];
+        
+        let totalValidGenerated = 0;
+        const failedAxes: string[] = [];
+        const axisResults: string[] = [];
+
+        // Simplify and decouple: We will request 4 questions per axis individually (8 requests).
+        // This makes the payload extremely small and practically immune to timeouts or API payload limits.
+        for (const axis of axes) {
+            // Error isolation: each axis is independent
+            try {
+                let axisLabelArabic = "";
+                switch(axis) {
+                    case "HEALTH_SAFETY": axisLabelArabic = "الصحة والسلامة في بيئة العمل"; break;
+                    case "PROFESSION_KNOWLEDGE": axisLabelArabic = "المعرفة المهنية التخصصية"; break;
+                    case "GENERAL_SKILLS": axisLabelArabic = "المهارات العامة وجودة التنفيذ"; break;
+                    case "OCCUPATIONAL_SAFETY": axisLabelArabic = "السلامة المهنية والمخاطر المباشرة"; break;
+                    case "CORRECT_METHODS": axisLabelArabic = "الأساليب الصحيحة والقياسية للمهنة"; break;
+                    case "PROFESSIONAL_BEHAVIOR": axisLabelArabic = "السلوك الوظيفي والانضباط المهني"; break;
+                    case "TOOLS_AND_EQUIPMENT": axisLabelArabic = "استخدام الأدوات والمعدات وتشخيصها"; break;
+                    case "EMERGENCIES_FIRST_AID": axisLabelArabic = "الطوارئ والإسعافات الأولية"; break;
+                }
+
+                const promptTemplate = `
 أنت خبير فني رفيع المستوى وممتحن معتمد في "الفحص المهني السعودي" (pacc.sa).
-مهمتك هي إعداد اختبار دقيق، وعميق، ومختص جداً لمهنة: "${professionName}". مطلوب 30 سؤال (Single Best Answer - SBA).
+مهمتك الآن هي صياغة 4 أسئلة دقيقة (Single Best Answer) لمهنة: "${professionName}" والمحصورة حصراً في هذا المحور التقني: [ ${axisLabelArabic} ].
+
+${professionDescription ? `تنويــه: مقتطف عن المهنة من الإدارة: "${professionDescription}"` : ""}
 
 ═══════════════════════════════════════════════════════
-⚙️ الخطوة الأولى: التشعب والتخصص العميق (Deep Domain Analysis)
+⚠️ قواعد صياغة الأسئلة — خالفها يعتبر فشلاً ذريعاً:
 ═══════════════════════════════════════════════════════
-قبل صياغة الأسئلة، قم بتحليل هذه المهنة إلى 5 نطاقات/تخصصات فرعية معقدة تواجه العامل.
-${professionDescription ? 
-  `>> تنبيه هام (توجيهات مدير النظام): لقد قام مدير النظام بتحديد المجالات أو الوصف التالي للمهنة: "${professionDescription}". يجب أن تلتزم التزاماً كاملاً بهذا الوصف وأن تستخرج النطاقات بناءً عليه حصراً.` 
-  : 
-  `>> نظرًا لعدم وجود وصف مخصص، استنتج المجالات الـ 5 المعتمدة دولياً لهذه المهنة المعينة حصراً. يمنع منعاً باتاً استنتاج أو إضافة أي مجالات أو بيئات عمل لا تخص هذه المهنة في الواقع (مثلاً لا تضف أسئلة عن المواشي إلا إذا كانت المهنة تتعلق بها نصاً ورسمياً).`
-}
->> يجب أن تتوزع الأسئلة الـ 30 بشكل متساوٍ على هذه النطاقات الفرعية الـ 5، بحيث يغطي الاختبار كافة تعقيدات المهنة لتكون شاملة 100%.
-
-═══════════════════════════════════════════════════════
-⚠️ قواعد صياغة الأسئلة الحاسمة — خالفها يعتبر فشلاً ذريعاً:
-═══════════════════════════════════════════════════════
-
 🔴 القاعدة 1: حظر البديهيات والإجابة النموذجية الكاذبة
-   - ⛔ ممنوع صياغة إجابات تبدو "مثالية أو لبقة" (مثل: إبلاغ المشرف فوراً، التأكد من السلامة، اتباع الدليل، الاتصال بالشرطة). هذه إجابات يسهل على الجاهل تخمينها وتعتبر الأسئلة التي تحتويها فاشلة.
-   - الإجابات يجب أن تكون سيناريوهات مهنية وعملية دقيقة تتضمن: أسماء أدوات محددة، خطوات عمل قياسية (SOPs)، علامات الخطر، تفاصيل المواد المستعملة، أو ضوابط فنية مخصصة للمهنة. 
-   - ⛔ يمنع منعاً باتاً وضع معادلات فيزيائية معقدة أو قوانين نيوتن أو حسابات رياضية عميقة ما لم تكن المهنة هندسية بحتة. ركز على "الأداء المهني" والمواقف اليومية.
+   - الإجابات يجب أن تكون سيناريوهات مهنية وعملية دقيقة تتضمن: أسماء أدوات محددة، خطوات عمل قياسية، علامات الخطر، أو تفاصيل المواد.
+   - ممنوع صياغة إجابات تبدو "مثالية" يسهل تخمينها.
 
-🔴 القاعدة 2: واقعية الخيارات الخاطئة (المشتتات - Distractors)
-   - جميع الخيارات الـ 4 يجب أن تبدو صحيحة لمن ليس خبيراً متمرساً بتفاصيل المهنة.
-   - المشتتات هي: "ممارسة وحيلة شائعة في السوق لكنها خاطئة"، "قاعدة قديمة انتهت"، أو "إجراء ينبني على فهم خاطئ لعمل الأداة".
-   - ⛔ ممنوع صياغة خيار يبدو غبياً أو واضح الخطأ.
+🔴 القاعدة 2: الخيارات الخاطئة (Distractors)
+   - جميع الخيارات الخاطئة يجب أن تبدو صحيحة لمن ليس خبيراً وتكون ممارسات شائعة خاطئة في سوق العمل الفعلي.
+   - 4 خيارات متقاربة بالطول تماماً (واحد فقط صحيح).
 
-🔴 القاعدة 3: توحيد طول الإجابات
-   - يجب أن تكون الخيارات الأربعة (الصحيح والخاطئة) بنفس الطول تماماً وبنفس الصياغة اللغوية.
-   - لا تجعل الخيار الصحيح أطول أو يحتوي على استثناءات لأن ذلك يكشفه.
+🔴 القاعدة 3: السيناريوهات والصعوبة (90% HARD)
+   - صغ 3 أسئلة بصعوبة HARD (تحدي تقني صعب للممارس البارع) وسؤال 1 MEDIUM.
+   - يجب أن يبدأ السيناريو بمشكلة أو حالة دقيقة محصورة بـ [ ${axisLabelArabic} ].
 
-🔴 القاعدة 4: سيناريوهات عملية ومواقف يومية
-   - 28 سؤال (من أصل 30) يجب أن تبدأ بسيناريو عملي حرج أو تحدي فني من صميم بيئة العمل.
-   - مثال للسيناريوهات المطلوبة: "أثناء قيامك بلحام أنابيب التبريد النحاسية، لاحظت أن طبقة اللحام لا تنتشر بشكل متساو. ماذا يجب أن تفعل لتصحيح هذه المشكلة المهنية؟" أو "كعامل تغليف، واجهت صندوقاً كرتونياً يحتوي على زجاج لكن وزنه غير متوازن بقوة، ما هي الطريقة المثلى لتدعيم قاعدته حسب المواصفات؟"
-
-🔴 القاعدة 5: المستوى المعرفي والصعوبة
-   - مستوى الصعوبة يجب أن يكون قوياً وموجهاً للممارس الفعلي الماهر (اكتشاف الأخطاء، حل المشاكل، الإجراءات الفنية السليمة):
-     - 25 سؤال HARD (تتطلب خبرة فعلية وتمييز المشاكل الدقيقة وصيانة العطال).
-     - 5 أسئلة MEDIUM.
-
-🔴 القاعدة 6: توزيع المحاور (10 لكل محور)
-   - "HEALTH_SAFETY" (10): علامات الخطر، إجراءات الوقاية من المواد، والبيئة الصناعية والأمن الصناعي.
-   - "PROFESSION_KNOWLEDGE" (10): خطوات العمل وصيانة الآلات واختيار المواد والأدوات الصحيحة.
-   - "GENERAL_SKILLS" (10): جودة العمل، الترتيب، الفحص النظري والعملي قبل البدء.
-
-═══════════════════════════════════════════════════════
 📋 تنسيق الإخراج النهائي (JSON ONLY):
-═══════════════════════════════════════════════════════
-
-أخرج البيانات كمصفوفة JSON صالحة فقط، بدون أي تنسيق markdown (لا تضف \`\`\`json).
-
+أخرج البيانات كمصفوفة JSON صالحة مكونة من 4 عناصر فقط.
 [{
-  "text": "وضع سيناريو عملي عميق يحتوي على أرقام ومعطيات، وينتهي بالسؤال المباشر:",
-  "explanation": "شرح هندسي للمحترف يوضح التبرير العلمي للإجابة الصحيحة وكيف أن المشتتات الثلاثة هي مجرد ممارسات خاطئة شائعة في السوق.",
+  "text": "السؤال هنا",
+  "explanation": "الشرح المهني هنا",
   "difficulty": "HARD",
-  "axis": "PROFESSION_KNOWLEDGE",
+  "axis": "${axis}",
   "cognitiveLevel": "K2",
   "options": [
-    { "text": "خيار تقني برقم أو قياس أو أداة (بنفس الطول)", "isCorrect": true },
-    { "text": "خيار تقني برقم أو قياس مشابه (شائع كخطأ)", "isCorrect": false },
-    { "text": "خيار تقني برقم أو أداة مختلفة (ممارسة قديمة)", "isCorrect": false },
-    { "text": "خيار تقني ناقص التحديد", "isCorrect": false }
+    { "text": "خيار صحيح", "isCorrect": true },
+    { "text": "خيار خاطئ", "isCorrect": false },
+    { "text": "خيار خاطئ", "isCorrect": false },
+    { "text": "خيار خاطئ", "isCorrect": false }
   ]
 }]
-
-تأكد من: 4 خيارات فقط، واحد فقط صحيح، وبطول متقارب جداً. مخصصة بصعوبة بالغة لمهنة "${professionName}".
 `;
 
-        // Auto-retry with exponential backoff for temporary Gemini errors (503, 429)
-        const MAX_RETRIES = 3;
-        const BASE_DELAY_MS = 3000; // 3 seconds
-        let res: Response | null = null;
+                console.log(`[AI Gen] 🔄 Starting axis [${axis}] for profession "${professionName}"...`);
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            role: "user",
-                            parts: [{ text: "You are a specialized JSON data generator for Saudi professional certification exams. Output ONLY a valid JSON array, without any markdown formatting.\n\n" + promptTemplate }]
-                        }
-                    ],
-                    generationConfig: {
-                        temperature: 0.3,
-                        responseMimeType: "application/json"
-                    }
-                })
-            });
+                const result = await callOpenAIWithRetry({
+                    apiKey: openAiKey,
+                    model: "gpt-4o-mini",
+                    prompt: "You are a specialized JSON data generator for Saudi professional certification exams. Output ONLY a valid JSON array.\n\n" + promptTemplate,
+                    maxRetries: 5,
+                    baseDelayMs: 10000,
+                    timeoutMs: 60000,
+                });
 
-            if (res.ok) {
-                if (attempt > 1) console.log(`[AI Gen] Gemini succeeded on attempt ${attempt}/${MAX_RETRIES}`);
-                break;
-            }
+                if (!result.success) {
+                    console.error(`[AI Gen] ❌ Axis [${axis}] failed after ${result.attempts} attempts: ${result.lastError}`);
+                    failedAxes.push(`${axis} (AI: ${result.lastError})`);
+                    axisResults.push(`${axis}: FAILED (AI)`);
+                    continue;
+                }
 
-            // Retry only on 503 (overloaded) or 429 (rate limit)
-            if ((res.status === 503 || res.status === 429) && attempt < MAX_RETRIES) {
-                const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1); // 3s, 6s, 12s
-                console.warn(`[AI Gen] Gemini returned ${res.status}, retrying in ${delay / 1000}s (attempt ${attempt}/${MAX_RETRIES})...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
+                if (result.attempts > 1) {
+                    console.log(`[AI Gen] ✅ Axis [${axis}] succeeded after ${result.attempts} attempts`);
+                } else {
+                    console.log(`[AI Gen] ✅ Axis [${axis}] succeeded on first attempt`);
+                }
 
-            // Non-retryable error or max retries exhausted
-            const errBody = await res.text();
-            console.error("Gemini Raw Error:", errBody);
-            throw new Error(`Gemini API error: ${res.statusText} - ${errBody}`);
-        }
+                // Smart JSON Extraction to bypass any conversational text before or after the JSON array
+                let finalContent = result.content;
+                const jsonStart = finalContent.indexOf('[');
+                const jsonEnd = finalContent.lastIndexOf(']');
+                if (jsonStart !== -1 && jsonEnd !== -1) {
+                    finalContent = finalContent.substring(jsonStart, jsonEnd + 1);
+                }
 
-        const data = await res!.json();
-        let content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "[]";
+                let generatedQuestions: any[] = [];
+                try {
+                    generatedQuestions = JSON.parse(finalContent);
+                } catch (e) {
+                    console.error(`[AI Gen] ❌ JSON parse failed for axis [${axis}]`);
+                    console.error("[AI Gen] Raw content:", finalContent.substring(0, 200) + "...");
+                    failedAxes.push(`${axis} (JSON parse error)`);
+                    axisResults.push(`${axis}: FAILED (JSON)`);
+                    continue;
+                }
 
-        // Safety cleanup if model still returns markdown fences
-        if (content.startsWith("```json")) {
-            content = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-        } else if (content.startsWith("```")) {
-            content = content.replace(/^```\s*/, "").replace(/\s*```$/, "");
-        }
-
-        const generatedQuestions = JSON.parse(content);
-
-        let validCount = 0;
-        const createPromises = generatedQuestions.map(async (q: any) => {
-            if (q.text && q.options && q.options.length === 4) {
-                const correctCount = q.options.filter((o: any) => o.isCorrect).length;
-                if (correctCount === 1) {
-                    validCount++;
-                    return prisma.question.create({
-                        data: {
-                            professionId,
-                            text: q.text,
-                            explanation: q.explanation,
-                            difficulty: q.difficulty || "HARD",
-                            cognitiveLevel: q.cognitiveLevel || "K2",
-                            axis: q.axis || "PROFESSION_KNOWLEDGE",
-                            options: {
-                                create: q.options.map((opt: any) => ({
-                                    text: opt.text,
-                                    isCorrect: opt.isCorrect
-                                }))
+                // Save questions sequentially to avoid overwhelming DB connection pool
+                let axisQuestionCount = 0;
+                for (const q of generatedQuestions) {
+                    if (q.text && q.options && q.options.length === 4) {
+                        const correctCount = q.options.filter((o: any) => o.isCorrect).length;
+                        if (correctCount === 1) {
+                            try {
+                                await prisma.question.create({
+                                    data: {
+                                        professionId,
+                                        text: q.text,
+                                        explanation: q.explanation,
+                                        difficulty: q.difficulty || "HARD",
+                                        cognitiveLevel: q.cognitiveLevel || "K2",
+                                        axis: axis as any,
+                                        options: {
+                                            create: q.options.map((opt: any) => ({
+                                                text: opt.text,
+                                                isCorrect: opt.isCorrect
+                                            }))
+                                        }
+                                    }
+                                });
+                                totalValidGenerated++;
+                                axisQuestionCount++;
+                            } catch (dbError: any) {
+                                console.error(`[AI Gen] ⚠️ DB error saving question for axis [${axis}]:`, dbError.message);
                             }
                         }
-                    });
+                    }
                 }
-            }
-        });
 
-        await Promise.all(createPromises.filter((p: any) => p !== undefined));
+                axisResults.push(`${axis}: OK (${axisQuestionCount} questions)`);
+
+                // Extremely important: Update Job Progress in Database so frontend can poll it
+                try {
+                    await prisma.aIGenerationJob.update({
+                        where: { id: jobId },
+                        data: { questionsGenerated: totalValidGenerated }
+                    });
+                } catch (dbError: any) {
+                    console.error(`[AI Gen] ⚠️ Failed to update job progress:`, dbError.message);
+                }
+                
+                // Wait between axes to prevent 429 rate limiting from Google
+                await sleep(8000, 2000);
+
+            } catch (axisError: any) {
+                console.error(`[AI Gen] ❌ Unexpected error on axis [${axis}]:`, axisError.message);
+                failedAxes.push(`${axis} (Unexpected: ${axisError.message})`);
+                axisResults.push(`${axis}: FAILED (Error)`);
+                continue;
+            }
+        }
+
+        // Build summary log
+        const summaryLog = failedAxes.length > 0
+            ? `Completed with ${failedAxes.length} failed axis(es): ${failedAxes.join(", ")}. Results: ${axisResults.join(" | ")}`
+            : null;
+
+        console.log(`[AI Gen] 🏁 Generation complete: ${totalValidGenerated}/32 questions. Failed axes: ${failedAxes.length}`);
+        if (summaryLog) console.warn(`[AI Gen] ⚠️ ${summaryLog}`);
 
         await prisma.aIGenerationJob.update({
             where: { id: jobId },
-            data: { status: "COMPLETED", questionsGenerated: validCount }
+            data: {
+                status: "COMPLETED",
+                questionsGenerated: totalValidGenerated,
+                questionsRequested: 32,
+                errorLog: summaryLog,
+            }
         });
 
     } catch (error: any) {
         console.error("AI BG Task Failed:", error);
-        await prisma.aIGenerationJob.update({
-            where: { id: jobId },
-            data: { status: "FAILED", errorLog: error.message }
-        });
+        try {
+            await prisma.aIGenerationJob.update({
+                where: { id: jobId },
+                data: { status: "FAILED", errorLog: error.message }
+            });
+        } catch (dbError: any) {
+            console.error("[AI Gen] ❌ Could not update job status to FAILED:", dbError.message);
+        }
     }
 }

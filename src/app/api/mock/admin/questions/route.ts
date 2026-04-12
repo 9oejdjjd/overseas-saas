@@ -43,7 +43,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { professionId, text, explanation, difficulty, isActive, options } = body;
+        const { professionId, text, explanation, difficulty, isActive, options, axis, cognitiveLevel } = body;
 
         if (!professionId || !text || !options || !Array.isArray(options) || options.length !== 4) {
             return NextResponse.json({ error: "Invalid data. Must provide text and exactly 4 options." }, { status: 400 });
@@ -59,7 +59,9 @@ export async function POST(request: Request) {
                 professionId,
                 text,
                 explanation,
+                axis: axis || "PROFESSION_KNOWLEDGE",
                 difficulty: difficulty || "MEDIUM",
+                cognitiveLevel: cognitiveLevel || "K2",
                 isActive: isActive ?? true,
                 options: {
                     create: options.map(opt => ({

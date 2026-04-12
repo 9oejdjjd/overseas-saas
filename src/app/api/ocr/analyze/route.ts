@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 60;
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
     try {
@@ -15,10 +12,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "No image provided" }, { status: 400 });
         }
 
+        const openAiKey = process.env.OPENAI_API_KEY;
+        if (!openAiKey) {
+            return NextResponse.json({ error: "Missing OPENAI_API_KEY in environment" }, { status: 500 });
+        }
+
         const buffer = await file.arrayBuffer();
         const base64Image = Buffer.from(buffer).toString("base64");
-
-        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
         let prompt = "";
         if (type === "PASSPORT") {
@@ -50,32 +50,53 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid type" }, { status: 400 });
         }
 
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: base64Image,
-                    mimeType: file.type,
-                },
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${openAiKey}`
             },
-        ]);
+            body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: prompt },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: `data:${file.type};base64,${base64Image}`
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens: 1000
+            })
+        });
 
-        const response = await result.response;
-        let text = response.text();
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(`OpenAI API error: ${errorData.error?.message || res.statusText}`);
+        }
+
+        const data = await res.json();
+        let text = data.choices?.[0]?.message?.content || "";
 
         // Clean JSON markdown
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
         try {
-            const data = JSON.parse(text);
-            return NextResponse.json(data);
+            const parsedData = JSON.parse(text);
+            return NextResponse.json(parsedData);
         } catch (e) {
             console.error("JSON Parse Error", text);
             return NextResponse.json({ error: "Failed to parse OCR response", raw: text }, { status: 500 });
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("OCR Error:", error);
-        return NextResponse.json({ error: "OCR processing failed" }, { status: 500 });
+        return NextResponse.json({ error: error.message || "OCR processing failed" }, { status: 500 });
     }
 }

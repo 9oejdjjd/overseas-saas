@@ -79,40 +79,50 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 include: { options: true }
             });
 
-            // Saudi Professional Exam style: 7 HARD + 2 MEDIUM + 1 EASY per axis = 10
-            const axes = ["HEALTH_SAFETY", "PROFESSION_KNOWLEDGE", "GENERAL_SKILLS"] as const;
+            // Saudi Professional Exam style: 30 Questions total (27 HARD, 3 MEDIUM), fairly distributed across all 8 axes
             let selectedQuestions: any[] = [];
+            
+            const hardQs = questionBank.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
+            const mediumQs = questionBank.filter(q => q.difficulty === "MEDIUM").sort(() => 0.5 - Math.random());
 
-            for (const axis of axes) {
-                const axisQs = questionBank.filter(q => q.axis === axis);
-                const hardQs = axisQs.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
-                const mediumQs = axisQs.filter(q => q.difficulty === "MEDIUM").sort(() => 0.5 - Math.random());
-                const easyQs = axisQs.filter(q => q.difficulty === "EASY").sort(() => 0.5 - Math.random());
-
-                // Target: 7 hard, 2 medium, 1 easy per axis
-                const pickedHard = hardQs.slice(0, 7);
-                const pickedMedium = mediumQs.slice(0, 2);
-                const pickedEasy = easyQs.slice(0, 1);
-
-                const totalPicked = [...pickedHard, ...pickedMedium, ...pickedEasy];
-
-                // Fallback: if we don't have enough of each difficulty, fill from remaining
-                if (totalPicked.length < 10) {
-                    const pickedIds = new Set(totalPicked.map(q => q.id));
-                    const remaining = axisQs.filter(q => !pickedIds.has(q.id)).sort(() => 0.5 - Math.random());
-                    totalPicked.push(...remaining.slice(0, 10 - totalPicked.length));
+            // Helper to pick target amount fairly across different axes
+            const pickFairly = (sourceQs: any[], targetAmount: number) => {
+                const axesGroups: { [key: string]: any[] } = {};
+                sourceQs.forEach(q => {
+                    if (!axesGroups[q.axis]) axesGroups[q.axis] = [];
+                    axesGroups[q.axis].push(q);
+                });
+                
+                const picked: any[] = [];
+                let axisKeys = Object.keys(axesGroups);
+                
+                while (picked.length < targetAmount && axisKeys.length > 0) {
+                    for (let i = axisKeys.length - 1; i >= 0; i--) {
+                        if (picked.length >= targetAmount) break;
+                        const key = axisKeys[i];
+                        if (axesGroups[key].length > 0) {
+                            picked.push(axesGroups[key].pop());
+                        } else {
+                            axisKeys.splice(i, 1);
+                        }
+                    }
                 }
+                return picked;
+            };
 
-                selectedQuestions.push(...totalPicked);
-            }
+            const pickedHard = pickFairly(hardQs, 27);
+            const pickedMedium = pickFairly(mediumQs, 3);
+            
+            selectedQuestions = [...pickedHard, ...pickedMedium];
 
-            // Fallback to random if we didn't get exactly 30 (for legacy data)
+            // Fallback: If not enough HARD/MEDIUM, fill with whatever is left (legacy compatibility)
             if (selectedQuestions.length < 30) {
-                const remainingBank = questionBank.filter(q => !selectedQuestions.find(sq => sq.id === q.id)).sort(() => 0.5 - Math.random());
+                const pickedIds = new Set(selectedQuestions.map(q => q.id));
+                const remainingBank = questionBank.filter(q => !pickedIds.has(q.id)).sort(() => 0.5 - Math.random());
                 selectedQuestions.push(...remainingBank.slice(0, 30 - selectedQuestions.length));
             }
 
-            // Final shuffle so the axes are mixed up in the actual exam
+            // Final shuffle so the axes and difficulties are mixed up in the actual exam
             selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random());
 
             if (selectedQuestions.length === 0) {
