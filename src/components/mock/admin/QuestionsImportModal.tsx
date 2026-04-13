@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FileDown, UploadCloud, AlertCircle, FileJson, CheckCircle2, Copy } from "lucide-react";
+import { FileDown, UploadCloud, AlertCircle, FileJson, CheckCircle2, Copy, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 interface Props {
     professions: any[];
@@ -46,6 +47,8 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
     
     // Form State
     const [professionId, setProfessionId] = useState("");
+    const [searchProfession, setSearchProfession] = useState("");
+    const [dropdownOpen, setDropdownOpen] = useState(false);
     const [axis, setAxis] = useState("");
     const [mode, setMode] = useState("skip_duplicates");
     const [jsonText, setJsonText] = useState("");
@@ -204,16 +207,43 @@ ${JSON_TEMPLATE}
                     {step === "input" && (
                         <div className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
+                                <div className="space-y-2 relative">
                                     <Label>المهنة المستهدفة</Label>
-                                    <Select value={professionId} onValueChange={setProfessionId}>
-                                        <SelectTrigger><SelectValue placeholder="اختر المهنة" /></SelectTrigger>
-                                        <SelectContent>
-                                            {professions.map(p => (
-                                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    <div className="relative">
+                                        <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
+                                        <Input
+                                            className="pr-9 focus:bg-white transition-colors"
+                                            placeholder="ابحث واختر المهنة..."
+                                            value={searchProfession}
+                                            onChange={(e) => {
+                                                setSearchProfession(e.target.value);
+                                                setDropdownOpen(true);
+                                                setProfessionId(""); // Reset id if user is typing
+                                            }}
+                                            onFocus={() => setDropdownOpen(true)}
+                                            onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
+                                        />
+                                    </div>
+                                    {dropdownOpen && (
+                                        <div className="absolute top-[68px] right-0 left-0 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                                            {professions.filter(p => p.name.includes(searchProfession)).map(p => (
+                                                <div 
+                                                    key={p.id} 
+                                                    className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
+                                                    onClick={() => {
+                                                        setProfessionId(p.id);
+                                                        setSearchProfession(p.name);
+                                                        setDropdownOpen(false);
+                                                    }}
+                                                >
+                                                    {p.name}
+                                                </div>
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                            {professions.filter(p => p.name.includes(searchProfession)).length === 0 && (
+                                                <div className="px-4 py-3 text-sm text-gray-500 text-center">لا توجد نتائج مطابقة</div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="space-y-2">
                                     <Label>المحور المعرفي</Label>
