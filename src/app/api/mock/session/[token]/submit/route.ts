@@ -52,15 +52,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         await Promise.all(updatePromises);
 
         // Calculate final score
-        const scorePercentage = (correctAnswers / totalQuestions) * 100;
-        const passed = scorePercentage >= session.passingScore;
+        let scorePercentage = 0;
+        if (totalQuestions > 0) {
+            scorePercentage = (correctAnswers / totalQuestions) * 100;
+        }
+        
+        // Round to 2 decimal places to prevent Prisma Decimal overflow crash
+        const roundedScore = Math.round(scorePercentage * 100) / 100;
+        const passed = roundedScore >= session.passingScore;
 
         const updatedSession = await prisma.examSession.update({
             where: { id: session.id },
             data: {
                 status: "SUBMITTED",
                 completedAt: new Date(),
-                score: scorePercentage
+                score: roundedScore,
+                isPassed: passed
             }
         });
 
