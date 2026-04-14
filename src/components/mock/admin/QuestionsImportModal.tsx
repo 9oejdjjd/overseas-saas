@@ -276,7 +276,7 @@ ${JSON_TEMPLATE}
                                     </div>
                                     {dropdownOpen && (
                                         <div className="absolute top-[68px] right-0 left-0 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                                            {professions.filter(p => p.name.includes(searchProfession)).map(p => (
+                                            {professions.filter(p => p.name.includes(searchProfession)).sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(p => (
                                                 <div 
                                                     key={p.id} 
                                                     className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"

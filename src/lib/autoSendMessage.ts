@@ -221,7 +221,8 @@ async function replaceVariables(
     text = text.replace(/{password}/g, applicant.platformPassword || "");
 
     // Location
-    const cityName = applicant.location?.name || applicant.examLocation || "";
+    // Prioritize the dedicated examLocation/examCenter over the original registration branch location
+    const cityName = applicant.examLocation || applicant.location?.name || "";
     const centerName = applicant.examCenter?.name || "";
     const address = applicant.examCenter?.address || applicant.location?.address || "";
     const mapUrl = applicant.examCenter?.locationUrl || applicant.location?.locationUrl || "";

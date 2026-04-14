@@ -116,6 +116,8 @@ export async function PATCH(
       newStatus = "ACCOUNT_CREATED";
     }
 
+    let globalIsRealReschedule = false;
+
     // Handle Exam Scheduling / Rescheduling with Fee Logic
     if (body.scheduleExam && body.examDate) {
       // Fetch config for fee calculations
@@ -128,6 +130,7 @@ export async function PATCH(
       });
 
       const isReschedule = !!existingApplicant?.examDate;
+      globalIsRealReschedule = isReschedule;
       const isRetake = body.isRetake || ["FAILED", "ABSENT", "CANCELLED"].includes(existingApplicant?.status || "");
 
       if (isRetake) {
@@ -277,19 +280,23 @@ export async function PATCH(
 
     // 2. Create Log (Fire and Forget or await)
     if (newStatus) {
-      const isExamReschedule = newStatus === "EXAM_SCHEDULED" && body.scheduleExam;
+      const isExamAction = newStatus === "EXAM_SCHEDULED" && body.scheduleExam;
+      const logActionString = isExamAction 
+        ? (globalIsRealReschedule ? "EXAM_RESCHEDULED" : "EXAM_SCHEDULED") 
+        : `STATUS_CHANGED_TO_${newStatus}`;
+
       await prisma.activityLog.create({
         data: {
-          action: isExamReschedule ? "EXAM_RESCHEDULED" : `STATUS_CHANGED_TO_${newStatus}`,
-          details: isExamReschedule
-            ? `Exam rescheduled to ${body.examDate}`
+          action: logActionString,
+          details: isExamAction
+            ? `Exam scheduled/rescheduled to ${body.examDate}`
             : `Status updated to ${newStatus}`,
           applicantId: id,
         },
       });
 
       // --- NEW FEATURE: Generate ExamSession Token for Private Testing ---
-      if (isExamReschedule && applicant.profession) {
+      if (isExamAction && applicant.profession) {
         try {
           // Find if there corresponds a Profession model to this applicant's profession string
           const professionObj = await prisma.profession.findFirst({
@@ -337,14 +344,9 @@ export async function PATCH(
       }
 
       // If this is a reschedule (not first-time scheduling), send reschedule notification
-      if (newStatus === "EXAM_SCHEDULED" && body.scheduleExam) {
-        const prevExamDate = await prisma.activityLog.count({
-          where: { applicantId: id, action: "EXAM_RESCHEDULED" }
-        });
-        if (prevExamDate > 0) {
-          autoSendMessage(id, "ON_EXAM_RESCHEDULE")
-            .catch(e => console.error("[AutoSend] ON_EXAM_RESCHEDULE error:", e));
-        }
+      if (isExamAction && globalIsRealReschedule) {
+        autoSendMessage(id, "ON_EXAM_RESCHEDULE")
+          .catch(e => console.error("[AutoSend] ON_EXAM_RESCHEDULE error:", e));
       }
     }
 
