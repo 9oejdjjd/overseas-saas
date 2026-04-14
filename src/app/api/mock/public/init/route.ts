@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// Normalize phone numbers by stripping all non-digit chars except leading +
+function normalizePhone(phone: string): string {
+    if (!phone) return "";
+    // Remove spaces, dashes, parentheses
+    let cleaned = phone.replace(/[\s\-\(\)]/g, "");
+    // Ensure starts with +
+    if (!cleaned.startsWith("+")) cleaned = "+" + cleaned;
+    return cleaned;
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { visitorName, visitorPhone, professionSlug, deviceFingerprint } = body;
+        const { visitorName, professionSlug, deviceFingerprint } = body;
+        const visitorPhone = normalizePhone(body.visitorPhone || "");
 
         if (!visitorName || !visitorPhone || !professionSlug) {
             return NextResponse.json({ error: "Name, WhatsApp number, and profession are required" }, { status: 400 });
@@ -24,12 +35,15 @@ export async function POST(request: Request) {
         }
 
         // 1. Look for an existing UNFINISHED session (NEW, STARTED, RESUMED) for this phone/fingerprint
+        //    Also try matching phone without leading + for compatibility
+        const phoneWithoutPlus = visitorPhone.replace(/^\+/, "");
         const existingSession = await prisma.examSession.findFirst({
             where: {
                 professionId: profession.id,
                 status: { in: ["NEW", "STARTED", "RESUMED"] },
                 OR: [
                     { visitorPhone: visitorPhone },
+                    { visitorPhone: phoneWithoutPlus },
                     ...(deviceFingerprint ? [{ deviceFingerprint }] : [])
                 ]
             },
@@ -56,15 +70,27 @@ export async function POST(request: Request) {
                 }
             } else if (existingSession.status === "NEW") {
                 // Just a fresh session the user (or admin) created but never started. Resume it!
+                // Update the phone/fingerprint on the session in case admin created it without fingerprint
+                await prisma.examSession.update({
+                    where: { id: existingSession.id },
+                    data: {
+                        visitorPhone: visitorPhone,
+                        ...(deviceFingerprint ? { deviceFingerprint } : {})
+                    }
+                });
                 return NextResponse.json({ token: existingSession.token, professionName: profession.name });
             }
         }
 
         // 3. Check attempt limits - count ONLY fully consumed sessions (SUBMITTED, EXPIRED, TIMEOUT)
+        //    Search by both phone formats for consistency
         const previousAttemptsByPhone = await prisma.examSession.count({
             where: {
                 professionId: profession.id,
-                visitorPhone: visitorPhone,
+                OR: [
+                    { visitorPhone: visitorPhone },
+                    { visitorPhone: phoneWithoutPlus }
+                ],
                 status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
             }
         });

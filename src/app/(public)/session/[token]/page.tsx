@@ -73,19 +73,23 @@ export default function ExamSessionPage() {
 
             setInfo(data);
             
-            // Initialize phone number
-            const rawPhone = data.visitorPhone || data.applicant?.whatsappNumber || data.applicant?.phoneNumber || "";
+            // Initialize phone number from all possible sources
+            const rawPhone = data.visitorPhone || data.applicant?.whatsappNumber || data.applicant?.phone || "";
             // simple matching to split code and number
+            let parsedPhone = rawPhone;
             const matchingCountry = countries.find(c => rawPhone.startsWith(c.code));
             if (matchingCountry) {
                 setCountryCode(matchingCountry.code);
-                setEditablePhone(rawPhone.slice(matchingCountry.code.length));
+                parsedPhone = rawPhone.slice(matchingCountry.code.length);
+                setEditablePhone(parsedPhone);
             } else {
-                setEditablePhone(rawPhone.replace(/^\+?\d{1,3}/, '')); // Just a rough fallback
+                parsedPhone = rawPhone.replace(/^\+?\d{1,3}/, ''); // Just a rough fallback
+                setEditablePhone(parsedPhone);
             }
 
             if (data.status === "STARTED" || data.status === "RESUMED") {
-                startExam(false); // Resume
+                // Pass phone directly to avoid React state race condition
+                startExam(false, parsedPhone);
             } else if (data.status === "SUBMITTED") {
                 setStatus("ERROR");
                 setErrorMsg("لقد قمت بتسليم هذا الاختبار مسبقاً.");
@@ -101,8 +105,14 @@ export default function ExamSessionPage() {
         }
     };
 
-    const startExam = async (isNew = true) => {
-        if (!editablePhone) {
+    const startExam = async (isNew = true, directPhone?: string) => {
+        // Use directPhone (from resume) or editablePhone (from user input)
+        const phoneToUse = directPhone || editablePhone;
+        
+        // For PRIVATE sessions (registered applicants), skip phone validation
+        const isPrivateSession = info?.type === "PRIVATE" && info?.applicantId;
+        
+        if (!isPrivateSession && !phoneToUse) {
             setErrorMsg("رقم الواتساب مطلوب");
             setStatus("ERROR");
             return;
@@ -113,7 +123,7 @@ export default function ExamSessionPage() {
             const res = await fetch(`/api/mock/session/${token}/start`, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: `${countryCode}${editablePhone}` })
+                body: JSON.stringify({ phone: phoneToUse ? `${countryCode}${phoneToUse}` : undefined })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);

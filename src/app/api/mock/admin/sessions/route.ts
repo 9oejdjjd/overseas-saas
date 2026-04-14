@@ -125,9 +125,20 @@ export async function POST(request: Request) {
             const profession = await prisma.profession.findUnique({ where: { id: professionId } });
             if (!profession) return NextResponse.json({ error: "Profession not found" }, { status: 404 });
 
-            // Increase maxAttempts for this specific visitor by creating a new session with incremented attempt number
+            // Normalize phone for consistent matching
+            const normalizedPhone = visitorPhone.replace(/[\s\-\(\)]/g, "");
+
+            // Count ALL consumed attempts (SUBMITTED, EXPIRED, TIMEOUT) - consistent with public init
             const prevAttempts = await prisma.examSession.count({
-                where: { professionId, visitorPhone, status: "SUBMITTED" }
+                where: { 
+                    professionId, 
+                    OR: [
+                        { visitorPhone: normalizedPhone },
+                        { visitorPhone: normalizedPhone.replace(/^\+/, "") },
+                        { visitorPhone: visitorPhone }
+                    ],
+                    status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] } 
+                }
             });
 
             const newSession = await prisma.examSession.create({
@@ -135,7 +146,7 @@ export async function POST(request: Request) {
                     type: "PUBLIC",
                     professionId,
                     visitorName: body.visitorName || "محاولة إضافية",
-                    visitorPhone,
+                    visitorPhone: normalizedPhone,
                     passingScore: profession.passingScore,
                     attemptNumber: prevAttempts + 1
                 }

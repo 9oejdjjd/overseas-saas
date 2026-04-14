@@ -30,7 +30,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             applicantId: session.applicantId,
             applicant: session.applicant ? {
                 fullName: session.applicant.fullName,
-                whatsappNumber: session.applicant.whatsappNumber
+                whatsappNumber: session.applicant.whatsappNumber,
+                phone: (session.applicant as any).phone || null
             } : null
         });
 
