@@ -140,8 +140,17 @@ export async function autoSendDirectMessage(
         }
 
         let text = template.body;
+        // Robust replacement for all variables
         for (const [key, value] of Object.entries(vars)) {
-            text = text.replace(new RegExp(`\\{${key}\\}`, "g"), value);
+            // Replace {key} regardless of case or using different naming conventions
+            const placeholder = `{${key}}`;
+            text = text.split(placeholder).join(value || "");
+            
+            // Also handle lowercase/underscore variants just in case
+            const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            if (snakeKey !== key) {
+                text = text.split(`{${snakeKey}}`).join(value || "");
+            }
         }
 
         const sendResult = await sendWhatsAppMessage(phone, text);
@@ -301,10 +310,16 @@ async function replaceVariables(
         }
     }
 
-    // Custom Variables
+    // Custom Variables & Result URL
     if (customVars) {
         for (const [key, value] of Object.entries(customVars)) {
-            text = text.replace(new RegExp(`\\{${key}\\}`, "g"), value);
+            text = text.split(`{${key}}`).join(value || "");
+            
+            // Handle common variants
+            if (key === "resultPageUrl") {
+                text = text.split("{result_page_url}").join(value || "");
+                text = text.split("{resultUrl}").join(value || "");
+            }
         }
     }
 
