@@ -19,7 +19,8 @@ import {
     Award,
     Target,
     BarChart3,
-    ArrowLeft
+    ArrowLeft,
+    Sparkles
 } from "lucide-react";
 import { MockExamNavbar } from "@/components/mock/MockExamNavbar";
 
