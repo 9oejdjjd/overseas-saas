@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertCircle, Clock, ArrowLeft, ArrowRight, Trophy, XCircle, FileText, Check, LayoutGrid, AlertTriangle, ShieldCheck, BookOpen, Sparkles, MessageCircle, User, Phone, Search, ChevronDown } from "lucide-react";
+import { CheckCircle, AlertCircle, Clock, ArrowLeft, ArrowRight, Trophy, XCircle, FileText, Check, LayoutGrid, AlertTriangle, ShieldCheck, BookOpen, Sparkles, MessageCircle, User, Phone, Search, ChevronDown, BarChart3 } from "lucide-react";
 import { MockExamNavbar } from "@/components/mock/MockExamNavbar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
