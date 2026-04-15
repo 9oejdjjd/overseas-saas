@@ -99,11 +99,17 @@ async function sendMockResultNotification(session: any, profession: any, passed:
     try {
         const { autoSendMessage, autoSendDirectMessage } = await import("@/lib/autoSendMessage");
 
+        const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+        const resultPageUrl = `${baseUrl}/session/${session.token}/result`;
+
         if (session.applicantId) {
             // Registered applicant → ON_MOCK_PASS or ON_MOCK_FAIL
             const trigger = passed ? "ON_MOCK_PASS" : "ON_MOCK_FAIL";
             await autoSendMessage(session.applicantId, trigger, {
-                customVars: { profession: profession.name }
+                customVars: { 
+                    profession: profession.name,
+                    resultPageUrl: resultPageUrl
+                }
             });
         } else if (session.visitorPhone) {
             // Public visitor (not registered) → ON_MOCK_PASS_VISITOR or ON_MOCK_FAIL_VISITOR
@@ -111,6 +117,7 @@ async function sendMockResultNotification(session: any, profession: any, passed:
             await autoSendDirectMessage(session.visitorPhone, trigger, {
                 name: session.visitorName || "عزيزي/عزيزتي",
                 profession: profession.name,
+                resultPageUrl: resultPageUrl
             });
         }
     } catch (e) {
