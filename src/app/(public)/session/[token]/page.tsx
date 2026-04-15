@@ -499,18 +499,9 @@ export default function ExamSessionPage() {
                             </p>
                         </div>
 
-                        <div className="flex flex-col gap-3">
-                            <Button 
-                                onClick={() => router.push(`/session/${token}/result`)} 
-                                className="w-full h-16 text-xl font-bold bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-2xl shadow-xl shadow-green-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4"
-                            >
-                                <BarChart3 size={24} /> مراجعة النتيجة بالتفصيل
-                            </Button>
-
-                            <Button onClick={() => router.push("/")} className="w-full h-16 text-xl font-bold bg-white/10 hover:bg-white/20 text-white rounded-2xl border border-white/20 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4">
-                                العودة للرئيسية <ArrowLeft size={24} />
-                            </Button>
-                        </div>
+                        <Button onClick={() => router.push("/")} className="w-full h-16 text-xl font-bold bg-gradient-to-l from-[#16539a] to-blue-600 hover:from-blue-700 hover:to-[#16539a] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4">
+                            العودة للرئيسية <ArrowLeft size={24} />
+                        </Button>
                     </motion.div>
                 </div>
             </div>

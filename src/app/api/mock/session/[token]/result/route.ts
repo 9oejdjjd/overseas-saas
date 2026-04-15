@@ -9,6 +9,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             where: { token },
             include: {
                 profession: true,
+                applicant: {
+                    select: { fullName: true }
+                },
                 questions: {
                     include: {
                         question: {
@@ -39,7 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             isPassed: session.isPassed,
             startedAt: session.startedAt,
             completedAt: session.completedAt,
-            visitorName: session.visitorName,
+            visitorName: session.applicant?.fullName || session.visitorName || "زائر",
             professionName: session.profession.name,
             questions: session.questions.map(sq => ({
                 id: sq.id,
