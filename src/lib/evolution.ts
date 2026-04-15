@@ -159,3 +159,37 @@ export async function sendWhatsAppFile(phone: string, base64: string, fileName: 
         return { success: false, error: errorMessage };
     }
 }
+/**
+ * Check if a number is on WhatsApp using Evolution API
+ * @param phone Phone number (e.g., 9677XXXXXXXX)
+ * @returns boolean indicating if the number is registered on WhatsApp
+ */
+export async function onWhatsApp(phone: string): Promise<boolean> {
+    if (!EVOLUTION_API_KEY) return true; // Fallback if not configured
+
+    const cleanPhone = formatPhone(phone);
+
+    try {
+        const url = `${EVOLUTION_BASE_URL}/chat/whatsappNumbers/${EVOLUTION_INSTANCE}`;
+        
+        const response = await axios.post(
+            url,
+            {
+                numbers: [cleanPhone]
+            },
+            {
+                headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        // Evolution API returns an array of objects for checked numbers
+        const result = response.data?.[0];
+        return result?.exists || false;
+    } catch (error) {
+        console.error("Evolution onWhatsApp Check Error:", error);
+        return true; // Fallback to avoid blocking users if API is down
+    }
+}

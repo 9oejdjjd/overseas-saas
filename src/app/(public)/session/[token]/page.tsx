@@ -53,6 +53,9 @@ export default function ExamSessionPage() {
     const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
     
     const [editablePhone, setEditablePhone] = useState("");
+    const [editableName, setEditableName] = useState("");
+    const [nameError, setNameError] = useState("");
+    const [phoneError, setPhoneError] = useState("");
     const [countryCode, setCountryCode] = useState("+967");
     const [showCountryDropdown, setShowCountryDropdown] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -73,6 +76,9 @@ export default function ExamSessionPage() {
 
             setInfo(data);
             
+            const initialName = data.visitorName || data.applicant?.fullName || "";
+            setEditableName(initialName);
+
             // Initialize phone number from all possible sources
             const rawPhone = data.visitorPhone || data.applicant?.whatsappNumber || data.applicant?.phone || "";
             // simple matching to split code and number
@@ -105,42 +111,89 @@ export default function ExamSessionPage() {
         }
     };
 
+    const isValidArabicName = (name: string) => {
+        if (!name) return "الاسم مطلوب";
+        // Arabic characters and spaces only
+        const arabicRegex = /^[\u0600-\u06FF\s]+$/;
+        if (!arabicRegex.test(name)) return "الاسم يجب أن يكون باللغة العربية فقط وبدون أرقام";
+        // No repeated chars more than 2
+        if (/(.)\1\1/.test(name)) return "يرجى إدخال اسم صحيح وتجنب الحروف العشوائية المكررة";
+        // Word count 2 to 4
+        const words = name.trim().split(/\s+/);
+        if (words.length < 2) return "يرجى إدخال الاسم الثنائي على الأقل";
+        if (words.length > 4) return "يرجى إدخال الاسم الرباعي كحد أقصى";
+        return null;
+    };
+
+    const isFakePhone = (phone: string) => {
+        const digits = phone.replace(/\D/g, '').slice(-8); // Last 8 digits check
+        if (/^(\d)\1+$/.test(digits)) return true;
+        if ("1234567890".includes(digits) || "0987654321".includes(digits)) return true;
+        return false;
+    };
+
     const startExam = async (isNew = true, directPhone?: string) => {
-        // Use directPhone (from resume) or editablePhone (from user input)
         const phoneToUse = directPhone || editablePhone;
-        
-        // For PRIVATE sessions (registered applicants), skip phone validation
+        const nameToUse = editableName;
         const isPrivateSession = info?.type === "PRIVATE" && info?.applicantId;
-        
-        if (!isPrivateSession && !phoneToUse) {
-            setErrorMsg("رقم الواتساب مطلوب");
-            setStatus("ERROR");
-            return;
+
+        // Reset errors
+        setNameError("");
+        setPhoneError("");
+
+        // Validation
+        if (!isPrivateSession) {
+            const nError = isValidArabicName(nameToUse);
+            if (nError) {
+                setNameError(nError);
+                return;
+            }
+
+            if (!phoneToUse) {
+                setPhoneError("رقم الواتساب مطلوب");
+                return;
+            }
+            if (isFakePhone(phoneToUse)) {
+                setPhoneError("رقم الهاتف يبدو غير صحيح أو وهمي");
+                return;
+            }
         }
         
         try {
-            setStatus("LOADING");
+            setIsSubmitting(true);
             const res = await fetch(`/api/mock/session/${token}/start`, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: phoneToUse ? `${countryCode}${phoneToUse}` : undefined })
+                body: JSON.stringify({ 
+                    phone: phoneToUse ? `${countryCode}${phoneToUse}` : undefined,
+                    name: nameToUse
+                })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) {
+                if (data.error.includes("واتساب") || data.error.includes("الهاتف")) {
+                    setPhoneError(data.error);
+                } else if (data.error.includes("الاسم")) {
+                    setNameError(data.error);
+                } else {
+                    setErrorMsg(data.error);
+                    setStatus("ERROR");
+                }
+                return;
+            }
 
             setQuestions(data.questions);
-            
-            // Calculate remaining time
             const durationMs = (data.session.duration || 60) * 60 * 1000;
             const startedAt = new Date(data.session.startedAt).getTime();
             const now = new Date().getTime();
             const remaining = Math.max(0, durationMs - (now - startedAt));
             setTimeLeft(Math.floor(remaining / 1000));
-            
             setStatus("STARTED");
         } catch (err: any) {
             setErrorMsg(err.message || "فشل بدء الاختبار");
             setStatus("ERROR");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -225,7 +278,7 @@ export default function ExamSessionPage() {
     }
 
     if (status === "WELCOME") {
-        const displayName = info?.visitorName || info?.applicant?.fullName || "";
+        const displayName = editableName || info?.visitorName || info?.applicant?.fullName || "";
         const professionName = info?.profession?.name || "التخصص";
         const isRegistered = !!info?.applicant;
         
@@ -275,11 +328,11 @@ export default function ExamSessionPage() {
                         </div>
                         
                         <Button 
-                            onClick={() => isRegistered ? setStatus("TERMS") : startExam()} 
+                            onClick={() => setStatus("TERMS")} 
                             className="w-full h-14 text-lg font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3"
                         >
-                            {isRegistered ? "التالي — الشروط والأحكام" : "بدء الاختبار الآن"}
-                            {isRegistered ? <ArrowLeft size={20} /> : <Sparkles size={20} />}
+                            دخول بوابة الاختبار
+                            <ArrowLeft size={20} />
                         </Button>
                     </motion.div>
                 </main>
@@ -288,100 +341,81 @@ export default function ExamSessionPage() {
     }
 
     if (status === "TERMS") {
-        const displayName = info?.visitorName || info?.applicant?.fullName || "";
+        const isRegistered = !!info?.applicant;
         
         return (
             <div className="min-h-[100dvh] bg-white flex flex-col font-sans">
-                <MockExamNavbar title="الشروط والأحكام" />
+                <MockExamNavbar title="بيانات المتقدم والشروط" />
                 <main className="flex-1 flex items-center justify-center p-6">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
                         <div className="bg-white p-8 md:p-10 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100">
                             <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-5 mx-auto border border-amber-100">
                                 <ShieldCheck size={28} />
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2 text-center">الشروط والأحكام</h2>
-                            <p className="text-slate-400 text-sm text-center mb-6">يرجى قراءة الشروط التالية بعناية قبل بدء الاختبار</p>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2 text-center">البيانات والشروط</h2>
+                            <p className="text-slate-400 text-sm text-center mb-6">يرجى التأكد من بياناتك والموافقة على الشروط للبدء</p>
                             
-                            {/* Terms List */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 max-h-[250px] overflow-y-auto custom-scrollbar">
-                                <ol className="space-y-3 text-sm text-slate-600 leading-relaxed list-decimal list-inside">
-                                    <li>بوابة الاعتماد المهني هي منصة <span className="font-bold text-slate-800">تدريبية تأهيلية مستقلة</span>، وليس لها أي علاقة رسمية بهيئة تقويم التعليم والتدريب أو الاعتماد المهني السعودي الرسمي.</li>
-                                    <li>الأسئلة المقدمة هي لغرض <span className="font-bold text-slate-800">التدريب والتأهيل فقط</span>، وقد لا تتطابق مع الأسئلة الفعلية في الاختبار الرسمي.</li>
-                                    <li>هذا اختبار تجريبي <span className="font-bold text-slate-800">لتحديد المستوى</span> وليس اختباراً رسمياً معتمداً.</li>
-                                    <li>نتيجة هذا الاختبار التجريبي <span className="font-bold text-slate-800">لا تمثل ولا تضمن</span> نتيجة الاختبار الفعلي.</li>
-                                    <li>سيتم إرسال نتيجة الاختبار على <span className="font-bold text-slate-800">رقم الواتساب المسجل</span>، لذا تأكد من صحته.</li>
-                                    <li>يتحمل المستخدم <span className="font-bold text-slate-800">كامل المسؤولية</span> عن صحة البيانات المدخلة.</li>
-                                    <li>لا يحق للمستخدم المطالبة بأي تعويض بناءً على نتيجة هذا الاختبار التجريبي.</li>
-                                    <li>يحق لإدارة البوابة <span className="font-bold text-slate-800">تعديل أو تحديث</span> محتوى الاختبارات والشروط في أي وقت دون إشعار مسبق.</li>
-                                </ol>
-                            </div>
-
-                            {/* Instructions */}
-                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
-                                <div className="text-sm text-slate-600 space-y-2">
-                                    <p>• لا تغلق الصفحة أو تحدثها أثناء الاختبار.</p>
-                                    <p>• تأكد من <span className="font-bold">استقرار اتصالك بالإنترنت</span>.</p>
-                                    <p>• بمجرد بدء الاختبار سيبدأ العداد التنازلي ولن يتوقف.</p>
-                                </div>
-                            </div>
-
-                            {/* Terms Checkbox */}
-                            <div 
-                                className="flex items-start gap-3 mb-6 bg-slate-50 p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 transition-colors cursor-pointer" 
-                                onClick={() => setTermsAccepted(!termsAccepted)}
-                            >
-                                <Checkbox 
-                                    checked={termsAccepted}
-                                    className="w-5 h-5 rounded-md data-[state=checked]:bg-[#16539a] border-slate-300 border-2 pointer-events-none mt-0.5 shrink-0"
-                                />
-                                <Label className="text-sm font-bold text-slate-700 pointer-events-none leading-relaxed">
-                                    لقد قرأت الشروط والأحكام أعلاه وأوافق عليها بالكامل.
-                                </Label>
-                            </div>
-
-                            {/* Editable WhatsApp Confirmation */}
+                            {/* Identity Fields */}
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 mb-8">
                                 <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    <MessageCircle className="w-5 h-5 text-[#25D366]" /> تأكيد رقم الواتساب
+                                    <User className="w-5 h-5 text-[#16539a]" /> بيانات المتقدم
                                 </h3>
                                 
-                                <div className="space-y-4">
+                                <div className="space-y-4 text-right" dir="rtl">
                                     <div className="space-y-2">
-                                        <Label className="text-slate-600 font-bold text-sm">الاسم</Label>
+                                        <Label className="text-slate-600 font-bold text-sm">الاسم الكامل (بالعربية)</Label>
                                         <div className="relative">
                                             <User className="absolute right-4 top-3.5 text-slate-400 w-5 h-5" />
                                             <Input 
-                                                readOnly
-                                                className="pl-4 pr-12 h-12 text-base rounded-xl border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed" 
-                                                value={displayName}
+                                                className={`pl-4 pr-12 h-12 text-base rounded-xl border-slate-200 focus:border-[#16539a] focus:ring-[#16539a]/20 transition-all ${nameError ? 'border-red-500 bg-red-50' : 'bg-white'}`} 
+                                                placeholder="أدخل اسمك الثنائي إلى الرباعي..."
+                                                value={editableName}
+                                                onChange={e => {
+                                                    setEditableName(e.target.value);
+                                                    setNameError("");
+                                                }}
                                             />
                                         </div>
+                                        {nameError && <p className="text-red-500 text-xs font-bold mt-1 pr-1">{nameError}</p>}
                                     </div>
                                     
                                     <div className="space-y-2">
                                         <Label className="text-slate-600 font-bold text-sm">رقم الواتساب (لإرسال النتيجة)</Label>
-                                        <div className="relative flex items-center bg-white border border-slate-200 rounded-xl focus-within:border-[#16539a] focus-within:ring-2 focus-within:ring-[#16539a]/20 transition-all h-14 w-full group">
-                                            {/* Country Code Dropdown */}
-                                            <div className="h-full flex items-center relative">
+                                        <div className={`relative flex items-center bg-white border rounded-xl focus-within:border-[#16539a] focus-within:ring-2 focus-within:ring-[#16539a]/20 transition-all h-14 md:h-16 w-full group overflow-hidden ${phoneError ? 'border-red-500' : 'border-slate-200'}`}>
+                                            {/* Number Input (Takes priority on the Right in RTL) */}
+                                            <Input 
+                                                className="flex-1 h-full px-4 text-xl md:text-2xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 text-right outline-none placeholder:text-slate-300" 
+                                                placeholder="5X XXX XXXX"
+                                                dir="ltr"
+                                                readOnly={isRegistered}
+                                                value={editablePhone}
+                                                onChange={e => {
+                                                    setEditablePhone(e.target.value.replace(/\D/g, ''));
+                                                    setPhoneError("");
+                                                }}
+                                            />
+
+                                            {/* Country Code Dropdown (On the Left in RTL) */}
+                                            <div className="h-full flex items-center relative bg-slate-50 border-r border-slate-200">
                                                 <button 
                                                     type="button" 
-                                                    onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-                                                    className="h-full px-4 flex items-center gap-2 border-l border-slate-200 hover:bg-slate-50 transition-colors rounded-r-xl text-slate-700"
+                                                    disabled={isRegistered}
+                                                    onClick={() => !isRegistered && setShowCountryDropdown(!showCountryDropdown)}
+                                                    className={`h-full px-3 md:px-5 flex items-center gap-2 transition-colors text-slate-700 ${!isRegistered ? 'hover:bg-slate-100' : 'cursor-not-allowed'}`}
                                                     dir="ltr"
                                                 >
-                                                    <span className="text-xl leading-none">{countries.find(c => c.code === countryCode)?.flag}</span>
-                                                    <span className="font-mono font-bold text-base">{countryCode}</span>
-                                                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${showCountryDropdown ? 'rotate-180 text-[#16539a]' : ''}`} />
+                                                    <span className="text-xl md:text-2xl leading-none">{countries.find(c => c.code === countryCode)?.flag}</span>
+                                                    <span className="font-mono font-bold text-base md:text-lg">{countryCode}</span>
+                                                    {!isRegistered && <ChevronDown size={16} className={`text-slate-400 transition-transform ${showCountryDropdown ? 'rotate-180 text-[#16539a]' : ''}`} />}
                                                 </button>
                                                 
-                                                {/* Dropdown Menu */}
                                                 <AnimatePresence>
-                                                    {showCountryDropdown && (
+                                                    {showCountryDropdown && !isRegistered && (
                                                         <motion.div 
                                                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            className="absolute bottom-full right-0 mb-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-72 overflow-hidden z-50 flex flex-col"
+                                                            className="absolute bottom-full left-0 mb-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-72 overflow-hidden z-50 flex flex-col"
                                                         >
                                                             <div className="p-3 border-b border-slate-100 bg-slate-50/50">
                                                                 <div className="relative">
@@ -421,18 +455,10 @@ export default function ExamSessionPage() {
                                                     )}
                                                 </AnimatePresence>
                                             </div>
-
-                                            {/* Number Input */}
-                                            <Input 
-                                                className="flex-1 h-full px-4 text-xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 text-left outline-none placeholder:text-slate-300" 
-                                                placeholder="5X XXX XXXX"
-                                                dir="ltr"
-                                                value={editablePhone}
-                                                onChange={e => setEditablePhone(e.target.value.replace(/\D/g, ''))}
-                                            />
                                         </div>
+                                        {phoneError && <p className="text-red-500 text-xs font-bold mt-1 pr-1">{phoneError}</p>}
                                     </div>
-
+                                    
                                     <div 
                                         className="flex items-start gap-3 mt-4 bg-green-50/60 p-3 rounded-lg border border-green-200/60 hover:border-green-300 transition-colors cursor-pointer" 
                                         onClick={() => setWhatsappConfirmed(!whatsappConfirmed)}
@@ -448,8 +474,26 @@ export default function ExamSessionPage() {
                                 </div>
                             </div>
 
+                            {/* Terms Checkbox */}
+                            <div 
+                                className="flex items-start gap-3 mb-8 bg-slate-50 p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 transition-colors cursor-pointer" 
+                                onClick={() => setTermsAccepted(!termsAccepted)}
+                            >
+                                <Checkbox 
+                                    checked={termsAccepted}
+                                    className="w-5 h-5 rounded-md data-[state=checked]:bg-[#16539a] border-slate-300 border-2 pointer-events-none mt-0.5 shrink-0"
+                                />
+                                <Label className="text-sm font-bold text-slate-700 pointer-events-none leading-relaxed text-right" dir="rtl">
+                                    لقد قرأت <span className="text-[#16539a] underline">الشروط والأحكام</span> وأوافق عليها بالكامل.
+                                </Label>
+                            </div>
+
                             <div className="flex gap-3">
-                                <Button onClick={() => setStatus("WELCOME")} variant="outline" className="w-[30%] h-14 text-base font-bold rounded-2xl border-2 border-slate-200 text-slate-600 hover:bg-slate-50">
+                                <Button 
+                                    onClick={() => setStatus("WELCOME")} 
+                                    variant="outline" 
+                                    className="w-[30%] h-16 text-base font-bold rounded-2xl border-2 border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+                                >
                                     رجوع
                                 </Button>
                                 <Button 

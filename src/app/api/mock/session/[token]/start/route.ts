@@ -17,6 +17,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             body = parsed.data;
         } catch (e) { }
 
+        // --- ENHANCED VALIDATION ---
+        const isValidArabicName = (name: string) => {
+            if (!name) return false;
+            const arabicRegex = /^[\u0600-\u06FF\s]+$/;
+            if (!arabicRegex.test(name)) return false;
+            if (/(.)\1\1/.test(name)) return false; 
+            const words = name.trim().split(/\s+/);
+            return words.length >= 2 && words.length <= 4;
+        };
+
+        const isFakePhone = (phone: string) => {
+            const digits = phone.replace(/\D/g, '').slice(-8); // Check last 8 digits
+            if (/^(\d)\1+$/.test(digits)) return true;
+            if ("1234567890".includes(digits) || "0987654321".includes(digits)) return true;
+            return false;
+        };
+
+        if (body.name && !isValidArabicName(body.name)) {
+            return NextResponse.json({ error: "الاسم غير مقبول. يرجى إدخال اسم عربي ثنائي إلى رباعي صحيح." }, { status: 400 });
+        }
+
+        if (body.phone) {
+            if (isFakePhone(body.phone)) {
+                return NextResponse.json({ error: "رقم الهاتف غير صحيح أو وهمي." }, { status: 400 });
+            }
+            
+            const { onWhatsApp } = await import("@/lib/evolution");
+            const exists = await onWhatsApp(body.phone);
+            if (!exists) {
+                return NextResponse.json({ error: "هذا الرقم غير مسجل في واتساب. يرجى استخدام رقم فعال لاستلام النتيجة." }, { status: 400 });
+            }
+        }
+        // ---------------------------
+
         const session = await prisma.examSession.findUnique({
             where: { token },
             include: { 
@@ -132,7 +166,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             const updates: any[] = [
                 prisma.examSession.update({
                     where: { id: session.id },
-                    data: { status: "STARTED", startedAt: new Date() }
+                    data: { 
+                        status: "STARTED", 
+                        startedAt: new Date(),
+                        visitorName: body.name || session.visitorName
+                    }
                 }),
                 prisma.examSessionQuestion.createMany({
                     data: selectedQuestions.map(q => ({

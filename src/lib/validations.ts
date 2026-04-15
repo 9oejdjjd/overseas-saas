@@ -16,7 +16,8 @@ export const userUpdateSchema = z.object({
 });
 
 export const sessionStartSchema = z.object({
-  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format").optional(), // Supports international E.164 format roughly
+  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format").optional(), 
+  name: z.string().optional(),
 });
 
 export const applicantCreateSchema = z.object({
