@@ -249,10 +249,10 @@ export async function PATCH(
     ) {
       // Whitelist fields to update
       const allowedFields = [
-        'firstName', 'lastName', 'passportNumber', 'nationalId', 'profession', 'notes',
+        'fullName', 'firstName', 'lastName', 'passportNumber', 'nationalId', 'profession', 'notes',
         'locationId', 'transportFromId', 'transportType', 'hasTransportation',
         'totalAmount', 'discount', 'amountPaid', 'remainingBalance',
-        'examLocation', 'examCenterId' // Note: examDate/Time handled above
+        'examLocation', 'examCenterId', 'phone', 'whatsappNumber' // Note: examDate/Time handled above
       ];
 
       allowedFields.forEach(field => {

@@ -189,13 +189,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 })
             ];
 
-            // Update applicant phone if provided in Private session
-            if (session.type === "PRIVATE" && session.applicantId && body.phone) {
-                updates.push(prisma.applicant.update({
-                    where: { id: session.applicantId },
-                    data: { whatsappNumber: body.phone }
-                }));
-            }
+
 
             // Save relationship
             await prisma.$transaction(updates);

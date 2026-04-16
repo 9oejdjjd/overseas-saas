@@ -168,14 +168,19 @@ export function ApplicantInfoTab({ applicant, isPlatformRegistered, onUpdate, vi
                                             whatsappNumber: applicant.whatsappNumber || ""
                                         });
                                     } else {
-                                        // When entering edit mode, ensure we don't wipe out existing data
-                                        // Pre-fill empty names if full name exists
-                                        setBasicInfo(prev => ({
-                                            ...prev,
-                                            fullName: prev.fullName || applicant.fullName || "",
-                                            firstName: prev.firstName || (applicant.fullName && !applicant.firstName ? applicant.fullName.split(' ')[0] : prev.firstName),
-                                            lastName: prev.lastName || (applicant.fullName && !applicant.lastName ? applicant.fullName.split(' ').slice(1).join(' ') : prev.lastName)
-                                        }));
+                                        // When entering edit mode, ensure we populate with the absolute latest Applicant data
+                                        setBasicInfo({
+                                            fullName: applicant.fullName || "",
+                                            firstName: applicant.firstName || (applicant.fullName && !applicant.firstName ? applicant.fullName.split(' ')[0] : ""),
+                                            lastName: applicant.lastName || (applicant.fullName && !applicant.lastName ? applicant.fullName.split(' ').slice(1).join(' ') : ""),
+                                            passportNumber: applicant.passportNumber || "",
+                                            passportExpiry: applicant.passportExpiry ? new Date(applicant.passportExpiry) : undefined,
+                                            dob: applicant.dob ? new Date(applicant.dob) : undefined,
+                                            nationalId: applicant.nationalId || "",
+                                            profession: applicant.profession || "",
+                                            phone: applicant.phone || "",
+                                            whatsappNumber: applicant.whatsappNumber || ""
+                                        });
                                     }
                                     setIsEditingBasic(!isEditingBasic);
                                 }}
