@@ -16,8 +16,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
         if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 404 });
 
-        if (session.status !== "STARTED") {
+        if (session.status !== "STARTED" && session.status !== "RESUMED") {
             return NextResponse.json({ error: "Session must be started to submit answers" }, { status: 400 });
+        }
+
+        // === ANTI-CHEAT: Server-side timeout enforcement ===
+        // Prevents submitting answers after the allowed exam time even if the client timer was manipulated
+        if (session.startedAt) {
+            const examDurationMs = (session.profession?.examDuration || 60) * 60 * 1000;
+            const gracePeriodMs = 60 * 1000; // 1 minute grace for slow networks
+            const deadline = new Date(session.startedAt).getTime() + examDurationMs + gracePeriodMs;
+            const now = Date.now();
+
+            if (now > deadline) {
+                // Auto-fail: mark session as TIMEOUT
+                await prisma.examSession.update({
+                    where: { id: session.id },
+                    data: { status: "TIMEOUT", completedAt: new Date(), score: 0, isPassed: false }
+                });
+                return NextResponse.json({ 
+                    error: "انتهى الوقت المسموح للاختبار. تم تسجيل النتيجة كـ (راسب) تلقائياً." 
+                }, { status: 400 });
+            }
         }
 
         if (!Array.isArray(answers)) {

@@ -34,23 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             return false;
         };
 
-        if (body.name && !isValidArabicName(body.name)) {
-            return NextResponse.json({ error: "الاسم غير مقبول. يرجى إدخال اسم عربي ثنائي إلى رباعي صحيح." }, { status: 400 });
-        }
-
-        if (body.phone) {
-            if (isFakePhone(body.phone)) {
-                return NextResponse.json({ error: "رقم الهاتف غير صحيح أو وهمي." }, { status: 400 });
-            }
-            
-            const { onWhatsApp } = await import("@/lib/evolution");
-            const exists = await onWhatsApp(body.phone);
-            if (!exists) {
-                return NextResponse.json({ error: "هذا الرقم غير مسجل في واتساب. يرجى استخدام رقم فعال لاستلام النتيجة." }, { status: 400 });
-            }
-        }
-        // ---------------------------
-
+        // Fetch session FIRST before any validation
         const session = await prisma.examSession.findUnique({
             where: { token },
             include: { 
@@ -74,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             return NextResponse.json({ error: "Session is already completed or expired" }, { status: 400 });
         }
 
-        // If session is already STARTED or RESUMED, just transition status and return existing data
+        // If session is already STARTED or RESUMED, skip all validation (already done on first start)
         if (session.status === "STARTED" || session.status === "RESUMED") {
             // Update status to RESUMED to log that they came back
             await prisma.examSession.update({
@@ -101,10 +85,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     visitorName: session.visitorName || session.applicant?.fullName,
                     duration: session.profession.examDuration,
                     startedAt: session.startedAt,
+                    serverNow: new Date().toISOString()
                 },
                 questions: existingQuestions
             });
         }
+        // --- VALIDATION: Only for NEW sessions (resumed ones already passed this) ---
+        if (session.type !== "PRIVATE") {
+            if (body.name && !isValidArabicName(body.name)) {
+                return NextResponse.json({ error: "الاسم غير مقبول. يرجى إدخال اسم عربي ثنائي إلى رباعي صحيح." }, { status: 400 });
+            }
+
+            if (body.phone) {
+                if (isFakePhone(body.phone)) {
+                    return NextResponse.json({ error: "رقم الهاتف غير صحيح أو وهمي." }, { status: 400 });
+                }
+                
+                try {
+                    const { onWhatsApp } = await import("@/lib/evolution");
+                    const exists = await onWhatsApp(body.phone);
+                    if (!exists) {
+                        return NextResponse.json({ error: "هذا الرقم غير مسجل في واتساب. يرجى استخدام رقم فعال لاستلام النتيجة." }, { status: 400 });
+                    }
+                } catch (waError) {
+                    console.warn("[WhatsApp Check] Evolution API unreachable, skipping check:", waError);
+                    // Don't block the exam if WhatsApp check fails
+                }
+            }
+        }
+        // ---------------------------
 
         // If it's a NEW session, we must select random questions and link them
         if (session.status === "NEW") {
@@ -211,6 +220,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     visitorName: session.visitorName,
                     duration: session.profession.examDuration,
                     startedAt: new Date(),
+                    serverNow: new Date().toISOString()
                 },
                 questions: safeQuestions
             });
@@ -245,6 +255,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 visitorName: session.visitorName,
                 duration: session.profession.examDuration,
                 startedAt: session.startedAt,
+                serverNow: new Date().toISOString()
             },
             questions: safeQuestions
         });

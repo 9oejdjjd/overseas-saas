@@ -99,8 +99,6 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
         }
     };
 
-    if (applicant.status !== "EXAM_SCHEDULED") return null;
-
     return (
         <TooltipProvider>
             <Tooltip>

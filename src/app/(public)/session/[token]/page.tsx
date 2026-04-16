@@ -80,10 +80,15 @@ export default function ExamSessionPage() {
             setEditableName(initialName);
 
             // Initialize phone number from all possible sources
-            const rawPhone = data.visitorPhone || data.applicant?.whatsappNumber || data.applicant?.phone || "";
-            // simple matching to split code and number
+            let rawPhone = data.visitorPhone || data.applicant?.whatsappNumber || data.applicant?.phone || "";
+            // Normalize: convert 00xxx to +xxx format before matching
+            rawPhone = rawPhone.replace(/^00/, '+');
+            if (rawPhone && !rawPhone.startsWith('+')) rawPhone = '+' + rawPhone;
+            
             let parsedPhone = rawPhone;
-            const matchingCountry = countries.find(c => rawPhone.startsWith(c.code));
+            // Sort countries by code length (longest first) to match +9665 before +966
+            const sortedCountries = [...countries].sort((a, b) => b.code.length - a.code.length);
+            const matchingCountry = sortedCountries.find(c => rawPhone.startsWith(c.code));
             if (matchingCountry) {
                 setCountryCode(matchingCountry.code);
                 parsedPhone = rawPhone.slice(matchingCountry.code.length);
@@ -94,8 +99,8 @@ export default function ExamSessionPage() {
             }
 
             if (data.status === "STARTED" || data.status === "RESUMED") {
-                // Pass phone directly to avoid React state race condition
-                startExam(false, parsedPhone);
+                // Pass phone AND name directly to avoid React state race condition
+                startExam(false, parsedPhone, initialName);
             } else if (data.status === "SUBMITTED") {
                 setStatus("ERROR");
                 setErrorMsg("لقد قمت بتسليم هذا الاختبار مسبقاً.");
@@ -132,17 +137,17 @@ export default function ExamSessionPage() {
         return false;
     };
 
-    const startExam = async (isNew = true, directPhone?: string) => {
+    const startExam = async (isNew = true, directPhone?: string, directName?: string) => {
         const phoneToUse = directPhone || editablePhone;
-        const nameToUse = editableName;
+        const nameToUse = directName || editableName;
         const isPrivateSession = info?.type === "PRIVATE" && info?.applicantId;
 
         // Reset errors
         setNameError("");
         setPhoneError("");
 
-        // Validation
-        if (!isPrivateSession) {
+        // Only validate on FIRST start, not on resume (data was already validated)
+        if (isNew && !isPrivateSession) {
             const nError = isValidArabicName(nameToUse);
             if (nError) {
                 setNameError(nError);
@@ -183,10 +188,10 @@ export default function ExamSessionPage() {
             }
 
             setQuestions(data.questions);
+            const serverNowMs = new Date(data.session.serverNow || new Date().toISOString()).getTime();
             const durationMs = (data.session.duration || 60) * 60 * 1000;
             const startedAt = new Date(data.session.startedAt).getTime();
-            const now = new Date().getTime();
-            const remaining = Math.max(0, durationMs - (now - startedAt));
+            const remaining = Math.max(0, durationMs - (serverNowMs - startedAt));
             setTimeLeft(Math.floor(remaining / 1000));
             setStatus("STARTED");
         } catch (err: any) {
@@ -197,21 +202,22 @@ export default function ExamSessionPage() {
         }
     };
 
+    // Timer built once when status changes to STARTED. No timeLeft dependency = no re-creation every second.
     useEffect(() => {
-        if (status === "STARTED" && timeLeft > 0) {
-            const timer = setInterval(() => {
-                setTimeLeft(prev => {
-                    if (prev <= 1) {
-                        clearInterval(timer);
-                        submitExam();
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-            return () => clearInterval(timer);
-        }
-    }, [status, timeLeft]);
+        if (status !== "STARTED") return;
+        const timer = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    submitExam();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status]);
 
     const handleSelectOption = (questionId: string, optionId: string) => {
         setAnswers(prev => {
@@ -251,14 +257,6 @@ export default function ExamSessionPage() {
         return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    if (status === "LOADING") {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-                <div className="w-16 h-16 border-4 border-[#16539a] border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
-
     if (status === "ERROR") {
         return (
             <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -276,6 +274,16 @@ export default function ExamSessionPage() {
             </div>
         );
     }
+
+    if (status === "LOADING" || !info) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+                <div className="w-16 h-16 border-4 border-[#16539a] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
+
 
     if (status === "WELCOME") {
         const displayName = editableName || info?.visitorName || info?.applicant?.fullName || "";
@@ -368,7 +376,7 @@ export default function ExamSessionPage() {
                                             <User className="absolute right-4 top-3.5 text-slate-400 w-5 h-5" />
                                             <Input 
                                                 className={`pl-4 pr-12 h-12 text-base rounded-xl border-slate-200 focus:border-[#16539a] focus:ring-[#16539a]/20 transition-all ${nameError ? 'border-red-500 bg-red-50' : 'bg-white'}`} 
-                                                placeholder="أدخل اسمك الثنائي إلى الرباعي..."
+                                                placeholder="أدخل اسمك ..."
                                                 value={editableName}
                                                 onChange={e => {
                                                     setEditableName(e.target.value);
@@ -385,7 +393,7 @@ export default function ExamSessionPage() {
                                             {/* Number Input (Takes priority on the Right in RTL) */}
                                             <Input 
                                                 className="flex-1 h-full px-4 text-xl md:text-2xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 text-right outline-none placeholder:text-slate-300" 
-                                                placeholder="5X XXX XXXX"
+                                                placeholder="XXX XXX XXX"
                                                 dir="ltr"
                                                 readOnly={isRegistered}
                                                 value={editablePhone}
