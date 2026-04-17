@@ -47,6 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             questions: session.questions.map(sq => ({
                 id: sq.id,
                 questionId: sq.questionId,
+                axis: sq.question.axis, // Added axis field
                 text: sq.question.text,
                 explanation: sq.question.explanation,
                 selectedOptionId: sq.selectedOptionId,

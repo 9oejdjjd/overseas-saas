@@ -47,10 +47,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         let correctAnswers = 0;
         const totalQuestions = session.questions.length;
 
-        // Process each answer
-        const updatePromises = session.questions.map(async (sessionQuestion) => {
+        // Pre-calculate correct answers and prepare updates synchronously
+        const updates = session.questions.map((sessionQuestion) => {
             const userAnswer = answers.find(a => a.questionId === sessionQuestion.questionId);
-
             let isCorrect = false;
             let selectedOptionId = null;
 
@@ -63,11 +62,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 }
             }
 
-            return prisma.examSessionQuestion.update({
-                where: { id: sessionQuestion.id },
-                data: { selectedOptionId, isCorrect }
-            });
+            return { id: sessionQuestion.id, selectedOptionId, isCorrect };
         });
+
+        // Execute updates
+        const updatePromises = updates.map(update => 
+            prisma.examSessionQuestion.update({
+                where: { id: update.id },
+                data: { selectedOptionId: update.selectedOptionId, isCorrect: update.isCorrect }
+            })
+        );
 
         await Promise.all(updatePromises);
 

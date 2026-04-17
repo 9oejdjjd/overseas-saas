@@ -84,9 +84,22 @@ export default function MockExamsAdminPage() {
     };
 
     const stopAttempts = async (session: any) => {
-        if (!confirm("هل أنت متأكد من إيقاف أو إلغاء محاولة أو جلسة هذا المتقدم؟")) return;
-        alert("تم إرسال طلب إيقاف المحاولات السابقة/الحالية بنجاح (Simulation).");
-        // In real app, call a DELETE/PUT endpoint here.
+        if (!confirm("هل أنت متأكد من إيقاف الجلسة الحالية؟")) return;
+        try {
+            const res = await fetch("/api/mock/admin/sessions", {
+                method: "PATCH", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ sessionId: session.id, status: "EXPIRED" })
+            });
+            if (res.ok) {
+                alert("تم إيقاف الجلسة بنجاح.");
+                fetchSessions();
+            } else {
+                alert("حدث خطأ أثناء محاولة الإيقاف.");
+            }
+        } catch(error) {
+            console.error(error);
+        }
     };
 
     useEffect(() => {
@@ -98,7 +111,7 @@ export default function MockExamsAdminPage() {
     const total = sessions.reduce((acc, g) => acc + g.totalAttempts, 0);
     const passed = sessions.filter(g => g.isPassed).length;
     const failed = sessions.filter(g => !g.isPassed && g.status === "SUBMITTED").length;
-    const pending = sessions.reduce((acc, g) => acc + g.sessions.filter((s:any) => s.status === "STARTED").length, 0);
+    const pending = sessions.reduce((acc, g) => acc + g.sessions.filter((s:any) => s.status === "STARTED" || s.status === "RESUMED").length, 0);
 
     return (
         <div className="space-y-6">
@@ -201,13 +214,13 @@ export default function MockExamsAdminPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center">
+                                        <td colSpan={7} className="py-12 text-center">
                                             <Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-400" />
                                         </td>
                                     </tr>
                                 ) : sessions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center text-gray-500">
+                                        <td colSpan={7} className="py-12 text-center text-gray-500">
                                             لا توجد جلسات اختبار حالياً
                                         </td>
                                     </tr>

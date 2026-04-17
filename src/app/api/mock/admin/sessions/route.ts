@@ -59,6 +59,7 @@ export async function GET(request: Request) {
                     sessions: [],
                     bestScore: 0,
                     lastScore: 0,
+                    hasSetLastScore: false,
                     isPassed: false,
                     totalAttempts: 0,
                     status: session.status,
@@ -77,12 +78,13 @@ export async function GET(request: Request) {
             group.sessions.push(session);
             group.totalAttempts += 1;
 
-            if (session.status === "SUBMITTED" && session.score) {
+            if (session.status === "SUBMITTED" && session.score !== null) {
                 const scoreNum = Number(session.score);
                 if (scoreNum > group.bestScore) group.bestScore = scoreNum;
-                // Since sessions are ordered by desc, the first one encountered is the latest
-                if (group.sessions.length === 1) {
+                // Since sessions are ordered by desc, the first SUBMITTED one encountered is the latest
+                if (!group.hasSetLastScore) {
                     group.lastScore = scoreNum;
+                    group.hasSetLastScore = true;
                 }
                 if (scoreNum >= session.passingScore) {
                     group.isPassed = true;
@@ -192,5 +194,32 @@ export async function POST(request: Request) {
     } catch (error) {
         console.error("POST Session Error:", error);
         return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
+    }
+}
+
+// Stop/Cancel session attempt
+export async function PATCH(request: Request) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
+        const body = await request.json();
+        const { sessionId, status } = body;
+
+        if (!sessionId || !status) {
+            return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
+        }
+
+        const updated = await prisma.examSession.update({
+            where: { id: sessionId },
+            data: { status }
+        });
+
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error("PATCH Session Error:", error);
+        return NextResponse.json({ error: "Failed to update session" }, { status: 500 });
     }
 }

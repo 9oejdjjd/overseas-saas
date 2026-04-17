@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,12 @@ export default function ExamSessionPage() {
     const [showSidebar, setShowSidebar] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
+    
+    // Maintain a ref to current answers safely
+    const answersRef = useRef(answers);
+    useEffect(() => {
+        answersRef.current = answers;
+    }, [answers]);
     
     const [editablePhone, setEditablePhone] = useState("");
     const [editableName, setEditableName] = useState("");
@@ -188,6 +194,26 @@ export default function ExamSessionPage() {
             }
 
             setQuestions(data.questions);
+
+            let restoredAnswers = data.questions
+                .filter((q: any) => q.selectedOptionId)
+                .map((q: any) => ({
+                    questionId: q.questionId,
+                    selectedOptionId: q.selectedOptionId
+                }));
+            
+            // Try to load from localStorage if backend is empty
+            if (restoredAnswers.length === 0) {
+                try {
+                    const localData = localStorage.getItem(`exam_answers_${token}`);
+                    if (localData) restoredAnswers = JSON.parse(localData);
+                } catch (e) {}
+            }
+
+            if (restoredAnswers.length > 0) {
+                setAnswers(restoredAnswers);
+            }
+
             const serverNowMs = new Date(data.session.serverNow || new Date().toISOString()).getTime();
             const durationMs = (data.session.duration || 60) * 60 * 1000;
             const startedAt = new Date(data.session.startedAt).getTime();
@@ -202,44 +228,78 @@ export default function ExamSessionPage() {
         }
     };
 
-    // Timer built once when status changes to STARTED. No timeLeft dependency = no re-creation every second.
+    // Timer and unload protections
     useEffect(() => {
         if (status !== "STARTED") return;
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "هل أنت متأكد من مغادرة الاختبار؟ سيتم حفظ إجاباتك الحالية.";
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
         const timer = setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(timer);
-                    submitExam();
+                    submitExam(answersRef.current, true); // auto-submit gracefully
                     return 0;
                 }
                 return prev - 1;
             });
         }, 1000);
-        return () => clearInterval(timer);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
 
     const handleSelectOption = (questionId: string, optionId: string) => {
         setAnswers(prev => {
             const exist = prev.find(a => a.questionId === questionId);
-            if (exist) {
-                return prev.map(a => a.questionId === questionId ? { ...a, selectedOptionId: optionId } : a);
-            }
-            return [...prev, { questionId, selectedOptionId: optionId }];
+            const newAnswers = exist 
+                ? prev.map(a => a.questionId === questionId ? { ...a, selectedOptionId: optionId } : a)
+                : [...prev, { questionId, selectedOptionId: optionId }];
+            
+            try { localStorage.setItem(`exam_answers_${token}`, JSON.stringify(newAnswers)); } catch (e) {}
+            return newAnswers;
         });
+
+        // Fire-and-forget save to backend
+        fetch(`/api/mock/session/${token}/save-answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questionId, selectedOptionId: optionId })
+        }).catch(() => {});
     };
 
-    const submitExam = async () => {
+    const submitExam = async (autoSubmitAnswers?: any[], isAutoSubmit = false) => {
         if (isSubmitting) return;
+
+        const finalAnswers = autoSubmitAnswers || answersRef.current;
+
+        if (!isAutoSubmit) {
+            const unanswered = questions.length - finalAnswers.length;
+            const msg = unanswered > 0 
+                ? `لديك ${unanswered} أسئلة غير مجابة مجمل ${questions.length}. هل أنت متأكد من التسليم النهائي؟`
+                : "هل أنت متأكد من تأكيد وتسليم إجاباتك؟";
+            
+            if (!window.confirm(msg)) return;
+        }
+
         setIsSubmitting(true);
         try {
             const res = await fetch(`/api/mock/session/${token}/submit`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ answers })
+                body: JSON.stringify({ answers: finalAnswers })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
+
+            try { localStorage.removeItem(`exam_answers_${token}`); } catch (e) {}
 
             setResult(data.result);
             setStatus("RESULT");
@@ -640,7 +700,7 @@ export default function ExamSessionPage() {
 
                     <div className="p-6 border-t border-slate-100 bg-slate-50 hidden lg:block">
                         <Button 
-                            onClick={submitExam}
+                            onClick={() => submitExam()}
                             disabled={isSubmitting || answers.length < questions.length - 5} // allow submitting if near end
                             className="w-full h-16 text-lg font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-2xl shadow-xl shadow-green-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
@@ -736,7 +796,7 @@ export default function ExamSessionPage() {
                         
                         {currentQuestionIdx === questions.length - 1 ? (
                             <Button 
-                                onClick={submitExam}
+                                onClick={() => submitExam()}
                                 disabled={isSubmitting || answers.length < questions.length - 5}
                                 className="h-14 md:h-16 px-6 md:px-12 text-base md:text-xl font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-xl md:rounded-2xl shadow-xl shadow-green-900/20 gap-2 md:gap-3 flex items-center justify-center disabled:opacity-50"
                             >

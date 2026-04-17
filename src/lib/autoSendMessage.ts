@@ -158,39 +158,23 @@ export async function autoSendDirectMessage(
         
         console.log(`[AutoSendDirect] ${trigger} → ${phone}: ${status}`);
 
-        // Log to MessageLog for visitors so it can be retried 
-        // Since schema requires applicantId, we'll try to find an applicant with this phone, otherwise create a temporary one.
         let applicant = await prisma.applicant.findFirst({
             where: { OR: [{ whatsappNumber: phone }, { phone: phone }] }
         });
 
-        if (!applicant) {
-            // Create a dummy applicant for the visitor so we can track their messages
-            applicant = await prisma.applicant.create({
+        if (applicant) {
+            await prisma.messageLog.create({
                 data: {
-                    fullName: "زائر (اختبار تجريبي)",
-                    profession: "غير محدد",
-                    phone: phone,
-                    whatsappNumber: phone,
-                    status: "NEW_REGISTRATION",
-                    totalAmount: 0,
-                    remainingBalance: 0,
-                    notes: "تم الإنشاء تلقائياً لتتبع رسائل الاختبار التجريبي للزوار"
+                    applicantId: applicant.id,
+                    templateId: template.id,
+                    trigger,
+                    channel: "WHATSAPP",
+                    message: text,
+                    status,
+                    sentAt: sendResult.success ? new Date() : undefined,
                 }
             });
         }
-
-        await prisma.messageLog.create({
-            data: {
-                applicantId: applicant.id,
-                templateId: template.id,
-                trigger,
-                channel: "WHATSAPP",
-                message: text,
-                status,
-                sentAt: sendResult.success ? new Date() : undefined,
-            }
-        });
 
         return { success: sendResult.success };
     } catch (error) {

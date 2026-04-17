@@ -122,29 +122,57 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 include: { options: true }
             });
 
-            // Saudi Professional Exam style: 30 Questions total (27 HARD, 3 MEDIUM), fairly distributed across all 8 axes
+            const totalRequired = session.profession.questionCount || 30;
+            
+            // Filter strictly HARD questions (K1, K2 levels)
+            const hardQs = questionBank.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
+            
             let selectedQuestions: any[] = [];
             
-            const hardQs = questionBank.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
-            const mediumQs = questionBank.filter(q => q.difficulty === "MEDIUM").sort(() => 0.5 - Math.random());
+            // 1. Separate questions by specific axes
+            const axisGroups: { [key: string]: any[] } = {
+                HEALTH_SAFETY: [],
+                OCCUPATIONAL_SAFETY: [],
+                EMERGENCIES_FIRST_AID: [],
+                OTHER: []
+            };
 
-            // Helper to pick target amount fairly across different axes
+            hardQs.forEach(q => {
+                if (q.axis === "HEALTH_SAFETY" || q.axis === "OCCUPATIONAL_SAFETY" || q.axis === "EMERGENCIES_FIRST_AID") {
+                    axisGroups[q.axis].push(q);
+                } else {
+                    // All other axes go to OTHER group (to be distributed fairly)
+                    axisGroups.OTHER.push(q);
+                }
+            });
+
+            // 2. Pick exact requested constraints (2, 2, 1)
+            const hsPicks = axisGroups.HEALTH_SAFETY.splice(0, 2);
+            const osPicks = axisGroups.OCCUPATIONAL_SAFETY.splice(0, 2);
+            const efaPicks = axisGroups.EMERGENCIES_FIRST_AID.splice(0, 1);
+            
+            selectedQuestions.push(...hsPicks, ...osPicks, ...efaPicks);
+
+            // 3. The remaining questions (e.g. 25, if total is 30) distributed equally across remaining axes
+            const remainingTarget = totalRequired - selectedQuestions.length;
+            
+            // Helper to pick target amount fairly across different remaining axes
             const pickFairly = (sourceQs: any[], targetAmount: number) => {
-                const axesGroups: { [key: string]: any[] } = {};
+                const subGroups: { [key: string]: any[] } = {};
                 sourceQs.forEach(q => {
-                    if (!axesGroups[q.axis]) axesGroups[q.axis] = [];
-                    axesGroups[q.axis].push(q);
+                    if (!subGroups[q.axis]) subGroups[q.axis] = [];
+                    subGroups[q.axis].push(q);
                 });
                 
                 const picked: any[] = [];
-                let axisKeys = Object.keys(axesGroups);
+                let axisKeys = Object.keys(subGroups);
                 
                 while (picked.length < targetAmount && axisKeys.length > 0) {
                     for (let i = axisKeys.length - 1; i >= 0; i--) {
                         if (picked.length >= targetAmount) break;
                         const key = axisKeys[i];
-                        if (axesGroups[key].length > 0) {
-                            picked.push(axesGroups[key].pop());
+                        if (subGroups[key].length > 0) {
+                            picked.push(subGroups[key].pop());
                         } else {
                             axisKeys.splice(i, 1);
                         }
@@ -153,16 +181,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return picked;
             };
 
-            const pickedHard = pickFairly(hardQs, 27);
-            const pickedMedium = pickFairly(mediumQs, 3);
-            
-            selectedQuestions = [...pickedHard, ...pickedMedium];
+            // Pick fairly from the OTHER axes pool
+            const pickedFairlyRest = pickFairly(axisGroups.OTHER, remainingTarget);
+            selectedQuestions.push(...pickedFairlyRest);
 
-            // Fallback: If not enough HARD/MEDIUM, fill with whatever is left (legacy compatibility)
-            if (selectedQuestions.length < 30) {
+            // 4. Fallback: If the bank didn't have enough HARD questions in those specific axes, fill with any remaining questions
+            if (selectedQuestions.length < totalRequired) {
                 const pickedIds = new Set(selectedQuestions.map(q => q.id));
                 const remainingBank = questionBank.filter(q => !pickedIds.has(q.id)).sort(() => 0.5 - Math.random());
-                selectedQuestions.push(...remainingBank.slice(0, 30 - selectedQuestions.length));
+                selectedQuestions.push(...remainingBank.slice(0, totalRequired - selectedQuestions.length));
             }
 
             // Final shuffle so the axes and difficulties are mixed up in the actual exam
@@ -178,7 +205,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     data: { 
                         status: "STARTED", 
                         startedAt: new Date(),
-                        visitorName: body.name || session.visitorName
+                        visitorName: body.name || session.visitorName,
+                        visitorPhone: body.phone || session.visitorPhone
                     }
                 }),
                 prisma.examSessionQuestion.createMany({
