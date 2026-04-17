@@ -12,18 +12,19 @@ import { Input } from "@/components/ui/input";
 
 interface Props {
     professions: any[];
+    questions: any[];
     onSuccess: () => void;
 }
 
 const AXIS_OPTIONS = [
-    { value: "HEALTH_SAFETY", label: "الصحة والسلامة" },
-    { value: "PROFESSION_KNOWLEDGE", label: "المعرفة المهنية" },
-    { value: "GENERAL_SKILLS", label: "المهارات العامة" },
-    { value: "OCCUPATIONAL_SAFETY", label: "السلامة المهنية" },
-    { value: "CORRECT_METHODS", label: "الطرق الصحيحة" },
-    { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك المهني" },
-    { value: "TOOLS_AND_EQUIPMENT", label: "الأدوات والمعدات" },
-    { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والإسعافات" }
+    { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل للمهنه" },
+    { value: "PROFESSION_KNOWLEDGE", label: "المعرفه المهنيه التخصصيه للمهنه" },
+    { value: "GENERAL_SKILLS", label: "المهارات العامه وجوده تنفيذ المهام في هذه المهنه" },
+    { value: "OCCUPATIONAL_SAFETY", label: "السلامه المهنيه والمخاطر المباشره في هذه المهنه" },
+    { value: "CORRECT_METHODS", label: "الاساليب الصحيحة والقياسية في هذه المهنه" },
+    { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك الوظيفي والانظباط المهني في هذه المهنه" },
+    { value: "TOOLS_AND_EQUIPMENT", label: "استخدام الادوات والمعدات الخاصه لهذه المهنه وتشخيصها" },
+    { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والاسعافات الاوليه" }
 ];
 
 const JSON_TEMPLATE = `[
@@ -41,7 +42,7 @@ const JSON_TEMPLATE = `[
   }
 ]`;
 
-export function QuestionsImportModal({ professions, onSuccess }: Props) {
+export function QuestionsImportModal({ professions, questions, onSuccess }: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState<"input" | "preview" | "report">("input");
     
@@ -300,9 +301,14 @@ ${JSON_TEMPLATE}
                                     <Select value={axis} onValueChange={setAxis}>
                                         <SelectTrigger><SelectValue placeholder="اختر المحور" /></SelectTrigger>
                                         <SelectContent>
-                                            {AXIS_OPTIONS.map(a => (
-                                                <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                                            ))}
+                                            {AXIS_OPTIONS.map(a => {
+                                                const count = professionId ? questions.filter(q => q.professionId === professionId && q.axis === a.value).length : 0;
+                                                return (
+                                                    <SelectItem key={a.value} value={a.value}>
+                                                        {a.label} {professionId ? `(${count} أسئلة)` : ''}
+                                                    </SelectItem>
+                                                );
+                                            })}
                                         </SelectContent>
                                     </Select>
                                 </div>

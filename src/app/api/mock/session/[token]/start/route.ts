@@ -124,8 +124,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
             const totalRequired = session.profession.questionCount || 30;
             
-            // Filter strictly HARD questions (K1, K2 levels)
-            const hardQs = questionBank.filter(q => q.difficulty === "HARD").sort(() => 0.5 - Math.random());
+            // Proper Fisher-Yates shuffle algorithm for true randomness
+            const shuffleArray = (array: any[]) => {
+                const newArr = [...array];
+                for (let i = newArr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+                }
+                return newArr;
+            };
+
+            // Filter strictly HARD questions and properly shuffle them
+            const hardQs = shuffleArray(questionBank.filter(q => q.difficulty === "HARD"));
             
             let selectedQuestions: any[] = [];
             
@@ -188,12 +198,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             // 4. Fallback: If the bank didn't have enough HARD questions in those specific axes, fill with any remaining questions
             if (selectedQuestions.length < totalRequired) {
                 const pickedIds = new Set(selectedQuestions.map(q => q.id));
-                const remainingBank = questionBank.filter(q => !pickedIds.has(q.id)).sort(() => 0.5 - Math.random());
+                const remainingBank = shuffleArray(questionBank.filter(q => !pickedIds.has(q.id)));
                 selectedQuestions.push(...remainingBank.slice(0, totalRequired - selectedQuestions.length));
             }
 
             // Final shuffle so the axes and difficulties are mixed up in the actual exam
-            selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random());
+            selectedQuestions = shuffleArray(selectedQuestions);
 
             if (selectedQuestions.length === 0) {
                 return NextResponse.json({ error: "Not enough questions in bank to generate exam" }, { status: 500 });

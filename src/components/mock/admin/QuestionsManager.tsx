@@ -72,7 +72,7 @@ export function QuestionsManager() {
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         تحديث
                     </button>
-                    <QuestionsImportModal professions={professions} onSuccess={fetchQuestions} />
+                    <QuestionsImportModal professions={professions} questions={questions} onSuccess={fetchQuestions} />
                 </div>
             </div>
 
