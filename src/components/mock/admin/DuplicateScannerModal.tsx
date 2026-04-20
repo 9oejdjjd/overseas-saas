@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Search, ScanSearch, Loader2, AlertTriangle, Trash2, CheckCircle2, ShieldAlert, X } from "lucide-react";
+import { Search, ScanSearch, Loader2, AlertTriangle, Trash2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -16,6 +16,7 @@ interface Props {
 }
 
 const AXIS_OPTIONS = [
+    { value: "ALL", label: "🔍 جميع المحاور (فحص شامل)" },
     { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل" },
     { value: "PROFESSION_KNOWLEDGE", label: "المعرفة المهنية التخصصية" },
     { value: "GENERAL_SKILLS", label: "المهارات العامة وجودة التنفيذ" },
@@ -26,12 +27,23 @@ const AXIS_OPTIONS = [
     { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والإسعافات الأولية" }
 ];
 
+const AXIS_LABELS: Record<string, string> = {
+    HEALTH_SAFETY: "الصحة والسلامة",
+    PROFESSION_KNOWLEDGE: "المعرفة المهنية",
+    GENERAL_SKILLS: "المهارات العامة",
+    OCCUPATIONAL_SAFETY: "السلامة المهنية",
+    CORRECT_METHODS: "الأساليب الصحيحة",
+    PROFESSIONAL_BEHAVIOR: "السلوك المهني",
+    TOOLS_AND_EQUIPMENT: "الأدوات والمعدات",
+    EMERGENCIES_FIRST_AID: "الطوارئ والإسعافات"
+};
+
 export function DuplicateScannerModal({ professions, onSuccess }: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [professionId, setProfessionId] = useState("");
     const [searchProfession, setSearchProfession] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [axis, setAxis] = useState("");
+    const [axis, setAxis] = useState("ALL");
     const [isScanning, setIsScanning] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [scanResult, setScanResult] = useState<any>(null);
@@ -39,8 +51,8 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const handleScan = async () => {
-        if (!professionId || !axis) {
-            setError("يرجى اختيار المهنة والمحور أولاً");
+        if (!professionId) {
+            setError("يرجى اختيار المهنة أولاً");
             return;
         }
         setError("");
@@ -86,6 +98,8 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
 
     const handleDelete = async () => {
         if (selectedIds.size === 0) return;
+        if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} سؤال مكرر؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+        
         setIsDeleting(true);
         setError("");
 
@@ -97,8 +111,6 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
-
-            // Re-scan after deletion
             onSuccess();
             handleScan();
         } catch (err: any) {
@@ -129,13 +141,12 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                     <DialogTitle className="flex flex-col gap-1">
                         <span className="text-xl flex items-center gap-2"><ShieldAlert className="text-orange-500 w-6 h-6" /> فاحص الأسئلة المكررة</span>
                         <span className="text-sm font-normal text-gray-500">
-                            يفحص الأسئلة الموجودة ويكتشف المتشابهة بنفس الفكرة أو الإجابة باستخدام خوارزمية ذكية
+                            يكتشف الأسئلة المتشابهة بالفكرة أو الإجابة حتى لو كانت بصياغة مختلفة — يدعم الفحص الشامل عبر جميع المحاور
                         </span>
                     </DialogTitle>
                 </DialogHeader>
 
                 <div className="mt-4 space-y-6">
-                    {/* Selection Controls */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2 relative">
                             <Label className="font-bold">المهنة</Label>
@@ -157,15 +168,8 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                             {dropdownOpen && (
                                 <div className="absolute top-[68px] right-0 left-0 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
                                     {professions.filter(p => p.name.includes(searchProfession)).sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar')).map((p: any) => (
-                                        <div
-                                            key={p.id}
-                                            className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
-                                            onClick={() => {
-                                                setProfessionId(p.id);
-                                                setSearchProfession(p.name);
-                                                setDropdownOpen(false);
-                                            }}
-                                        >
+                                        <div key={p.id} className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
+                                            onClick={() => { setProfessionId(p.id); setSearchProfession(p.name); setDropdownOpen(false); }}>
                                             {p.name}
                                         </div>
                                     ))}
@@ -173,9 +177,9 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                             )}
                         </div>
                         <div className="space-y-2">
-                            <Label className="font-bold">المحور</Label>
+                            <Label className="font-bold">نطاق الفحص</Label>
                             <Select value={axis} onValueChange={setAxis}>
-                                <SelectTrigger><SelectValue placeholder="اختر المحور" /></SelectTrigger>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {AXIS_OPTIONS.map(a => (
                                         <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
@@ -187,7 +191,7 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
 
                     <Button onClick={handleScan} disabled={isScanning} className="w-full h-12 gap-2 bg-orange-600 hover:bg-orange-700 text-white font-bold">
                         {isScanning ? <Loader2 className="animate-spin h-5 w-5" /> : <ScanSearch className="h-5 w-5" />}
-                        {isScanning ? "جاري الفحص..." : "بدء فحص التكرار"}
+                        {isScanning ? "جاري الفحص الذكي..." : axis === "ALL" ? "فحص شامل لجميع المحاور" : "بدء فحص التكرار"}
                     </Button>
 
                     {error && (
@@ -196,10 +200,8 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                         </div>
                     )}
 
-                    {/* Results */}
                     {scanResult && (
                         <div className="space-y-4">
-                            {/* Summary */}
                             <div className={`p-5 rounded-xl border ${scanResult.totalDuplicates > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
                                 <div className="flex items-center gap-3 mb-2">
                                     {scanResult.totalDuplicates > 0 ? (
@@ -214,10 +216,9 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                                         }
                                     </h3>
                                 </div>
-                                <p className="text-sm text-gray-600">تم فحص {scanResult.totalScanned} سؤال في هذا المحور</p>
+                                <p className="text-sm text-gray-600">تم فحص {scanResult.totalScanned} سؤال {axis === "ALL" ? "عبر جميع المحاور" : ""}</p>
                             </div>
 
-                            {/* Action Bar */}
                             {scanResult.totalDuplicates > 0 && (
                                 <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gray-50 rounded-xl border">
                                     <div className="flex gap-2">
@@ -228,38 +229,31 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                                             إلغاء التحديد
                                         </Button>
                                     </div>
-                                    <Button
-                                        onClick={handleDelete}
-                                        disabled={selectedIds.size === 0 || isDeleting}
-                                        className="gap-2 bg-red-600 hover:bg-red-700 text-white"
-                                        size="sm"
-                                    >
+                                    <Button onClick={handleDelete} disabled={selectedIds.size === 0 || isDeleting} className="gap-2 bg-red-600 hover:bg-red-700 text-white" size="sm">
                                         {isDeleting ? <Loader2 className="animate-spin h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                                         حذف المحدد ({selectedIds.size})
                                     </Button>
                                 </div>
                             )}
 
-                            {/* Duplicate Groups */}
                             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
                                 {scanResult.duplicateGroups.map((group: any, gi: number) => (
                                     <div key={gi} className="border border-gray-200 rounded-xl overflow-hidden">
-                                        {/* Original (Keep) */}
                                         <div className="p-4 bg-blue-50/50 border-b border-gray-200">
                                             <div className="flex items-start gap-2">
                                                 <Badge className="bg-blue-600 text-white shrink-0 mt-1">الأصل</Badge>
-                                                <p className="text-sm font-medium text-gray-800 leading-relaxed">{group.keepText}</p>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-medium text-gray-800 leading-relaxed">{group.keepText}</p>
+                                                    {axis === "ALL" && group.keepAxis && (
+                                                        <Badge variant="outline" className="mt-2 text-[10px] text-blue-700 border-blue-200">{AXIS_LABELS[group.keepAxis] || group.keepAxis}</Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                        {/* Duplicates */}
                                         {group.duplicates.map((dup: any, di: number) => (
                                             <div key={di} className={`p-4 border-b last:border-0 border-gray-100 ${selectedIds.has(dup.id) ? 'bg-red-50/50' : 'hover:bg-gray-50'} transition-colors`}>
                                                 <div className="flex items-start gap-3">
-                                                    <Checkbox
-                                                        checked={selectedIds.has(dup.id)}
-                                                        onCheckedChange={() => toggleId(dup.id)}
-                                                        className="mt-1 shrink-0"
-                                                    />
+                                                    <Checkbox checked={selectedIds.has(dup.id)} onCheckedChange={() => toggleId(dup.id)} className="mt-1 shrink-0" />
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-sm text-gray-700 leading-relaxed mb-2">{dup.text}</p>
                                                         <div className="flex flex-wrap gap-2">
@@ -269,6 +263,11 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                                                             <Badge variant="outline" className="text-red-500 border-red-200 bg-red-50 text-[10px]">
                                                                 {dup.reason}
                                                             </Badge>
+                                                            {axis === "ALL" && dup.axis && (
+                                                                <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50 text-[10px]">
+                                                                    {AXIS_LABELS[dup.axis] || dup.axis}
+                                                                </Badge>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>

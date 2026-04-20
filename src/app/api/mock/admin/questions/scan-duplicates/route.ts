@@ -4,46 +4,46 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
 
-// --- Similarity Functions (same as import route) ---
-function getBigrams(str: string) {
-    const bigrams = new Set<string>();
-    for (let i = 0; i < str.length - 1; i++) {
-        bigrams.add(str.slice(i, i + 2));
-    }
-    return bigrams;
+// --- Enhanced Similarity Functions ---
+
+function normalizeArabic(text: string): string {
+    return text
+        .replace(/[\u064B-\u065F\u0670]/g, '') // Remove tashkeel/diacritics
+        .replace(/[أإآ]/g, 'ا')               // Normalize alef variants
+        .replace(/ة/g, 'ه')                   // Normalize taa marbuta
+        .replace(/ى/g, 'ي')                   // Normalize alef maqsura
+        .replace(/ؤ/g, 'و')                   // Normalize waw hamza
+        .replace(/ئ/g, 'ي')                   // Normalize yaa hamza
+        .replace(/[\s\p{P}]+/gu, ' ')         // Collapse whitespace & punctuation
+        .trim()
+        .toLowerCase();
 }
 
-function bigramSimilarity(str1: string, str2: string) {
-    if (!str1 || !str2) return 0;
-    const s1 = str1.replace(/[\s\p{P}]/gu, '').toLowerCase();
-    const s2 = str2.replace(/[\s\p{P}]/gu, '').toLowerCase();
-    if (s1 === s2) return 1;
-    if (s1.length < 2 || s2.length < 2) return 0;
-    const bg1 = getBigrams(s1);
-    const bg2 = getBigrams(s2);
-    let intersectionSize = 0;
-    for (const bg of bg1) {
-        if (bg2.has(bg)) intersectionSize++;
-    }
-    return (2.0 * intersectionSize) / (bg1.size + bg2.size);
-}
-
-function extractKeywords(text: string): Set<string> {
+function extractKeywords(text: string): string[] {
     const stopWords = new Set([
-        'في', 'من', 'إلى', 'على', 'عن', 'مع', 'هو', 'هي', 'هل', 'ما', 'أن', 'لا',
-        'أو', 'و', 'ثم', 'بل', 'لكن', 'إذا', 'عند', 'بعد', 'قبل', 'حتى', 'كل',
-        'هذا', 'هذه', 'ذلك', 'تلك', 'التي', 'الذي', 'اللذين', 'التالية', 'التالي',
-        'يجب', 'يمكن', 'يتم', 'كان', 'كانت', 'يكون', 'تكون', 'أي', 'أحد', 'بين',
-        'خلال', 'أثناء', 'عبر', 'فوق', 'تحت', 'ضد', 'لدى', 'حول', 'دون',
-        'الأكثر', 'الأقل', 'الأفضل', 'الصحيح', 'الصحيحة', 'الخاطئة',
-        'السؤال', 'الإجابة', 'الخيار', 'العامل', 'المهني', 'العمل',
+        'في', 'من', 'إلى', 'الى', 'على', 'عن', 'مع', 'هو', 'هي', 'هل', 'ما', 'أن', 'ان', 'لا',
+        'أو', 'او', 'و', 'ثم', 'بل', 'لكن', 'إذا', 'اذا', 'عند', 'بعد', 'قبل', 'حتى', 'كل',
+        'هذا', 'هذه', 'ذلك', 'تلك', 'التي', 'الذي', 'اللذين', 'التاليه', 'التالي',
+        'يجب', 'يمكن', 'يتم', 'كان', 'كانت', 'يكون', 'تكون', 'أي', 'اي', 'أحد', 'احد', 'بين',
+        'خلال', 'أثناء', 'اثناء', 'عبر', 'فوق', 'تحت', 'ضد', 'لدى', 'حول', 'دون',
+        'الأكثر', 'الاكثر', 'الأقل', 'الاقل', 'الأفضل', 'الافضل',
+        'الصحيح', 'الصحيحه', 'الخاطئه', 'الخاطيه',
+        'السؤال', 'الإجابه', 'الاجابه', 'الخيار', 'العامل', 'المهني', 'العمل',
+        'عند', 'منها', 'لها', 'له', 'بها', 'فيها', 'عليها', 'منه', 'لان', 'لأن',
+        'حيث', 'كيف', 'لماذا', 'متى', 'اين', 'أين', 'الذين', 'التى',
+        'تعتبر', 'يعتبر', 'يعد', 'تعد', 'احد', 'إحدى', 'احدى',
+        'قد', 'لم', 'لن', 'سوف', 'ليس', 'ليست', 'غير', 'بدون',
+        'اذ', 'إذ', 'كذلك', 'ايضا', 'أيضا', 'ولكن', 'بينما',
     ]);
-    const words = text.replace(/[\p{P}]/gu, '').toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    return new Set(words.filter(w => !stopWords.has(w)));
+    const normalized = normalizeArabic(text);
+    const words = normalized.split(/\s+/).filter(w => w.length > 2);
+    return words.filter(w => !stopWords.has(w));
 }
 
-function jaccardSimilarity(set1: Set<string>, set2: Set<string>): number {
-    if (set1.size === 0 && set2.size === 0) return 0;
+function jaccardSimilarity(words1: string[], words2: string[]): number {
+    if (words1.length === 0 && words2.length === 0) return 0;
+    const set1 = new Set(words1);
+    const set2 = new Set(words2);
     let intersection = 0;
     for (const word of set1) {
         if (set2.has(word)) intersection++;
@@ -52,28 +52,64 @@ function jaccardSimilarity(set1: Set<string>, set2: Set<string>): number {
     return union === 0 ? 0 : intersection / union;
 }
 
-function getSimilarityScore(
+function getBigrams(str: string): Set<string> {
+    const bigrams = new Set<string>();
+    const normalized = normalizeArabic(str);
+    for (let i = 0; i < normalized.length - 1; i++) {
+        bigrams.add(normalized.slice(i, i + 2));
+    }
+    return bigrams;
+}
+
+function bigramSimilarity(str1: string, str2: string): number {
+    if (!str1 || !str2) return 0;
+    const n1 = normalizeArabic(str1);
+    const n2 = normalizeArabic(str2);
+    if (n1 === n2) return 1;
+    if (n1.length < 2 || n2.length < 2) return 0;
+    const bg1 = getBigrams(n1);
+    const bg2 = getBigrams(n2);
+    let intersectionSize = 0;
+    for (const bg of bg1) {
+        if (bg2.has(bg)) intersectionSize++;
+    }
+    return (2.0 * intersectionSize) / (bg1.size + bg2.size);
+}
+
+function getSimilarityResult(
     q1Text: string, q1Answer: string,
     q2Text: string, q2Answer: string
-): { isSimilar: boolean, score: number, reason: string } {
+): { isSimilar: boolean; score: number; reason: string } {
     const kw1 = extractKeywords(q1Text);
     const kw2 = extractKeywords(q2Text);
     const questionJaccard = jaccardSimilarity(kw1, kw2);
     const answerSim = bigramSimilarity(q1Answer, q2Answer);
     const textSim = bigramSimilarity(q1Text, q2Text);
 
-    if (textSim >= 0.85) {
+    // Rule 1: Near-identical text
+    if (textSim >= 0.75) {
         return { isSimilar: true, score: Math.round(textSim * 100), reason: "نص السؤال شبه متطابق" };
     }
-    if (questionJaccard >= 0.50 && answerSim >= 0.60) {
+
+    // Rule 2: Same concept + same answer (relaxed thresholds)
+    if (questionJaccard >= 0.35 && answerSim >= 0.50) {
         const avg = Math.round(((questionJaccard + answerSim) / 2) * 100);
         return { isSimilar: true, score: avg, reason: "نفس الفكرة ونفس الإجابة" };
     }
-    if (questionJaccard >= 0.65) {
+
+    // Rule 3: Very similar keywords
+    if (questionJaccard >= 0.50) {
         return { isSimilar: true, score: Math.round(questionJaccard * 100), reason: "تشابه كبير في المفاهيم" };
     }
-    if (textSim >= 0.70) {
+
+    // Rule 4: Text similarity moderate
+    if (textSim >= 0.60) {
         return { isSimilar: true, score: Math.round(textSim * 100), reason: "تشابه نصي مرتفع" };
+    }
+
+    // Rule 5: Identical correct answers with some question overlap
+    if (answerSim >= 0.75 && questionJaccard >= 0.25) {
+        return { isSimilar: true, score: Math.round(answerSim * 100), reason: "إجابة صحيحة متطابقة مع تشابه بالسؤال" };
     }
 
     return { isSimilar: false, score: 0, reason: "" };
@@ -88,26 +124,32 @@ export async function POST(request: Request) {
         }
 
         const { professionId, axis } = await request.json();
-        if (!professionId || !axis) {
-            return NextResponse.json({ error: "professionId and axis are required" }, { status: 400 });
+        if (!professionId) {
+            return NextResponse.json({ error: "professionId is required" }, { status: 400 });
+        }
+
+        // If axis is "ALL", scan all questions for the profession across all axes
+        const whereClause: any = { professionId };
+        if (axis && axis !== "ALL") {
+            whereClause.axis = axis;
         }
 
         const questions = await prisma.question.findMany({
-            where: { professionId, axis },
+            where: whereClause,
             include: { options: true },
             orderBy: { createdAt: 'asc' }
         });
 
         if (questions.length < 2) {
-            return NextResponse.json({ duplicateGroups: [], totalScanned: questions.length });
+            return NextResponse.json({ duplicateGroups: [], totalScanned: questions.length, totalDuplicates: 0 });
         }
 
         // Build QA pairs
         const qaPairs = questions.map(q => ({
             id: q.id,
             text: q.text.trim(),
+            axis: q.axis,
             correctAnswer: (q.options as any[]).find((o: any) => o.isCorrect)?.text?.trim() || "",
-            createdAt: q.createdAt
         }));
 
         // Find duplicate groups
@@ -115,26 +157,28 @@ export async function POST(request: Request) {
         const duplicateGroups: {
             keepId: string;
             keepText: string;
-            duplicates: { id: string; text: string; score: number; reason: string }[];
+            keepAxis: string;
+            duplicates: { id: string; text: string; axis: string; score: number; reason: string }[];
         }[] = [];
 
         for (let i = 0; i < qaPairs.length; i++) {
             if (processed.has(qaPairs[i].id)) continue;
 
-            const group: { id: string; text: string; score: number; reason: string }[] = [];
+            const group: { id: string; text: string; axis: string; score: number; reason: string }[] = [];
 
             for (let j = i + 1; j < qaPairs.length; j++) {
                 if (processed.has(qaPairs[j].id)) continue;
 
-                const result = getSimilarityScore(
-                    qaPairs[i].text.toLowerCase(), qaPairs[i].correctAnswer.toLowerCase(),
-                    qaPairs[j].text.toLowerCase(), qaPairs[j].correctAnswer.toLowerCase()
+                const result = getSimilarityResult(
+                    qaPairs[i].text, qaPairs[i].correctAnswer,
+                    qaPairs[j].text, qaPairs[j].correctAnswer
                 );
 
                 if (result.isSimilar) {
                     group.push({
                         id: qaPairs[j].id,
                         text: qaPairs[j].text,
+                        axis: qaPairs[j].axis,
                         score: result.score,
                         reason: result.reason
                     });
@@ -147,6 +191,7 @@ export async function POST(request: Request) {
                 duplicateGroups.push({
                     keepId: qaPairs[i].id,
                     keepText: qaPairs[i].text,
+                    keepAxis: qaPairs[i].axis,
                     duplicates: group
                 });
             }
@@ -177,15 +222,12 @@ export async function DELETE(request: Request) {
         }
 
         await prisma.$transaction(async (tx) => {
-            // Delete session links first
             await tx.examSessionQuestion.deleteMany({
                 where: { questionId: { in: questionIds } }
             });
-            // Delete options
             await tx.questionOption.deleteMany({
                 where: { questionId: { in: questionIds } }
             });
-            // Delete questions
             await tx.question.deleteMany({
                 where: { id: { in: questionIds } }
             });
