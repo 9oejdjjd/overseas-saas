@@ -244,7 +244,7 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                                                 <Badge className="bg-blue-600 text-white shrink-0 mt-1">الأصل</Badge>
                                                 <div className="flex-1">
                                                     <p className="text-sm font-medium text-gray-800 leading-relaxed">{group.keepText}</p>
-                                                    {axis === "ALL" && group.keepAxis && (
+                                                    {group.keepAxis && (
                                                         <Badge variant="outline" className="mt-2 text-[10px] text-blue-700 border-blue-200">{AXIS_LABELS[group.keepAxis] || group.keepAxis}</Badge>
                                                     )}
                                                 </div>
@@ -263,7 +263,7 @@ export function DuplicateScannerModal({ professions, onSuccess }: Props) {
                                                             <Badge variant="outline" className="text-red-500 border-red-200 bg-red-50 text-[10px]">
                                                                 {dup.reason}
                                                             </Badge>
-                                                            {axis === "ALL" && dup.axis && (
+                                                            {dup.axis && (
                                                                 <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50 text-[10px]">
                                                                     {AXIS_LABELS[dup.axis] || dup.axis}
                                                                 </Badge>

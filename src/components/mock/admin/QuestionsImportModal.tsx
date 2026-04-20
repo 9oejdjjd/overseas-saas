@@ -45,7 +45,7 @@ const JSON_TEMPLATE = `[
 export function QuestionsImportModal({ professions, questions, onSuccess }: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState<"input" | "preview" | "report">("input");
-    
+
     // Form State
     const [professionId, setProfessionId] = useState("");
     const [searchProfession, setSearchProfession] = useState("");
@@ -55,7 +55,7 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const [mode, setMode] = useState("skip_duplicates");
     const [jsonText, setJsonText] = useState("");
     const [parsedData, setParsedData] = useState<any[]>([]);
-    
+
     // Action State
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -162,21 +162,6 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
         const professionName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
         const axisName = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
 
-        // Build existing questions context for injection
-        const existingAxisQuestions = professionId && axis 
-            ? questions.filter(q => q.professionId === professionId && q.axis === axis)
-            : [];
-        
-        // Take up to 30 question summaries to inject (keep prompt manageable)
-        const existingSummaries = existingAxisQuestions.slice(0, 30).map((q: any, i: number) => {
-            const correctOpt = q.options?.find((o: any) => o.isCorrect);
-            return `${i + 1}. ${q.text.substring(0, 80)}... [الإجابة: ${correctOpt?.text?.substring(0, 40) || 'غير محدد'}]`;
-        }).join('\n');
-
-        const contextBlock = existingSummaries 
-            ? `\n\n🚨 تحذير صارم ومهم جداً:\nالأسئلة التالية موجودة مسبقاً في بنك الأسئلة (${existingAxisQuestions.length} سؤال). يُمنع منعاً باتاً إنشاء أسئلة بنفس الفكرة أو المفهوم أو الإجابة. ابتكر سيناريوهات جديدة كلياً وغير مطروقة:\n${existingSummaries}` 
-            : '';
-
         return `أريد منك أن تعمل كخبير معتمد في إعداد اختبارات الاعتماد المهني والفحص المهني وفق المعايير المستخدمة في الاختبارات المهنية الواقعية (مثل اختبارات الهيئة السعودية للتخصصات المهنية).
 
 المطلوب:
@@ -243,7 +228,7 @@ ${JSON_TEMPLATE}
 - أن عدد الأسئلة = 30
 - التوزيع صحيح (MEDIUM / HARD)
 - التوزيع المعرفي صحيح (K1 / K2)
-- JSON صحيح 100% بدون أخطاء${contextBlock}`;
+- JSON صحيح 100% بدون أخطاء`;
     };
 
     const copyTemplate = () => {
@@ -296,8 +281,8 @@ ${JSON_TEMPLATE}
                                     {dropdownOpen && (
                                         <div className="absolute top-[68px] right-0 left-0 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
                                             {professions.filter(p => p.name.includes(searchProfession)).sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(p => (
-                                                <div 
-                                                    key={p.id} 
+                                                <div
+                                                    key={p.id}
                                                     className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
                                                     onClick={() => {
                                                         setProfessionId(p.id);
@@ -332,7 +317,7 @@ ${JSON_TEMPLATE}
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-blue-600 font-bold">موضوع فرعي للتركيز (اختياري)</Label>
-                                    <Input 
+                                    <Input
                                         placeholder="مثال: التعامل مع الحروق والصدمات الكهربائية..."
                                         value={focusTopic}
                                         onChange={(e) => setFocusTopic(e.target.value)}
@@ -374,17 +359,17 @@ ${JSON_TEMPLATE}
                                             <Button variant="secondary" size="sm" className="h-7 text-xs">
                                                 <UploadCloud className="h-3 w-3 ml-1" /> رفع ملف
                                             </Button>
-                                            <input 
-                                                type="file" accept=".json" 
+                                            <input
+                                                type="file" accept=".json"
                                                 onChange={handleFileUpload}
                                                 className="absolute inset-0 opacity-0 cursor-pointer w-full"
                                             />
                                         </div>
                                     </div>
                                 </div>
-                                <Textarea 
-                                    className="font-mono text-left opacity-90 h-64 text-sm bg-gray-50 border-gray-200 focus:bg-white transition-colors custom-scrollbar" 
-                                    dir="ltr" 
+                                <Textarea
+                                    className="font-mono text-left opacity-90 h-64 text-sm bg-gray-50 border-gray-200 focus:bg-white transition-colors custom-scrollbar"
+                                    dir="ltr"
                                     placeholder="يلصق محتوى مصفوفة ال JSON هنا..."
                                     value={jsonText}
                                     onChange={(e) => setJsonText(e.target.value)}
@@ -428,8 +413,8 @@ ${JSON_TEMPLATE}
                                     <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
                                         <p className="text-gray-500 mb-1">وضعية الإدخال</p>
                                         <p className="font-bold text-orange-600 text-xs mt-1">
-                                            {mode === "replace_axis_questions" ? "استبدال المحور بالكامل" : 
-                                             mode === "skip_duplicates" ? "تجاوز المكرر" : "إضافة (رفض التكرار)"}
+                                            {mode === "replace_axis_questions" ? "استبدال المحور بالكامل" :
+                                                mode === "skip_duplicates" ? "تجاوز المكرر" : "إضافة (رفض التكرار)"}
                                         </p>
                                     </div>
                                 </div>
@@ -477,7 +462,7 @@ ${JSON_TEMPLATE}
                             <div className="text-center py-6 bg-green-50 rounded-xl border border-green-100">
                                 <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-3" />
                                 <h3 className="text-xl font-bold text-green-900">تم اكتمال عملية الاستيراد</h3>
-                                <p className="text-green-700 mt-1">المهنة: {professions.find(p=>p.id===professionId)?.name} | {AXIS_OPTIONS.find(a=>a.value===axis)?.label}</p>
+                                <p className="text-green-700 mt-1">المهنة: {professions.find(p => p.id === professionId)?.name} | {AXIS_OPTIONS.find(a => a.value === axis)?.label}</p>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
