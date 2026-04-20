@@ -5,6 +5,7 @@ import { Loader2, RefreshCw, Layers, CheckCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { QuestionsImportModal } from "./QuestionsImportModal";
+import { DuplicateScannerModal } from "./DuplicateScannerModal";
 
 export function QuestionsManager() {
     const [questions, setQuestions] = useState<any[]>([]);
@@ -73,6 +74,7 @@ export function QuestionsManager() {
                         تحديث
                     </button>
                     <QuestionsImportModal professions={professions} questions={questions} onSuccess={fetchQuestions} />
+                    <DuplicateScannerModal professions={professions} onSuccess={fetchQuestions} />
                 </div>
             </div>
 
