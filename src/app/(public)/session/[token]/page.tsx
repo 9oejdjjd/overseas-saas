@@ -396,7 +396,13 @@ export default function ExamSessionPage() {
                         </div>
                         
                         <Button 
-                            onClick={() => setStatus("TERMS")} 
+                            onClick={() => {
+                                if (info?.type === "PUBLIC") {
+                                    startExam(true, editablePhone, editableName);
+                                } else {
+                                    setStatus("TERMS");
+                                }
+                            }} 
                             className="w-full h-14 text-lg font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3"
                         >
                             دخول بوابة الاختبار

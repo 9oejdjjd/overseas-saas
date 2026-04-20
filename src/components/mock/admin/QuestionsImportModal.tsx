@@ -51,6 +51,7 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const [searchProfession, setSearchProfession] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [axis, setAxis] = useState("");
+    const [focusTopic, setFocusTopic] = useState("");
     const [mode, setMode] = useState("skip_duplicates");
     const [jsonText, setJsonText] = useState("");
     const [parsedData, setParsedData] = useState<any[]>([]);
@@ -136,6 +137,7 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const resetForm = () => {
         setStep("input");
         setJsonText("");
+        setFocusTopic("");
         setParsedData([]);
         setReport(null);
         setError(null);
@@ -160,11 +162,27 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
         const professionName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
         const axisName = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
 
+        // Build existing questions context for injection
+        const existingAxisQuestions = professionId && axis 
+            ? questions.filter(q => q.professionId === professionId && q.axis === axis)
+            : [];
+        
+        // Take up to 30 question summaries to inject (keep prompt manageable)
+        const existingSummaries = existingAxisQuestions.slice(0, 30).map((q: any, i: number) => {
+            const correctOpt = q.options?.find((o: any) => o.isCorrect);
+            return `${i + 1}. ${q.text.substring(0, 80)}... [الإجابة: ${correctOpt?.text?.substring(0, 40) || 'غير محدد'}]`;
+        }).join('\n');
+
+        const contextBlock = existingSummaries 
+            ? `\n\n🚨 تحذير صارم ومهم جداً:\nالأسئلة التالية موجودة مسبقاً في بنك الأسئلة (${existingAxisQuestions.length} سؤال). يُمنع منعاً باتاً إنشاء أسئلة بنفس الفكرة أو المفهوم أو الإجابة. ابتكر سيناريوهات جديدة كلياً وغير مطروقة:\n${existingSummaries}` 
+            : '';
+
         return `أريد منك أن تعمل كخبير معتمد في إعداد اختبارات الاعتماد المهني والفحص المهني وفق المعايير المستخدمة في الاختبارات المهنية الواقعية (مثل اختبارات الهيئة السعودية للتخصصات المهنية).
 
 المطلوب:
 توليد 30 سؤالًا احترافيًا لمهنة: ${professionName}
 وفي محور: ${axisName}
+${focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : ""}
 
 🎯 الهدف:
 إنشاء بنك أسئلة عالي الجودة يحاكي الاختبارات الحقيقية من حيث:
@@ -225,7 +243,7 @@ ${JSON_TEMPLATE}
 - أن عدد الأسئلة = 30
 - التوزيع صحيح (MEDIUM / HARD)
 - التوزيع المعرفي صحيح (K1 / K2)
-- JSON صحيح 100% بدون أخطاء`;
+- JSON صحيح 100% بدون أخطاء${contextBlock}`;
     };
 
     const copyTemplate = () => {
@@ -313,6 +331,16 @@ ${JSON_TEMPLATE}
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
+                                    <Label className="text-blue-600 font-bold">موضوع فرعي للتركيز (اختياري)</Label>
+                                    <Input 
+                                        placeholder="مثال: التعامل مع الحروق والصدمات الكهربائية..."
+                                        value={focusTopic}
+                                        onChange={(e) => setFocusTopic(e.target.value)}
+                                        className="bg-blue-50/30 border-blue-100 focus:border-blue-400 focus:ring-blue-400"
+                                    />
+                                    <p className="text-[10px] text-gray-500">يساعد في تقييد ChatGPT لإنتاج أسئلة جديدة غير مكررة</p>
+                                </div>
+                                <div className="space-y-2 lg:col-span-3">
                                     <Label>طريقة الاستيراد والتعارض</Label>
                                     <Select value={mode} onValueChange={setMode}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
