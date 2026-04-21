@@ -396,13 +396,7 @@ export default function ExamSessionPage() {
                         </div>
                         
                         <Button 
-                            onClick={() => {
-                                if (info?.type === "PUBLIC") {
-                                    startExam(true, editablePhone, editableName);
-                                } else {
-                                    setStatus("TERMS");
-                                }
-                            }} 
+                            onClick={() => setStatus("TERMS")} 
                             className="w-full h-14 text-lg font-bold bg-gradient-to-l from-[#16539a] to-[#2563eb] hover:from-[#1e66b8] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3"
                         >
                             دخول بوابة الاختبار
@@ -572,10 +566,10 @@ export default function ExamSessionPage() {
                                 </Button>
                                 <Button 
                                     onClick={() => startExam(true)} 
-                                    disabled={!termsAccepted || !whatsappConfirmed}
+                                    disabled={!termsAccepted || !whatsappConfirmed || isSubmitting}
                                     className="w-[70%] h-14 text-base font-bold bg-gradient-to-l from-[#5c9e45] to-green-600 hover:from-[#4d853a] hover:to-[#5c9e45] text-white rounded-2xl shadow-xl shadow-green-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                                 >
-                                    ابدأ الاختبار الآن
+                                    {isSubmitting ? "جاري التحضير..." : "ابدأ الاختبار الآن"}
                                 </Button>
                             </div>
                         </div>
