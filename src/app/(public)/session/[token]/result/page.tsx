@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { 
     Trophy, XCircle, CheckCircle2, AlertCircle, ArrowLeft, BookOpen, Clock, ChevronDown, 
-    Award, Target, BarChart3, Briefcase, ShieldCheck, HelpCircle, ArrowRight, Star, Sparkles, Filter
+    Award, Target, BarChart3, Briefcase, ShieldCheck, HelpCircle, ArrowRight, Star, Sparkles, Filter,
+    Home, RefreshCw, MessageSquare, Phone, GraduationCap, Rocket, Users, HeartHandshake
 } from "lucide-react";
+import Link from "next/link";
 
 // Axis mapping
 const AXIS_NAMES: Record<string, string> = {
@@ -52,6 +54,9 @@ export default function ExamResultPage() {
     const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"ALL" | "CORRECT" | "WRONG" | "SKIPPED">("ALL");
     const [animatedScore, setAnimatedScore] = useState(0);
+    const [activeNav, setActiveNav] = useState("result");
+    const resultSectionRef = useRef<HTMLDivElement>(null);
+    const wrongSectionRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const fetchResult = async () => {
@@ -187,12 +192,70 @@ export default function ExamResultPage() {
     const strokeDashoffset = strokeDasharray - (strokeDasharray * animatedScore) / 100;
 
     return (
-        <div className="min-h-screen bg-[#0a0f1c] font-sans pb-32 text-white overflow-x-hidden relative" dir="rtl">
+        <div className="min-h-screen bg-[#0a0f1c] font-sans pb-32 lg:pb-32 text-white overflow-x-hidden relative" dir="rtl">
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] mix-blend-overlay pointer-events-none z-0"></div>
             <div className={`fixed top-[-20%] right-[-10%] w-[800px] h-[800px] rounded-full blur-[160px] pointer-events-none z-0 transition-colors duration-1000 ${result.score >= 70 ? (result.score >= 80 ? 'bg-[#5c9e45]/10' : 'bg-blue-500/10') : 'bg-red-500/10'}`} />
             <div className="fixed bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#16539a]/10 rounded-full blur-[140px] pointer-events-none z-0" />
+
+            {/* ===== MOBILE: Top Logo Bar ===== */}
+            <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white/5 backdrop-blur-2xl border-b border-white/10">
+                <div className="flex items-center justify-center h-14 px-4">
+                    <Link href="/" className="flex items-center">
+                        <img 
+                            src="/logo1.png" 
+                            alt="شعار بوابة الاعتماد المهني" 
+                            className="h-8 w-auto object-contain"
+                            width="160"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                            }}
+                        />
+                        <div className="hidden text-sm font-black text-white">
+                            بوابة الاعتماد المهني
+                        </div>
+                    </Link>
+                </div>
+            </div>
+
+            {/* ===== MOBILE: Bottom Tab Bar ===== */}
+            <motion.div 
+                initial={{ y: 60, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.6, type: "spring", delay: 0.5 }}
+                className="lg:hidden fixed bottom-0 left-0 right-0 z-40"
+            >
+                <div 
+                    className="mx-3 mb-3 bg-white/10 backdrop-blur-2xl border border-white/15 shadow-[0_-8px_40px_rgba(0,0,0,0.3)] rounded-[1.75rem]"
+                    style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                >
+                    <div className="flex items-center justify-around px-2 h-[64px]">
+                        {[
+                            { id: "home", label: "الرئيسية", icon: Home, action: () => router.push("/") },
+                            { id: "result", label: "النتيجة", icon: BarChart3, action: () => { resultSectionRef.current?.scrollIntoView({ behavior: 'smooth' }); }},
+                            { id: "wrong", label: "الأخطاء", icon: XCircle, action: () => { setActiveTab("WRONG"); wrongSectionRef.current?.scrollIntoView({ behavior: 'smooth' }); }},
+                            { id: "retry", label: "إعادة", icon: RefreshCw, action: () => router.push("/") },
+                        ].map(item => {
+                            const Icon = item.icon;
+                            const isActive = activeNav === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    onClick={() => { setActiveNav(item.id); item.action(); try { navigator.vibrate?.(10); } catch {} }}
+                                    className={`flex flex-col items-center justify-center flex-1 py-2 transition-all duration-300 ${isActive ? 'text-white' : 'text-slate-500'}`}
+                                >
+                                    <div className={`relative p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-white/10' : ''}`}>
+                                        <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                                    </div>
+                                    <span className={`text-[10px] mt-0.5 ${isActive ? 'font-black' : 'font-semibold'}`}>{item.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </motion.div>
             
-            <main className="max-w-6xl mx-auto px-6 pt-32 relative z-10">
+            <main className="max-w-6xl mx-auto px-4 md:px-6 pt-20 lg:pt-32 pb-24 lg:pb-0 relative z-10" ref={resultSectionRef}>
                 {/* 1. HERO HEADER SECTION */}
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
@@ -268,6 +331,78 @@ export default function ExamResultPage() {
                     </div>
                 </motion.div>
 
+                {/* ===== MARKETING CTA SECTION ===== */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 30 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.2, duration: 0.7 }}
+                    className="mt-8 md:mt-12 relative"
+                >
+                    {/* Animated glow background */}
+                    <div className="absolute -inset-1 bg-gradient-to-r from-[#25D366] via-[#16539a] to-[#25D366] rounded-[2.5rem] opacity-20 blur-xl animate-pulse" />
+                    
+                    <div className="relative bg-gradient-to-br from-[#0d1f3c] via-[#0a1628] to-[#0d1f3c] rounded-[2rem] border border-white/10 overflow-hidden">
+                        {/* Top accent line */}
+                        <div className="h-1 w-full bg-gradient-to-l from-[#25D366] via-[#16539a] to-[#25D366]" />
+                        
+                        {/* Decorative circles */}
+                        <div className="absolute top-10 -right-20 w-60 h-60 bg-[#25D366]/5 rounded-full blur-3xl pointer-events-none" />
+                        <div className="absolute -bottom-10 -left-20 w-60 h-60 bg-[#16539a]/10 rounded-full blur-3xl pointer-events-none" />
+
+                        <div className="relative z-10 p-6 md:p-10">
+                            {/* Header */}
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#25D366]/10 border border-[#25D366]/20 rounded-full text-[#25D366] text-xs font-black mb-4">
+                                    <Sparkles size={14} />
+                                    {result.isPassed ? 'أنت جاهز للخطوة التالية' : 'فرصتك تبدأ من هنا'}
+                                </div>
+                                <h3 className="text-2xl md:text-3xl font-black text-white mb-3 leading-tight">
+                                    {result.isPassed 
+                                        ? 'نتيجتك تؤكد أنك مستعد — سجّل الآن واحصل على الاعتماد المهني!'
+                                        : 'النتيجة ليست النهاية — سجّل معنا ونضمن لك النجاح!'
+                                    }
+                                </h3>
+                                <p className="text-slate-400 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+                                    {result.isPassed 
+                                        ? 'أثبتّ كفاءتك المهنية في الاختبار التجريبي. الآن حان وقت الاعتماد الرسمي! فريقنا المتخصص يتولى كل الإجراءات — من التسجيل وحجز الموعد وحتى تحضيرك ليوم الاختبار الفعلي. وصلنا أكثر من 2000 شخص لاجتياز الفحص بنجاح.'
+                                        : 'لا تقلق من النتيجة — هذا مجرد اختبار تجريبي! عند تسجيلك معنا، فريقنا المتخصص سيدربك ويعلّمك كل ما تحتاجه حتى تجتاز الاختبار الرسمي من أول محاولة. نمشي معك خطوة بخطوة من الصفر حتى الحصول على شهادة الاعتماد المهني.'
+                                    }
+                                </p>
+                            </div>
+
+                            {/* Trust badges */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                                {[
+                                    { icon: <Users size={20} />, text: '+2,000 مسجّل ناجح', color: 'text-[#25D366]' },
+                                    { icon: <ShieldCheck size={20} />, text: 'متابعة حتى الاجتياز', color: 'text-blue-400' },
+                                    { icon: <GraduationCap size={20} />, text: 'تدريب متخصص', color: 'text-amber-400' },
+                                    { icon: <Rocket size={20} />, text: 'إجراءات سريعة', color: 'text-purple-400' },
+                                ].map((badge, i) => (
+                                    <div key={i} className="flex flex-col items-center gap-2 p-4 bg-white/[0.03] rounded-2xl border border-white/5 hover:bg-white/[0.06] transition-colors">
+                                        <div className={badge.color}>{badge.icon}</div>
+                                        <span className="text-[11px] md:text-xs font-bold text-slate-300 text-center leading-tight">{badge.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* CTA Button */}
+                            <div className="flex justify-center">
+                                <a 
+                                    href={`https://wa.me/967777263111?text=${encodeURIComponent(result.isPassed ? 'مرحباً، اجتزت الاختبار التجريبي بنجاح وأريد التسجيل في الاعتماد المهني. ما هي المتطلبات والخطوات؟' : 'مرحباً، أريد التسجيل في الاعتماد المهني وأحتاج مساعدة في التحضير. ما هي المتطلبات والخطوات؟')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="group relative inline-flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-[#25D366] hover:bg-[#20bd5a] text-white font-black text-lg rounded-2xl shadow-[0_8px_30px_rgba(37,211,102,0.3)] hover:shadow-[0_12px_40px_rgba(37,211,102,0.4)] transition-all duration-300 hover:-translate-y-1 active:scale-[0.97]"
+                                >
+                                    <MessageSquare size={24} className="group-hover:rotate-6 transition-transform" />
+                                    سجّل الآن
+                                    <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+
                 {/* 3. NEW AXIS RADAR / PROGRESS BARS */}
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
@@ -297,24 +432,21 @@ export default function ExamResultPage() {
                                         className={`h-full rounded-full ${ax.score >= 80 ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : ax.score >= 60 ? 'bg-blue-500 shadow-[0_0_10px_#3b82f6]' : 'bg-red-500 shadow-[0_0_10px_#ef4444]'}`}
                                     />
                                 </div>
-                                <div className="mt-2 text-xs text-slate-500 font-bold flex justify-between">
-                                    <span>{ax.total} أسئلة مقيّمة</span>
-                                    <span>{ax.correct} إجابات صحيحة</span>
-                                </div>
+
                             </div>
                         ))}
                     </div>
                 </motion.div>
 
                 {/* 4. STATS GRID */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-6 md:mt-10">
-                    <DarkStatsCard icon={<CheckCircle2 className="text-emerald-400 w-8 h-8" />} label="إجابات صحيحة" value={correctQuestions.length} color="bg-emerald-500/5 border-emerald-500/10" />
-                    <DarkStatsCard icon={<XCircle className="text-red-400 w-8 h-8" />} label="إجابات خاطئة" value={incorrectQuestions.length} color="bg-red-500/5 border-red-500/10" />
-                    <DarkStatsCard icon={<HelpCircle className="text-slate-400 w-8 h-8" />} label="لم يتم حلها" value={unansweredQuestions.length} color="bg-white/5 border-white/5" />
+                <div className="grid grid-cols-3 gap-3 md:gap-6 mt-6 md:mt-10">
+                    <DarkStatsCard icon={<CheckCircle2 className="text-emerald-400 w-6 h-6 md:w-8 md:h-8" />} label="صحيحة" value={correctQuestions.length} total={result.questions.length} color="bg-emerald-500/5 border-emerald-500/10" />
+                    <DarkStatsCard icon={<XCircle className="text-red-400 w-6 h-6 md:w-8 md:h-8" />} label="خاطئة" value={incorrectQuestions.length} total={result.questions.length} color="bg-red-500/5 border-red-500/10" />
+                    <DarkStatsCard icon={<HelpCircle className="text-slate-400 w-6 h-6 md:w-8 md:h-8" />} label="متروكة" value={unansweredQuestions.length} total={result.questions.length} color="bg-white/5 border-white/5" />
                 </div>
 
                 {/* 5. ENHANCED QUESTIONS FILTER & REVIEW */}
-                <div className="mt-16 md:mt-20">
+                <div className="mt-16 md:mt-20" ref={wrongSectionRef}>
                     <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-6 md:mb-8 gap-6">
                         <div className="text-center md:text-right">
                             <h2 className="text-2xl md:text-3xl font-black text-white mb-2">سجل المراجعة والأسئلة</h2>
@@ -482,16 +614,14 @@ export default function ExamResultPage() {
     );
 }
 
-function DarkStatsCard({ icon, label, value, color }: { icon: React.ReactNode, label: string, value: number, color: string }) {
+function DarkStatsCard({ icon, label, value, total, color }: { icon: React.ReactNode, label: string, value: number, total?: number, color: string }) {
     return (
-        <div className={`p-4 sm:p-6 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border ${color} flex items-center justify-between sm:justify-start gap-4 sm:gap-6 transition-all hover:scale-[1.03] group shadow-lg`}>
-            <div className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 bg-white/5 rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/5 group-hover:bg-white/10 transition-colors">
+        <div className={`p-4 md:p-6 rounded-2xl md:rounded-[2rem] border ${color} flex flex-col items-center justify-center gap-2 md:gap-3 transition-all hover:scale-[1.03] group shadow-lg text-center`}>
+            <div className="w-10 h-10 md:w-14 md:h-14 shrink-0 bg-white/5 rounded-xl md:rounded-2xl flex items-center justify-center border border-white/5 group-hover:bg-white/10 transition-colors">
                 {icon}
             </div>
-            <div className="text-left sm:text-right">
-                <div className="text-2xl sm:text-3xl font-black text-white mb-0 sm:mb-1 tracking-tight">{value}</div>
-                <div className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest">{label}</div>
-            </div>
+            <div className="text-2xl md:text-3xl font-black text-white tracking-tight">{value}{total ? <span className="text-sm md:text-base text-slate-500 font-bold">/{total}</span> : null}</div>
+            <div className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{label}</div>
         </div>
     );
 }

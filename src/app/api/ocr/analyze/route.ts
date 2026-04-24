@@ -12,13 +12,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "No image provided" }, { status: 400 });
         }
 
-        const openAiKey = process.env.OPENAI_API_KEY;
-        if (!openAiKey) {
-            return NextResponse.json({ error: "Missing OPENAI_API_KEY in environment" }, { status: 500 });
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) {
+            return NextResponse.json({ error: "Missing GEMINI_API_KEY in environment" }, { status: 500 });
         }
 
         const buffer = await file.arrayBuffer();
         const base64Image = Buffer.from(buffer).toString("base64");
+        const mimeType = file.type || "image/jpeg";
 
         let prompt = "";
         if (type === "PASSPORT") {
@@ -50,41 +51,41 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid type" }, { status: 400 });
         }
 
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${openAiKey}`
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
+                contents: [
                     {
-                        role: "user",
-                        content: [
-                            { type: "text", text: prompt },
+                        parts: [
+                            { text: prompt },
                             {
-                                type: "image_url",
-                                image_url: {
-                                    url: `data:${file.type};base64,${base64Image}`
+                                inline_data: {
+                                    mime_type: mimeType,
+                                    data: base64Image
                                 }
                             }
                         ]
                     }
                 ],
-                max_tokens: 1000
+                generationConfig: {
+                    temperature: 0.1,
+                    response_mime_type: "application/json"
+                }
             })
         });
 
         if (!res.ok) {
             const errorData = await res.json();
-            throw new Error(`OpenAI API error: ${errorData.error?.message || res.statusText}`);
+            throw new Error(`Gemini API error: ${errorData.error?.message || res.statusText}`);
         }
 
         const data = await res.json();
-        let text = data.choices?.[0]?.message?.content || "";
+        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-        // Clean JSON markdown
+        // Clean JSON markdown if any
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
         try {

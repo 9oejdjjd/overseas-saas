@@ -49,6 +49,7 @@ export default function ExamSessionPage() {
     const [timeLeft, setTimeLeft] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
     
@@ -278,18 +279,19 @@ export default function ExamSessionPage() {
     const submitExam = async (autoSubmitAnswers?: any[], isAutoSubmit = false) => {
         if (isSubmitting) return;
 
-        const finalAnswers = autoSubmitAnswers || answersRef.current;
-
         if (!isAutoSubmit) {
-            const unanswered = questions.length - finalAnswers.length;
-            const msg = unanswered > 0 
-                ? `لديك ${unanswered} أسئلة غير مجابة مجمل ${questions.length}. هل أنت متأكد من التسليم النهائي؟`
-                : "هل أنت متأكد من تأكيد وتسليم إجاباتك؟";
-            
-            if (!window.confirm(msg)) return;
+            // Show custom Bottom Sheet instead of window.confirm
+            setShowSubmitConfirm(true);
+            return;
         }
 
+        await executeSubmit(autoSubmitAnswers);
+    };
+
+    const executeSubmit = async (overrideAnswers?: any[]) => {
+        setShowSubmitConfirm(false);
         setIsSubmitting(true);
+        const finalAnswers = overrideAnswers || answersRef.current;
         try {
             const res = await fetch(`/api/mock/session/${token}/submit`, {
                 method: "POST",
@@ -449,12 +451,79 @@ export default function ExamSessionPage() {
                                     
                                     <div className="space-y-2">
                                         <Label className="text-slate-600 font-bold text-sm">رقم الواتساب (لإرسال النتيجة)</Label>
-                                        <div className={`relative flex items-center bg-white border rounded-xl focus-within:border-[#16539a] focus-within:ring-2 focus-within:ring-[#16539a]/20 transition-all h-14 md:h-16 w-full group overflow-hidden ${phoneError ? 'border-red-500' : 'border-slate-200'}`}>
-                                            {/* Number Input (Takes priority on the Right in RTL) */}
-                                            <Input 
-                                                className="flex-1 h-full px-4 text-xl md:text-2xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 text-right outline-none placeholder:text-slate-300" 
-                                                placeholder="XXX XXX XXX"
+                                        
+                                        {/* Country Code Selector — separate row on mobile */}
+                                        <div className="relative">
+                                            <button 
+                                                type="button" 
+                                                disabled={isRegistered}
+                                                onClick={() => !isRegistered && setShowCountryDropdown(!showCountryDropdown)}
+                                                className={`w-full h-12 px-4 flex items-center justify-between bg-slate-50 border rounded-xl transition-colors text-slate-700 ${showCountryDropdown ? 'border-[#16539a] ring-2 ring-[#16539a]/20' : 'border-slate-200'} ${!isRegistered ? 'hover:bg-slate-100' : 'cursor-not-allowed'}`}
                                                 dir="ltr"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl leading-none">{countries.find(c => c.code === countryCode)?.flag}</span>
+                                                    <span className="font-bold text-sm text-slate-600">{countries.find(c => c.code === countryCode)?.name}</span>
+                                                    <span className="font-mono font-bold text-base text-[#16539a]">{countryCode}</span>
+                                                </div>
+                                                {!isRegistered && <ChevronDown size={18} className={`text-slate-400 transition-transform ${showCountryDropdown ? 'rotate-180 text-[#16539a]' : ''}`} />}
+                                            </button>
+                                            
+                                            <AnimatePresence>
+                                                {showCountryDropdown && !isRegistered && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, y: -10, scale: 0.97 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -10, scale: 0.97 }}
+                                                        className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 flex flex-col"
+                                                    >
+                                                        <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+                                                            <div className="relative">
+                                                                <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4" />
+                                                                <Input 
+                                                                    autoFocus
+                                                                    placeholder="ابحث بالدولة أو الرمز..."
+                                                                    value={searchQuery}
+                                                                    onChange={e => setSearchQuery(e.target.value)}
+                                                                    className="h-10 pl-3 pr-9 border-slate-200 focus:border-[#16539a] text-sm bg-white rounded-xl shadow-sm"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-52 overflow-y-auto p-2 custom-scrollbar">
+                                                            {filteredCountries.length > 0 ? filteredCountries.map(c => (
+                                                                <button 
+                                                                    key={c.code}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setCountryCode(c.code);
+                                                                        setShowCountryDropdown(false);
+                                                                        setSearchQuery("");
+                                                                    }}
+                                                                    className={`w-full p-3 rounded-xl flex items-center justify-between hover:bg-slate-50 transition-colors mb-1 ${countryCode === c.code ? 'bg-blue-50 text-[#16539a] border border-blue-100' : 'text-slate-700 border border-transparent'}`}
+                                                                    dir="ltr"
+                                                                >
+                                                                    <span className="text-2xl leading-none">{c.flag}</span>
+                                                                    <span className="flex-1 text-right pr-4 font-bold">{c.name}</span>
+                                                                    <span className="font-mono font-medium text-slate-500 w-16 text-left">{c.code}</span>
+                                                                </button>
+                                                            )) : (
+                                                                <div className="p-6 text-center text-slate-400 font-medium">لم يتم العثور على نتائج</div>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {/* Phone Number Input — full width */}
+                                        <div className={`relative flex items-center bg-white border rounded-xl focus-within:border-[#16539a] focus-within:ring-2 focus-within:ring-[#16539a]/20 transition-all h-14 w-full overflow-hidden ${phoneError ? 'border-red-500' : 'border-slate-200'}`}>
+                                            <Phone className="absolute right-4 text-slate-300 w-5 h-5 pointer-events-none" />
+                                            <Input 
+                                                className="w-full h-full px-4 pr-12 text-xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 outline-none placeholder:text-slate-300" 
+                                                placeholder="7XX XXX XXX"
+                                                dir="ltr"
+                                                type="tel"
+                                                inputMode="numeric"
                                                 readOnly={isRegistered}
                                                 value={editablePhone}
                                                 onChange={e => {
@@ -462,67 +531,7 @@ export default function ExamSessionPage() {
                                                     setPhoneError("");
                                                 }}
                                             />
-
-                                            {/* Country Code Dropdown (On the Left in RTL) */}
-                                            <div className="h-full flex items-center relative bg-slate-50 border-r border-slate-200">
-                                                <button 
-                                                    type="button" 
-                                                    disabled={isRegistered}
-                                                    onClick={() => !isRegistered && setShowCountryDropdown(!showCountryDropdown)}
-                                                    className={`h-full px-3 md:px-5 flex items-center gap-2 transition-colors text-slate-700 ${!isRegistered ? 'hover:bg-slate-100' : 'cursor-not-allowed'}`}
-                                                    dir="ltr"
-                                                >
-                                                    <span className="text-xl md:text-2xl leading-none">{countries.find(c => c.code === countryCode)?.flag}</span>
-                                                    <span className="font-mono font-bold text-base md:text-lg">{countryCode}</span>
-                                                    {!isRegistered && <ChevronDown size={16} className={`text-slate-400 transition-transform ${showCountryDropdown ? 'rotate-180 text-[#16539a]' : ''}`} />}
-                                                </button>
-                                                
-                                                <AnimatePresence>
-                                                    {showCountryDropdown && !isRegistered && (
-                                                        <motion.div 
-                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            className="absolute bottom-full left-0 mb-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-72 overflow-hidden z-50 flex flex-col"
-                                                        >
-                                                            <div className="p-3 border-b border-slate-100 bg-slate-50/50">
-                                                                <div className="relative">
-                                                                    <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4" />
-                                                                    <Input 
-                                                                        autoFocus
-                                                                        placeholder="ابحث بالدولة أو الرمز..."
-                                                                        value={searchQuery}
-                                                                        onChange={e => setSearchQuery(e.target.value)}
-                                                                        className="h-10 pl-3 pr-9 border-slate-200 focus:border-[#16539a] text-sm bg-white rounded-xl shadow-sm"
-                                                                    />
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="max-h-64 overflow-y-auto p-2 custom-scrollbar">
-                                                                {filteredCountries.length > 0 ? filteredCountries.map(c => (
-                                                                    <button 
-                                                                        key={c.code}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setCountryCode(c.code);
-                                                                            setShowCountryDropdown(false);
-                                                                            setSearchQuery("");
-                                                                        }}
-                                                                        className={`w-full p-3 rounded-xl flex items-center justify-between hover:bg-slate-50 transition-colors mb-1 ${countryCode === c.code ? 'bg-blue-50 text-[#16539a] border border-blue-100' : 'text-slate-700 border border-transparent'}`}
-                                                                        dir="ltr"
-                                                                    >
-                                                                        <span className="text-2xl leading-none">{c.flag}</span>
-                                                                        <span className="flex-1 text-right pr-4 font-bold">{c.name}</span>
-                                                                        <span className="font-mono font-medium text-slate-500 w-16 text-left">{c.code}</span>
-                                                                    </button>
-                                                                )) : (
-                                                                    <div className="p-6 text-center text-slate-400 font-medium">لم يتم العثور على نتائج</div>
-                                                                )}
-                                                            </div>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
+                                            <div className="absolute left-4 font-mono font-bold text-slate-400 text-sm pointer-events-none" dir="ltr">{countryCode}</div>
                                         </div>
                                         {phoneError && <p className="text-red-500 text-xs font-bold mt-1 pr-1">{phoneError}</p>}
                                     </div>
@@ -635,7 +644,7 @@ export default function ExamSessionPage() {
     );
 
     return (
-        <div className="h-screen bg-[#f8fafc] flex flex-col font-sans overflow-hidden">
+        <div className="h-[100dvh] bg-[#f8fafc] flex flex-col font-sans overflow-hidden">
             {/* The Unified Navbar spanning full width */}
             <MockExamNavbar 
                 title={`قاعة الاختبار: ${info?.profession?.name || ""}`} 
@@ -643,11 +652,21 @@ export default function ExamSessionPage() {
                 leftElement={TimerComponent}
             />
 
+            {/* Progress Bar - fixed thin bar showing answered progress */}
+            <div className="h-1 w-full bg-slate-100 shrink-0">
+                <motion.div 
+                    className="h-full bg-gradient-to-l from-[#16539a] to-[#5c9e45]" 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercent}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                />
+            </div>
+
             {/* Main Workspace Layout */}
             <div className="flex-1 flex overflow-hidden">
                 
-                {/* Right Sidebar: Map & Progress (Visible on lg screens) */}
-                <aside className={`w-[22rem] bg-white border-l border-slate-200 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.03)] z-10 transition-transform ${showSidebar ? 'translate-x-0 absolute right-0 h-full' : 'hidden lg:flex'}`}>
+                {/* Right Sidebar: Map & Progress (Visible on lg screens, full-screen overlay on mobile) */}
+                <aside className={`w-full lg:w-[22rem] bg-white border-l border-slate-200 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.03)] z-30 transition-all duration-300 ${showSidebar ? 'fixed inset-0 lg:relative lg:inset-auto' : 'hidden lg:flex'}`}>
                     <div className="p-6 md:p-8 border-b border-slate-100 relative">
                         {/* Mobile Close Button */}
                         <button 
@@ -819,8 +838,87 @@ export default function ExamSessionPage() {
                         )}
                     </div>
 
+                    {/* Mobile Submit Button - fixed at bottom for easy thumb reach */}
+                    <div className="lg:hidden h-20 bg-white border-t border-slate-200 px-4 flex items-center shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+                        <Button 
+                            onClick={() => submitExam()}
+                            disabled={isSubmitting || answers.length < questions.length - 5}
+                            className="w-full h-14 text-base font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-2xl shadow-lg shadow-green-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            <Check size={20} />
+                            {isSubmitting ? "جاري الإرسال..." : `إنهاء الاختبار (${answers.length}/${questions.length})`}
+                        </Button>
+                    </div>
+
                 </main>
             </div>
+
+            {/* ===== Submit Confirmation Bottom Sheet ===== */}
+            <AnimatePresence>
+                {showSubmitConfirm && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowSubmitConfirm(false)}
+                            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60]"
+                        />
+                        {/* Bottom Sheet on mobile, centered modal on desktop */}
+                        <motion.div
+                            initial={{ y: "100%", opacity: 0.5 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: "100%", opacity: 0 }}
+                            transition={{ type: "spring", damping: 32, stiffness: 400 }}
+                            className="fixed bottom-0 left-0 right-0 md:bottom-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-md md:rounded-3xl z-[61] bg-white rounded-t-[2rem] shadow-2xl"
+                            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                        >
+                            {/* Handle bar (mobile only) */}
+                            <div className="flex justify-center pt-3 pb-1 md:hidden">
+                                <div className="w-10 h-1 bg-slate-200 rounded-full" />
+                            </div>
+                            
+                            <div className="p-6 md:p-8 text-center">
+                                <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-amber-100">
+                                    <AlertTriangle className="w-8 h-8 text-amber-500" />
+                                </div>
+                                <h3 className="text-xl font-black text-slate-800 mb-2">تأكيد تسليم الاختبار</h3>
+                                <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                                    {questions.length - answers.length > 0 
+                                        ? <span>لديك <strong className="text-amber-600">{questions.length - answers.length}</strong> أسئلة غير مجابة من أصل <strong>{questions.length}</strong>. هل أنت متأكد من التسليم النهائي؟</span>
+                                        : "هل أنت متأكد من تأكيد وتسليم جميع إجاباتك؟"
+                                    }
+                                </p>
+                                
+                                {/* Progress indicator */}
+                                <div className="bg-slate-50 rounded-xl p-3 mb-6 flex items-center justify-between">
+                                    <span className="text-xs font-bold text-slate-400">الإجابات المكتملة</span>
+                                    <span className="text-sm font-black text-[#16539a]">{answers.length} / {questions.length}</span>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button 
+                                        onClick={() => setShowSubmitConfirm(false)}
+                                        variant="outline" 
+                                        className="flex-1 h-14 rounded-2xl font-bold border-2 border-slate-200 text-slate-600 hover:bg-slate-50 text-base"
+                                    >
+                                        متابعة الاختبار
+                                    </Button>
+                                    <Button 
+                                        onClick={() => executeSubmit()}
+                                        disabled={isSubmitting}
+                                        className="flex-1 h-14 rounded-2xl font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white shadow-lg shadow-green-900/20 text-base disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        <Check size={20} />
+                                        {isSubmitting ? "جاري..." : "تأكيد التسليم"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
