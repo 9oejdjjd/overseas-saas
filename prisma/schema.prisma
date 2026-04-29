@@ -592,7 +592,7 @@ model Profession {
   slug          String   @unique // e.g. "plumber", "driver"
   description   String?  @db.Text
   examDuration  Int      @default(60) // in minutes
-  questionCount Int      @default(20) // Number of questions per exam
+  questionCount Int      @default(30) // Number of questions per exam
   passingScore  Int      @default(60) // Percentage 0-100
   maxAttempts   Int      @default(3) // Max exam attempts per visitor/applicant
   isActive      Boolean  @default(true)

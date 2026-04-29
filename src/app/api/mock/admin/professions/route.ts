@@ -75,7 +75,7 @@ export async function POST(request: Request) {
                 slug,
                 description,
                 examDuration: examDuration ? Number(examDuration) : 60,
-                questionCount: questionCount ? Number(questionCount) : 20,
+                questionCount: questionCount ? Number(questionCount) : 30,
                 passingScore: passingScore ? Number(passingScore) : 60,
                 isActive: isActive ?? true
             }
