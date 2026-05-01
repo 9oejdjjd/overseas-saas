@@ -5,12 +5,15 @@ import { Loader2, RefreshCw, Layers, CheckCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { QuestionsImportModal } from "./QuestionsImportModal";
+import { SingleQuestionImportModal } from "./SingleQuestionImportModal";
 import { DuplicateScannerModal } from "./DuplicateScannerModal";
 
 export function QuestionsManager() {
     const [questions, setQuestions] = useState<any[]>([]);
     const [professions, setProfessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [config, setConfig] = useState<any>(null);
+    const [isToggling, setIsToggling] = useState(false);
 
     const [filterProfession, setFilterProfession] = useState<string>("ALL");
     const [searchProfession, setSearchProfession] = useState<string>("");
@@ -39,9 +42,40 @@ export function QuestionsManager() {
         }
     };
 
+    const fetchConfig = async () => {
+        try {
+            const res = await fetch("/api/pricing/config");
+            const data = await res.json();
+            setConfig(data);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const toggleNewFeatures = async () => {
+        if (!config) return;
+        setIsToggling(true);
+        try {
+            const res = await fetch("/api/pricing/config", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enableMockExamNewQuestions: !config.enableMockExamNewQuestions })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setConfig(updated);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsToggling(false);
+        }
+    };
+
     useEffect(() => {
         fetchQuestions();
         fetchProfessions();
+        fetchConfig();
     }, []);
 
     const axisLabels: any = {
@@ -73,6 +107,17 @@ export function QuestionsManager() {
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         تحديث
                     </button>
+                    {config && (
+                        <button 
+                            onClick={toggleNewFeatures} 
+                            disabled={isToggling}
+                            className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors border flex-1 justify-center sm:flex-none ${config.enableMockExamNewQuestions ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                        >
+                            {isToggling ? <Loader2 className="h-4 w-4 animate-spin" /> : (config.enableMockExamNewQuestions ? <CheckCircle className="h-4 w-4" /> : <Layers className="h-4 w-4" />)}
+                            {config.enableMockExamNewQuestions ? 'الأنواع الجديدة: مفعلة' : 'الأنواع الجديدة: معطلة'}
+                        </button>
+                    )}
+                    <SingleQuestionImportModal professions={professions} onSuccess={fetchQuestions} />
                     <QuestionsImportModal professions={professions} questions={questions} onSuccess={fetchQuestions} />
                     <DuplicateScannerModal professions={professions} onSuccess={fetchQuestions} />
                 </div>
@@ -158,8 +203,17 @@ export function QuestionsManager() {
                                             : "bg-purple-50 text-purple-700 border-purple-200"}>
                                             {q.cognitiveLevel === "K1" ? "K1 تذكر" : "K2 تطبيق"}
                                         </Badge>
+                                        <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                                            {q.type === "TRUE_FALSE" ? "صح أو خطأ" : q.type === "FILL_BLANK" ? "إكمال الفراغ" : "اختيار من متعدد"}
+                                        </Badge>
                                     </div>
                                     <h3 className="font-bold text-gray-900 mb-4">{q.text}</h3>
+                                    
+                                    {q.imageUrl && (
+                                        <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block">
+                                            <img src={q.imageUrl} alt="صورة السؤال" className="h-32 object-contain bg-gray-50" />
+                                        </div>
+                                    )}
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                                         {q.options?.map((opt: any) => (

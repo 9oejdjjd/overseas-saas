@@ -44,6 +44,7 @@ model ServiceConfig {
   maxAllowedExamChanges    Int      @default(1)
   examModificationDeadline Int      @default(72) // Hours before exam
   examCancellationDeadline Int      @default(72) // Hours before exam
+  enableMockExamNewQuestions Boolean @default(false)
   updatedAt                DateTime @updatedAt
 }
 
@@ -621,11 +622,19 @@ enum QuestionDifficulty {
   HARD
 }
 
+enum QuestionType {
+  MCQ        // اختيار من متعدد (4 خيارات)
+  TRUE_FALSE // صح أو خطأ (خياران)
+  FILL_BLANK // إكمال الفراغات (4 خيارات)
+}
+
 model Question {
   id           String             @id @default(uuid())
   professionId String
+  type         QuestionType       @default(MCQ)
   axis         QuestionAxis       @default(PROFESSION_KNOWLEDGE)
   text         String             @db.Text
+  imageUrl     String?            // رابط الصورة (Cloudinary) - اختياري
   explanation  String?            @db.Text
   difficulty     QuestionDifficulty @default(MEDIUM)
   cognitiveLevel String?            @default("K2") // K1=تذكر واسترجاع, K2=تطبيق وتحليل سيناريو

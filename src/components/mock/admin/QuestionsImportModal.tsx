@@ -51,7 +51,9 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const [searchProfession, setSearchProfession] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [axis, setAxis] = useState("");
+    const [questionType, setQuestionType] = useState("MCQ");
     const [focusTopic, setFocusTopic] = useState("");
+    const [includeExisting, setIncludeExisting] = useState(false);
     const [mode, setMode] = useState("skip_duplicates");
     const [jsonText, setJsonText] = useState("");
     const [parsedData, setParsedData] = useState<any[]>([]);
@@ -86,8 +88,10 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
             for (let i = 0; i < parsed.length; i++) {
                 const q = parsed[i];
                 if (!q.text) return setError(`السؤال رقم ${i + 1} يفتقد لنص السؤال 'text'`);
-                if (!q.options || !Array.isArray(q.options) || q.options.length !== 4) {
-                    return setError(`السؤال رقم ${i + 1} يجب أن يحتوي على 4 خيارات بالضبط`);
+                
+                const expectedOptions = questionType === "TRUE_FALSE" ? 2 : 4;
+                if (!q.options || !Array.isArray(q.options) || q.options.length !== expectedOptions) {
+                    return setError(`السؤال رقم ${i + 1} يجب أن يحتوي على ${expectedOptions} خيارات بالضبط`);
                 }
                 const correctCount = q.options.filter((o: any) => o.isCorrect).length;
                 if (correctCount !== 1) {
@@ -113,6 +117,7 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
                     professionId,
                     axis,
                     mode,
+                    questionType,
                     questions: parsedData
                 })
             });
@@ -162,14 +167,25 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
         const professionName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
         const axisName = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
 
-        return `أريد منك أن تعمل كخبير معتمد في إعداد اختبارات الاعتماد المهني والفحص المهني وفق المعايير المستخدمة في الاختبارات المهنية الواقعية (مثل اختبارات الهيئة السعودية للتخصصات المهنية).
+        let existingQsText = "";
+        if (includeExisting && questions && questions.length > 0) {
+            const existingQs = questions
+                .filter(q => q.professionId === professionId && q.axis === axis && q.type === questionType)
+                .map(q => q.text);
+            
+            if (existingQs.length > 0) {
+                // Shuffle and take up to 40 random questions to avoid token limits
+                const shuffled = existingQs.sort(() => 0.5 - Math.random());
+                const sample = shuffled.slice(0, 40);
+                existingQsText = `\n\n🛑 تحذير صارم: الأسئلة التالية موجودة مسبقاً في النظام. يُمنع منعاً باتاً تكرارها، أو إعادة صياغتها، أو استخدام نفس فكرتها. ابتكر أفكاراً وسيناريوهات جديدة تماماً:\n` + sample.map(t => `- ${t}`).join("\n");
+            }
+        }
 
-المطلوب:
-توليد 30 سؤالًا احترافيًا لمهنة: ${professionName}
-وفي محور: ${axisName}
-${focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : ""}
+        const expertPersona = `أريد منك أن تعمل كخبير معتمد في إعداد اختبارات الاعتماد المهني والفحص المهني وفق المعايير المستخدمة في الاختبارات المهنية الواقعية (مثل اختبارات الهيئة السعودية للتخصصات المهنية).`;
 
-🎯 الهدف:
+        const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
+
+        const qualityRules = `🎯 الهدف:
 إنشاء بنك أسئلة عالي الجودة يحاكي الاختبارات الحقيقية من حيث:
 - مستوى الصعوبة
 - دقة الصياغة
@@ -194,30 +210,92 @@ ${focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الم�
 - لا تكرر نفس الفكرة بصياغات مختلفة
 - تجنب الأسئلة السهلة أو البدائية
 
-🧩 الخيارات:
+📌 الشرح (explanation):
+- شرح مختصر لكنه احترافي
+- يوضح لماذا الإجابة صحيحة أو العبارة خاطئة
+- ويشير بشكل غير مباشر لماذا الخيارات الأخرى غير مناسبة
+
+🧠 أسلوب الأسئلة في أسئلة K2:
+- ابدأ بسيناريو واقعي (مثال: "أثناء العمل..." أو "في حالة حدوث...")
+
+🚫 ممنوع:
+- عدم استخدام أسئلة إنشائية أو رأي
+- عدم تكرار نفس المصطلحات بشكل ممل
+- عدم الخروج عن المحور المحدد`;
+
+        if (questionType === "TRUE_FALSE") {
+            return `${expertPersona}
+
+المطلوب:
+توليد 30 سؤال "صح أو خطأ" لمهنة: ${professionName}
+وفي محور: ${axisName}${focusString}
+
+${qualityRules}
+
+🎯 هيكل سؤال (صح أو خطأ):
+- كل سؤال يجب أن يكون عبارة مهنية فنية واضحة يمكن الحكم عليها بـ "صح" أو "خطأ".
+- العبارات الخاطئة يجب أن تمثل أخطاء شائعة في المهنة وليست أخطاء بديهية يمكن لأي شخص اكتشافها.
+
+📦 الإخراج حصرياً بصيغة JSON فقط:
+[
+  {
+    "text": "العبارة المهنية الفنية هنا (تكون صحيحة أو خاطئة)",
+    "explanation": "شرح مختصر يوضح لماذا العبارة صحيحة أو خطأ",
+    "difficulty": "HARD",
+    "cognitiveLevel": "K1",
+    "options": [
+      { "text": "صح", "isCorrect": true },
+      { "text": "خطأ", "isCorrect": false }
+    ]
+  }
+]${existingQsText}`;
+        }
+
+        if (questionType === "FILL_BLANK") {
+            return `${expertPersona}
+
+المطلوب:
+توليد 30 سؤال "إكمال الفراغ" لمهنة: ${professionName}
+وفي محور: ${axisName}${focusString}
+
+${qualityRules}
+
+🎯 هيكل سؤال (إكمال الفراغ):
+- كل سؤال يجب أن يكون عبارة أو جملة مهنية تحتوي على فراغ (_____).
+- يجب على المتدرب اختيار الكلمة أو العبارة المناسبة لملء الفراغ من بين 4 خيارات.
+- الخيارات الـ 4 يجب أن تكون مصطلحات فنية أو إجراءات قريبة جداً من بعضها للتمويه وزيادة الصعوبة.
+
+📦 الإخراج حصرياً بصيغة JSON فقط:
+[
+  {
+    "text": "أثناء استخدام آلة القطع، يجب دائماً ارتداء _____ لحماية العينين من الشظايا.",
+    "explanation": "النظارات الواقية هي من أساسيات السلامة...",
+    "difficulty": "HARD",
+    "cognitiveLevel": "K2",
+    "options": [
+      { "text": "القفازات", "isCorrect": false },
+      { "text": "النظارات الواقية", "isCorrect": true },
+      { "text": "الخوذة", "isCorrect": false },
+      { "text": "الحذاء الواقي", "isCorrect": false }
+    ]
+  }
+]${existingQsText}`;
+        }
+
+        return `${expertPersona}
+
+المطلوب:
+توليد 30 سؤالًا احترافيًا (اختيار من متعدد) لمهنة: ${professionName}
+وفي محور: ${axisName}${focusString}
+
+${qualityRules}
+
+🧩 هيكل سؤال (الاختيار من متعدد):
 - كل سؤال يحتوي على 4 خيارات
 - خيار واحد فقط صحيح 100%
 - الخيارات الخاطئة يجب أن تكون "مقنعة ومنطقية" وليست واضحة الخطأ
 - لا تجعل الإجابة الصحيحة أطول أو أوضح بشكل يكشفها
-
-📌 الشرح (explanation):
-- شرح مختصر لكنه احترافي
-- يوضح لماذا الإجابة صحيحة
-- ويشير بشكل غير مباشر لماذا الخيارات الأخرى خاطئة
-
-🧠 أسلوب الأسئلة:
-- استخدم مزيج من:
-  - أسئلة مباشرة عميقة
-  - أسئلة تحليل
-  - أسئلة مواقف (Scenario-based)
-- في أسئلة K2:
-  ابدأ بسيناريو واقعي (مثال: "أثناء العمل..." أو "في حالة حدوث...")
-
-🚫 ممنوع:
-- عدم استخدام أسئلة إنشائية أو رأي
-- عدم استخدام "جميع ما سبق" أو "لا شيء مما سبق"
-- عدم تكرار نفس المصطلحات بشكل ممل
-- عدم الخروج عن المحور المحدد
+- ممنوع استخدام "جميع ما سبق" أو "لا شيء مما سبق"
 
 📦 الإخراج (مهم جدًا):
 أعد النتيجة حصريًا بصيغة JSON فقط بدون أي نص إضافي، وبالشكل التالي:
@@ -228,7 +306,7 @@ ${JSON_TEMPLATE}
 - أن عدد الأسئلة = 30
 - التوزيع صحيح (MEDIUM / HARD)
 - التوزيع المعرفي صحيح (K1 / K2)
-- JSON صحيح 100% بدون أخطاء`;
+- JSON صحيح 100% بدون أخطاء${existingQsText}`;
     };
 
     const copyTemplate = () => {
@@ -305,10 +383,10 @@ ${JSON_TEMPLATE}
                                         <SelectTrigger><SelectValue placeholder="اختر المحور" /></SelectTrigger>
                                         <SelectContent>
                                             {AXIS_OPTIONS.map(a => {
-                                                const count = professionId ? questions.filter(q => q.professionId === professionId && q.axis === a.value).length : 0;
+                                                const count = professionId ? questions.filter(q => q.professionId === professionId && q.axis === a.value && q.type === questionType).length : 0;
                                                 return (
                                                     <SelectItem key={a.value} value={a.value}>
-                                                        {a.label} {professionId ? `(${count} أسئلة)` : ''}
+                                                        {a.label} {professionId ? `(${count} أسئلة ${questionType})` : ''}
                                                     </SelectItem>
                                                 );
                                             })}
@@ -325,7 +403,18 @@ ${JSON_TEMPLATE}
                                     />
                                     <p className="text-[10px] text-gray-500">يساعد في تقييد ChatGPT لإنتاج أسئلة جديدة غير مكررة</p>
                                 </div>
-                                <div className="space-y-2 lg:col-span-3">
+                                <div className="space-y-2">
+                                    <Label>نوع الأسئلة</Label>
+                                    <Select value={questionType} onValueChange={setQuestionType}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="MCQ">اختيار من متعدد (عادي)</SelectItem>
+                                            <SelectItem value="TRUE_FALSE">صح أو خطأ</SelectItem>
+                                            <SelectItem value="FILL_BLANK">إكمال الفراغات</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2 lg:col-span-2">
                                     <Label>طريقة الاستيراد والتعارض</Label>
                                     <Select value={mode} onValueChange={setMode}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -416,6 +505,16 @@ ${JSON_TEMPLATE}
                                             {mode === "replace_axis_questions" ? "استبدال المحور بالكامل" :
                                                 mode === "skip_duplicates" ? "تجاوز المكرر" : "إضافة (رفض التكرار)"}
                                         </p>
+                                    </div>
+                                    
+                                    <div className="col-span-4 flex items-center gap-3 bg-blue-50 border border-blue-100 p-4 rounded-xl cursor-pointer hover:bg-blue-100/50 transition-colors" onClick={() => setIncludeExisting(!includeExisting)}>
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${includeExisting ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'}`}>
+                                            {includeExisting && <CheckCircle2 size={14} />}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-gray-800">تضمين الأسئلة السابقة كتحذير لمنع التكرار</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">يرفق عينة من الأسئلة الموجودة حالياً في الـ Prompt ليقوم الذكاء الاصطناعي بتجنبها. (قد يزيد من استهلاك الـ Tokens)</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

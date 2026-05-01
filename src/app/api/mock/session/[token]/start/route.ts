@@ -66,10 +66,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 data: { status: "RESUMED" }
             });
             
-            // Format existing questions to match frontend expectation
             const existingQuestions = session.questions.map((sq: any) => ({
                 questionId: sq.question.id,
                 question: {
+                    type: sq.question.type,
+                    imageUrl: sq.question.imageUrl,
                     text: sq.question.text,
                     options: sq.question.options.map((opt: any) => ({ id: opt.id, text: opt.text }))
                 },
@@ -117,14 +118,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
         // If it's a NEW session, we must select random questions and link them
         if (session.status === "NEW") {
+            // 1. Fetch user identification to get Seen Questions
+            const userPhone = body.phone || session.visitorPhone;
+            const userIdentifier = session.applicantId || userPhone || session.deviceFingerprint;
+            let seenQuestionIds = new Set<string>();
+
+            if (userIdentifier) {
+                const orConditions = [];
+                if (session.applicantId) orConditions.push({ applicantId: session.applicantId });
+                if (userPhone) orConditions.push({ visitorPhone: userPhone });
+                if (session.deviceFingerprint) orConditions.push({ deviceFingerprint: session.deviceFingerprint });
+
+                // Find all past sessions for this user for THIS profession
+                const pastSessions = await prisma.examSession.findMany({
+                    where: {
+                        professionId: session.professionId,
+                        OR: orConditions,
+                        id: { not: session.id }
+                    },
+                    select: { id: true }
+                });
+
+                if (pastSessions.length > 0) {
+                    const pastSessionIds = pastSessions.map(s => s.id);
+                    const seenQuestions = await prisma.examSessionQuestion.findMany({
+                        where: { sessionId: { in: pastSessionIds } },
+                        select: { questionId: true }
+                    });
+                    seenQuestions.forEach(sq => seenQuestionIds.add(sq.questionId));
+                }
+            }
+
+            // 2. Fetch the question bank (Only HARD and ACTIVE)
             const questionBank = await prisma.question.findMany({
-                where: { professionId: session.professionId, isActive: true },
+                where: { 
+                    professionId: session.professionId, 
+                    isActive: true,
+                    difficulty: "HARD" // Strictly HARD difficulty as requested
+                },
                 include: { options: true }
             });
 
             const totalRequired = session.profession.questionCount || 30;
-            
-            // Proper Fisher-Yates shuffle algorithm for true randomness
+
+            // Fetch ServiceConfig to check if new question types are enabled
+            const serviceConfig = await prisma.serviceConfig.findUnique({ where: { id: "global" } });
+            const enableNewQuestions = serviceConfig?.enableMockExamNewQuestions ?? false;
+
             const shuffleArray = (array: any[]) => {
                 const newArr = [...array];
                 for (let i = newArr.length - 1; i > 0; i--) {
@@ -134,72 +174,102 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return newArr;
             };
 
-            // Filter strictly HARD questions and properly shuffle them
-            const hardQs = shuffleArray(questionBank.filter(q => q.difficulty === "HARD"));
+            // 3. Separate into Unseen and Seen, and Shuffle
+            let unseenBank = shuffleArray(questionBank.filter(q => !seenQuestionIds.has(q.id)));
+            let seenBank = shuffleArray(questionBank.filter(q => seenQuestionIds.has(q.id)));
+
+            // If new questions are disabled, exclude them from both pools
+            if (!enableNewQuestions) {
+                unseenBank = unseenBank.filter(q => q.type === "MCQ" && !q.imageUrl);
+                seenBank = seenBank.filter(q => q.type === "MCQ" && !q.imageUrl);
+            }
+
+            // 4. Setup Quotas
+            const typeQuota = enableNewQuestions 
+                ? { MCQ: 15, TRUE_FALSE: 7, IMAGE: 3, FILL_BLANK: 5 }
+                : { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
+
+            const axisQuota: Record<string, number> = {
+                EMERGENCIES_FIRST_AID: 1,
+                HEALTH_SAFETY: 3,
+                OCCUPATIONAL_SAFETY: 3,
+                OTHER: 23 // Distributed among the rest
+            };
             
+            const OTHER_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
+
             let selectedQuestions: any[] = [];
-            
-            // 1. Separate questions by specific axes
-            const axisGroups: { [key: string]: any[] } = {
-                HEALTH_SAFETY: [],
-                OCCUPATIONAL_SAFETY: [],
-                EMERGENCIES_FIRST_AID: [],
-                OTHER: []
+            const pickedIds = new Set<string>();
+
+            const addQuestion = (q: any, isOtherAxis: boolean) => {
+                selectedQuestions.push(q);
+                pickedIds.add(q.id);
+                
+                // Decrement type quota
+                if (q.imageUrl && enableNewQuestions) {
+                    typeQuota.IMAGE--;
+                } else {
+                    typeQuota[q.type as keyof typeof typeQuota]--;
+                }
+
+                // Decrement axis quota
+                if (isOtherAxis) {
+                    axisQuota.OTHER--;
+                } else {
+                    axisQuota[q.axis]--;
+                }
             };
 
-            hardQs.forEach(q => {
-                if (q.axis === "HEALTH_SAFETY" || q.axis === "OCCUPATIONAL_SAFETY" || q.axis === "EMERGENCIES_FIRST_AID") {
-                    axisGroups[q.axis].push(q);
-                } else {
-                    // All other axes go to OTHER group (to be distributed fairly)
-                    axisGroups.OTHER.push(q);
-                }
-            });
+            // Helper to pick questions based on quotas
+            const pickQuestionsFromPool = (pool: any[], enforceAxis: boolean) => {
+                for (const q of pool) {
+                    if (pickedIds.has(q.id) || selectedQuestions.length >= totalRequired) continue;
 
-            // 2. Pick exact requested constraints (2, 2, 1)
-            const hsPicks = axisGroups.HEALTH_SAFETY.splice(0, 2);
-            const osPicks = axisGroups.OCCUPATIONAL_SAFETY.splice(0, 2);
-            const efaPicks = axisGroups.EMERGENCIES_FIRST_AID.splice(0, 1);
-            
-            selectedQuestions.push(...hsPicks, ...osPicks, ...efaPicks);
+                    let qType = q.type;
+                    if (q.imageUrl && enableNewQuestions) qType = "IMAGE";
 
-            // 3. The remaining questions (e.g. 25, if total is 30) distributed equally across remaining axes
-            const remainingTarget = totalRequired - selectedQuestions.length;
-            
-            // Helper to pick target amount fairly across different remaining axes
-            const pickFairly = (sourceQs: any[], targetAmount: number) => {
-                const subGroups: { [key: string]: any[] } = {};
-                sourceQs.forEach(q => {
-                    if (!subGroups[q.axis]) subGroups[q.axis] = [];
-                    subGroups[q.axis].push(q);
-                });
-                
-                const picked: any[] = [];
-                let axisKeys = Object.keys(subGroups);
-                
-                while (picked.length < targetAmount && axisKeys.length > 0) {
-                    for (let i = axisKeys.length - 1; i >= 0; i--) {
-                        if (picked.length >= targetAmount) break;
-                        const key = axisKeys[i];
-                        if (subGroups[key].length > 0) {
-                            picked.push(subGroups[key].pop());
-                        } else {
-                            axisKeys.splice(i, 1);
+                    const typeNeeded = typeQuota[qType as keyof typeof typeQuota] > 0;
+                    
+                    const isOtherAxis = OTHER_AXES.includes(q.axis) || (!axisQuota[q.axis] && axisQuota[q.axis] !== 0); // fallback if axis not recognized
+                    const axisNeeded = isOtherAxis ? axisQuota.OTHER > 0 : axisQuota[q.axis] > 0;
+
+                    if (typeNeeded) {
+                        if (!enforceAxis || axisNeeded) {
+                            addQuestion(q, isOtherAxis);
                         }
                     }
                 }
-                return picked;
             };
 
-            // Pick fairly from the OTHER axes pool
-            const pickedFairlyRest = pickFairly(axisGroups.OTHER, remainingTarget);
-            selectedQuestions.push(...pickedFairlyRest);
+            // Phase 1: Unseen, enforce both Type and Axis
+            pickQuestionsFromPool(unseenBank, true);
 
-            // 4. Fallback: If the bank didn't have enough HARD questions in those specific axes, fill with any remaining questions
+            // Phase 2: Unseen, relax Axis, enforce Type only
             if (selectedQuestions.length < totalRequired) {
-                const pickedIds = new Set(selectedQuestions.map(q => q.id));
-                const remainingBank = shuffleArray(questionBank.filter(q => !pickedIds.has(q.id)));
-                selectedQuestions.push(...remainingBank.slice(0, totalRequired - selectedQuestions.length));
+                pickQuestionsFromPool(unseenBank, false);
+            }
+
+            // Phase 3: Seen (Fallback), enforce both Type and Axis
+            if (selectedQuestions.length < totalRequired) {
+                pickQuestionsFromPool(seenBank, true);
+            }
+
+            // Phase 4: Seen, relax Axis, enforce Type only
+            if (selectedQuestions.length < totalRequired) {
+                pickQuestionsFromPool(seenBank, false);
+            }
+
+            // Phase 5: Absolute Emergency, fill with whatever is left (Ignore quotas)
+            if (selectedQuestions.length < totalRequired) {
+                const remainingUnseen = unseenBank.filter(q => !pickedIds.has(q.id));
+                const remainingSeen = seenBank.filter(q => !pickedIds.has(q.id));
+                const emergencyPool = [...remainingUnseen, ...remainingSeen];
+                
+                for (const q of emergencyPool) {
+                    if (selectedQuestions.length >= totalRequired) break;
+                    selectedQuestions.push(q);
+                    pickedIds.add(q.id);
+                }
             }
 
             // Final shuffle so the axes and difficulties are mixed up in the actual exam
@@ -232,10 +302,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             // Save relationship
             await prisma.$transaction(updates);
 
-            // Construct payload returning questions to UI without 'isCorrect' flag
             const safeQuestions = selectedQuestions.map(q => ({
                 questionId: q.id,
                 question: {
+                    type: q.type,
+                    imageUrl: q.imageUrl,
                     text: q.text,
                     options: q.options.map((opt: any) => ({
                         id: opt.id,
@@ -271,6 +342,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         const safeQuestions = savedSessionQuestions.map(sq => ({
             questionId: sq.question.id,
             question: {
+                type: sq.question.type,
+                imageUrl: sq.question.imageUrl,
                 text: sq.question.text,
                 options: sq.question.options.map(opt => ({
                     id: opt.id,

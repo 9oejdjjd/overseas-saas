@@ -38,7 +38,8 @@ export async function PATCH(request: Request) {
                 maxFreeChanges: body.maxFreeChanges,
                 maxAllowedExamChanges: body.maxAllowedExamChanges,
                 examModificationDeadline: body.examModificationDeadline,
-                examCancellationDeadline: body.examCancellationDeadline
+                examCancellationDeadline: body.examCancellationDeadline,
+                enableMockExamNewQuestions: body.enableMockExamNewQuestions !== undefined ? body.enableMockExamNewQuestions : undefined
             }
         });
 

@@ -27,6 +27,8 @@ interface QuestionResult {
     id: string;
     questionId: string;
     axis: string;
+    type?: string;
+    imageUrl?: string | null;
     text: string;
     explanation: string;
     selectedOptionId: string | null;
@@ -40,6 +42,7 @@ interface ResultData {
     isPassed: boolean;
     visitorName: string;
     professionName: string;
+    isRegistered: boolean;
     startedAt: string;
     completedAt: string;
     questions: QuestionResult[];
@@ -331,8 +334,8 @@ export default function ExamResultPage() {
                     </div>
                 </motion.div>
 
-                {/* ===== MARKETING CTA SECTION ===== */}
-                <motion.div 
+                {/* ===== MARKETING CTA SECTION (Visitors only) ===== */}
+                {!result.isRegistered && <motion.div 
                     initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
@@ -401,7 +404,7 @@ export default function ExamResultPage() {
                             </div>
                         </div>
                     </div>
-                </motion.div>
+                </motion.div>}
 
                 {/* 3. NEW AXIS RADAR / PROGRESS BARS */}
                 <motion.div 
@@ -520,6 +523,15 @@ export default function ExamResultPage() {
                                                     </div>
                                                 </div>
                                                 <p className="text-slate-100 text-lg md:text-xl font-bold leading-relaxed">{q.text}</p>
+                                                {q.imageUrl && (
+                                                    <div className="mt-4 rounded-2xl overflow-hidden border border-white/10 bg-white/5 inline-block max-w-full">
+                                                        <img 
+                                                            src={q.imageUrl} 
+                                                            alt="صورة السؤال" 
+                                                            className="max-h-[250px] w-auto object-contain p-2"
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className={`mt-2 transition-transform duration-300 self-center md:self-start hidden md:block ${isExpanded ? 'rotate-180 text-white' : 'text-slate-500'}`}>
                                                 <ChevronDown size={32} />

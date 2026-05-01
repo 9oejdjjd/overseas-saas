@@ -82,11 +82,13 @@ export async function POST(request: Request) {
             }
         }
 
-        // 3. Check attempt limits - count ONLY fully consumed sessions (SUBMITTED, EXPIRED, TIMEOUT)
-        //    Search by both phone formats for consistency
+        // 3. Check attempt limits GLOBALLY across ALL professions (not per profession)
+        //    This prevents users from bypassing the limit by switching professions
+        const MAX_GLOBAL_ATTEMPTS = 3;
+
         const previousAttemptsByPhone = await prisma.examSession.count({
             where: {
-                professionId: profession.id,
+                type: "PUBLIC",
                 OR: [
                     { visitorPhone: visitorPhone },
                     { visitorPhone: phoneWithoutPlus }
@@ -99,7 +101,7 @@ export async function POST(request: Request) {
         if (deviceFingerprint) {
             previousAttemptsByFingerprint = await prisma.examSession.count({
                 where: {
-                    professionId: profession.id,
+                    type: "PUBLIC",
                     deviceFingerprint: deviceFingerprint,
                     status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
                 }
@@ -108,9 +110,9 @@ export async function POST(request: Request) {
 
         const previousAttempts = Math.max(previousAttemptsByPhone, previousAttemptsByFingerprint);
 
-        if (previousAttempts >= profession.maxAttempts) {
+        if (previousAttempts >= MAX_GLOBAL_ATTEMPTS) {
             return NextResponse.json({
-                error: `لقد استنفذت جميع محاولاتك (${profession.maxAttempts} محاولات). يرجى التواصل مع الإدارة للحصول على محاولات إضافية.`
+                error: `لقد استنفذت جميع محاولاتك (${MAX_GLOBAL_ATTEMPTS} محاولات). يرجى التواصل مع الإدارة للحصول على محاولات إضافية.`
             }, { status: 403 });
         }
 

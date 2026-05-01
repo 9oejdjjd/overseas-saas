@@ -44,9 +44,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             completedAt: session.completedAt,
             visitorName: session.applicant?.fullName || session.visitorName || "زائر",
             professionName: session.profession.name,
+            isRegistered: !!session.applicantId,
             questions: session.questions.map(sq => ({
                 id: sq.id,
                 questionId: sq.questionId,
+                type: sq.question.type,
+                imageUrl: sq.question.imageUrl,
                 axis: sq.question.axis, // Added axis field
                 text: sq.question.text,
                 explanation: sq.question.explanation,

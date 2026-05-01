@@ -115,7 +115,13 @@ export default function ExamSessionPage() {
                 setStatus("ERROR");
                 setErrorMsg("لقد انتهى وقت هذا الاختبار المسموح.");
             } else {
-                setStatus("WELCOME");
+                // Session is NEW — check if visitor data was already collected from registration page
+                if (data.visitorName && data.visitorPhone) {
+                    // Data already collected & validated in /[slug] registration → skip WELCOME/TERMS
+                    startExam(false, parsedPhone, initialName);
+                } else {
+                    setStatus("WELCOME");
+                }
             }
         } catch (err: any) {
             setErrorMsg(err.message || "فشل تحميل البيانات");
@@ -760,14 +766,62 @@ export default function ExamSessionPage() {
                                             <div className="w-12 h-12 md:w-16 md:h-16 shrink-0 bg-blue-50 text-[#16539a] rounded-xl md:rounded-2xl flex items-center justify-center font-black text-2xl md:text-3xl shadow-sm border border-blue-100">
                                                 {currentQuestionIdx + 1}
                                             </div>
-                                            <h2 className="text-xl md:text-3xl lg:text-4xl font-black text-slate-800 leading-[1.6] md:pt-2">
-                                                {currentQuestion?.question.text}
-                                            </h2>
+                                            <div className="flex-1 space-y-6">
+                                                <h2 className="text-xl md:text-3xl lg:text-4xl font-black text-slate-800 leading-[1.6] md:pt-2">
+                                                    {currentQuestion?.question.text}
+                                                </h2>
+                                                {currentQuestion?.question.imageUrl && (
+                                                    <div className="mt-4 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm inline-block max-w-full bg-slate-50">
+                                                        <img 
+                                                            src={currentQuestion.question.imageUrl} 
+                                                            alt="صورة توضيحية للسؤال" 
+                                                            className="max-h-[300px] md:max-h-[400px] w-auto object-contain p-2"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Options Grid */}
-                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                                    {currentQuestion?.question.type === "TRUE_FALSE" ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
+                                            {currentQuestion?.question.options.map((opt: any) => {
+                                                const isSelected = currentAnswer === opt.id;
+                                                const isTrueOption = opt.text.includes("صح");
+                                                
+                                                return (
+                                                    <button
+                                                        key={opt.id}
+                                                        onClick={() => handleSelectOption(currentQuestion.questionId, opt.id)}
+                                                        className={`w-full p-8 md:p-12 rounded-2xl md:rounded-[2rem] border-2 transition-all duration-200 flex flex-col items-center justify-center gap-4 group relative overflow-hidden
+                                                            ${isSelected 
+                                                                ? (isTrueOption ? "bg-emerald-50 border-emerald-500 shadow-[0_8px_30px_rgba(16,185,129,0.15)]" : "bg-red-50 border-red-500 shadow-[0_8px_30px_rgba(239,68,68,0.15)]")
+                                                                : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md"
+                                                            }
+                                                        `}
+                                                    >
+                                                        <div className={`w-16 h-16 md:w-20 md:h-20 shrink-0 rounded-2xl flex items-center justify-center transition-all
+                                                            ${isSelected 
+                                                                ? (isTrueOption ? "bg-emerald-500 text-white" : "bg-red-500 text-white") 
+                                                                : "bg-slate-100 text-slate-400 group-hover:scale-110"
+                                                            }
+                                                        `}>
+                                                            {isTrueOption ? (
+                                                                <Check size={36} strokeWidth={3} />
+                                                            ) : (
+                                                                <AlertTriangle size={36} strokeWidth={3} className={isSelected ? "text-white" : "text-slate-400 group-hover:text-red-500"} />
+                                                            )}
+                                                        </div>
+                                                        <span className={`text-2xl md:text-3xl font-black ${isSelected ? (isTrueOption ? "text-emerald-700" : "text-red-700") : "text-slate-700"}`}>
+                                                            {opt.text}
+                                                        </span>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
                                         {currentQuestion?.question.options.map((opt: any, index: number) => {
                                             const isSelected = currentAnswer === opt.id;
                                             const letters = ["أ", "ب", "ج", "د", "هـ"];
@@ -797,6 +851,7 @@ export default function ExamSessionPage() {
                                             )
                                         })}
                                     </div>
+                                    )}
                                 </motion.div>
                             </AnimatePresence>
                         </div>

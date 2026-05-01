@@ -15,6 +15,7 @@ interface QuestionInput {
     explanation?: string;
     difficulty?: QuestionDifficulty;
     cognitiveLevel?: string;
+    imageUrl?: string;
     options: OptionInput[];
 }
 
@@ -113,12 +114,14 @@ function getSimilarityResult(
     const answerSim = bigramSimilarity(q1Answer, q2Answer);
     const textSim = bigramSimilarity(q1Text, q2Text);
 
-    if (textSim >= 0.55) return { isSimilar: true, score: Math.round(textSim * 100), reason: "نص السؤال شبه متطابق" };
-    if (questionJaccard >= 0.25 && answerSim >= 0.45) return { isSimilar: true, score: Math.round(((questionJaccard + answerSim) / 2) * 100), reason: "نفس الفكرة ونفس الإجابة" };
-    if (overlap >= 0.45) return { isSimilar: true, score: Math.round(overlap * 100), reason: "تشابه كبير في الكلمات المفتاحية" };
-    if (questionJaccard >= 0.35) return { isSimilar: true, score: Math.round(questionJaccard * 100), reason: "تشابه في المفاهيم" };
-    if (answerSim >= 0.60 && questionJaccard >= 0.15) return { isSimilar: true, score: Math.round(answerSim * 100), reason: "إجابة صحيحة متطابقة" };
-    if (answerSim >= 0.75) return { isSimilar: true, score: Math.round(answerSim * 100), reason: "إجابة صحيحة متشابهة جداً" };
+    // 1. Exact or near-exact text match (Raised threshold from 0.55 to 0.80 to prevent false positives)
+    if (textSim >= 0.80) return { isSimilar: true, score: Math.round(textSim * 100), reason: "نص السؤال شبه متطابق" };
+    
+    // 2. High keyword overlap AND the answer is the same/similar (Requires BOTH)
+    if (overlap >= 0.65 && answerSim >= 0.60) return { isSimilar: true, score: Math.round(overlap * 100), reason: "تشابه كبير في الفكرة والإجابة" };
+    
+    // 3. Very high conceptual match (Raised threshold from 0.35 to 0.60)
+    if (questionJaccard >= 0.60) return { isSimilar: true, score: Math.round(questionJaccard * 100), reason: "تشابه عالي جداً في المفاهيم" };
 
     return { isSimilar: false, score: 0, reason: "" };
 }
@@ -131,7 +134,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { professionId, axis, mode, questions } = body;
+        const { professionId, axis, mode, questions, questionType = "MCQ" } = body;
 
         if (!professionId || !axis || !mode || !Array.isArray(questions)) {
             return NextResponse.json({ error: "Missing required fields: professionId, axis, mode, questions array." }, { status: 400 });
@@ -169,9 +172,10 @@ export async function POST(request: Request) {
             const q: QuestionInput = questions[i];
             const qText = q.text?.trim() || "";
 
-            if (!q.options || !Array.isArray(q.options) || q.options.length !== 4) {
+            const expectedOptionsCount = questionType === "TRUE_FALSE" ? 2 : 4;
+            if (!q.options || !Array.isArray(q.options) || q.options.length !== expectedOptionsCount) {
                 report.failed++;
-                report.errors.push({ index: i, text: qText, reason: "Must have exactly 4 options." });
+                report.errors.push({ index: i, text: qText, reason: `Must have exactly ${expectedOptionsCount} options.` });
                 continue;
             }
 
@@ -250,6 +254,7 @@ export async function POST(request: Request) {
                 explanation: q.explanation || null,
                 difficulty: q.difficulty || "MEDIUM",
                 cognitiveLevel: q.cognitiveLevel || "K2",
+                imageUrl: q.imageUrl || null,
                 options: q.options.map(opt => ({
                     text: opt.text.trim(),
                     isCorrect: !!opt.isCorrect
@@ -287,7 +292,9 @@ export async function POST(request: Request) {
                         data: {
                             professionId,
                             axis,
+                            type: questionType,
                             text: q.text,
+                            imageUrl: q.imageUrl,
                             explanation: q.explanation,
                             difficulty: q.difficulty,
                             cognitiveLevel: q.cognitiveLevel,
