@@ -29,6 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 examDuration: updateData.examDuration ? Number(updateData.examDuration) : undefined,
                 questionCount: updateData.questionCount ? Number(updateData.questionCount) : undefined,
                 passingScore: updateData.passingScore ? Number(updateData.passingScore) : undefined,
+                enabledQuestionTypes: updateData.enabledQuestionTypes || undefined,
             }
         });
 

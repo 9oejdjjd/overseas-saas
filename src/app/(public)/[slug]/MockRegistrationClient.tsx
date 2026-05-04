@@ -194,7 +194,7 @@ export default function MockRegistrationPage() {
                                 <Activity size={28} className="text-[#5c9e45]" />
                                 <div>
                                     <div className="text-sm text-slate-400">عدد الأسئلة المتوقعة</div>
-                                    <div className="text-xl font-bold">{profession?.questionCount || 20} سؤال تقني متعدد</div>
+                                    <div className="text-xl font-bold">{profession?.questionCount || 30} سؤال تقني متعدد</div>
                                 </div>
                             </div>
                         </div>

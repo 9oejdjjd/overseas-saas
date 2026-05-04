@@ -597,6 +597,7 @@ model Profession {
   passingScore  Int      @default(60) // Percentage 0-100
   maxAttempts   Int      @default(3) // Max exam attempts per visitor/applicant
   isActive      Boolean  @default(true)
+  enabledQuestionTypes String @default("MCQ") // Comma-separated: "MCQ", "MCQ,TRUE_FALSE", "MCQ,TRUE_FALSE,FILL_BLANK,IMAGE"
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

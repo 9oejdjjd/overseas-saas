@@ -149,21 +149,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 }
             }
 
-            // 2. Fetch the question bank (Only HARD and ACTIVE)
-            const questionBank = await prisma.question.findMany({
+            // 2. Fetch the question bank METADATA (Optimized Memory Usage)
+            const questionBankMeta = await prisma.question.findMany({
                 where: { 
                     professionId: session.professionId, 
                     isActive: true,
                     difficulty: "HARD" // Strictly HARD difficulty as requested
                 },
-                include: { options: true }
+                select: { id: true, type: true, axis: true, imageUrl: true }
             });
 
-            const totalRequired = session.profession.questionCount || 30;
+            const totalRequired = 30; // Hardcoded to 30 as requested
 
-            // Fetch ServiceConfig to check if new question types are enabled
-            const serviceConfig = await prisma.serviceConfig.findUnique({ where: { id: "global" } });
-            const enableNewQuestions = serviceConfig?.enableMockExamNewQuestions ?? false;
+            // Read enabled question types from the profession itself
+            const enabledTypes = ((session.profession as any).enabledQuestionTypes || "MCQ").split(",");
+            const enableNewQuestions = enabledTypes.length > 1;
 
             const shuffleArray = (array: any[]) => {
                 const newArr = [...array];
@@ -174,110 +174,123 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return newArr;
             };
 
-            // 3. Separate into Unseen and Seen, and Shuffle
-            let unseenBank = shuffleArray(questionBank.filter(q => !seenQuestionIds.has(q.id)));
-            let seenBank = shuffleArray(questionBank.filter(q => seenQuestionIds.has(q.id)));
-
-            // If new questions are disabled, exclude them from both pools
-            if (!enableNewQuestions) {
-                unseenBank = unseenBank.filter(q => q.type === "MCQ" && !q.imageUrl);
-                seenBank = seenBank.filter(q => q.type === "MCQ" && !q.imageUrl);
+            // 3. Setup Dynamic Quotas
+            let typeQuota: Record<string, number> = { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
+            if (enableNewQuestions) {
+                const allowImg = enabledTypes.includes("IMAGE");
+                const allowTf = enabledTypes.includes("TRUE_FALSE");
+                const allowFb = enabledTypes.includes("FILL_BLANK");
+                
+                typeQuota.IMAGE = allowImg ? 3 : 0;
+                typeQuota.TRUE_FALSE = allowTf ? 5 : 0;
+                typeQuota.FILL_BLANK = allowFb ? 5 : 0;
+                typeQuota.MCQ = totalRequired - typeQuota.IMAGE - typeQuota.TRUE_FALSE - typeQuota.FILL_BLANK;
             }
 
-            // 4. Setup Quotas
-            const typeQuota = enableNewQuestions 
-                ? { MCQ: 15, TRUE_FALSE: 7, IMAGE: 3, FILL_BLANK: 5 }
-                : { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
-
+            // Define Axis Quotas
             const axisQuota: Record<string, number> = {
+                HEALTH_SAFETY: 2,
+                OCCUPATIONAL_SAFETY: 2,
                 EMERGENCIES_FIRST_AID: 1,
-                HEALTH_SAFETY: 3,
-                OCCUPATIONAL_SAFETY: 3,
-                OTHER: 23 // Distributed among the rest
+                CORE: 25
             };
             
-            const OTHER_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
+            const CORE_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
 
-            let selectedQuestions: any[] = [];
-            const pickedIds = new Set<string>();
-
-            const addQuestion = (q: any, isOtherAxis: boolean) => {
-                selectedQuestions.push(q);
-                pickedIds.add(q.id);
-                
-                // Decrement type quota
-                if (q.imageUrl && enableNewQuestions) {
-                    typeQuota.IMAGE--;
-                } else {
-                    typeQuota[q.type as keyof typeof typeQuota]--;
-                }
-
-                // Decrement axis quota
-                if (isOtherAxis) {
-                    axisQuota.OTHER--;
-                } else {
-                    axisQuota[q.axis]--;
-                }
+            // Helper to determine the effective bucket of a question
+            const getEffectiveType = (q: any) => {
+                if (q.imageUrl && enableNewQuestions && enabledTypes.includes("IMAGE")) return "IMAGE";
+                return q.type;
             };
 
-            // Helper to pick questions based on quotas
-            const pickQuestionsFromPool = (pool: any[], enforceAxis: boolean) => {
+            const getEffectiveAxis = (q: any) => {
+                if (CORE_AXES.includes(q.axis)) return "CORE";
+                if (["HEALTH_SAFETY", "OCCUPATIONAL_SAFETY", "EMERGENCIES_FIRST_AID"].includes(q.axis)) return q.axis;
+                return "CORE"; // fallback any unrecognized to CORE
+            };
+
+            // 4. Separate and Filter Valid Questions
+            let validQuestions = questionBankMeta.filter(q => {
+                const eType = getEffectiveType(q);
+                if (eType !== "MCQ" && eType !== "IMAGE" && !enabledTypes.includes(eType)) return false;
+                if (eType === "IMAGE" && !enabledTypes.includes("IMAGE")) return false;
+                return true;
+            });
+
+            // Separate unseen and seen
+            let unseenBank = shuffleArray(validQuestions.filter(q => !seenQuestionIds.has(q.id)));
+            let seenBank = shuffleArray(validQuestions.filter(q => seenQuestionIds.has(q.id)));
+
+            const selectedIds = new Set<string>();
+
+            // Picker Helper
+            const pickQuestions = (pool: any[], enforceType: boolean, enforceAxis: boolean) => {
                 for (const q of pool) {
-                    if (pickedIds.has(q.id) || selectedQuestions.length >= totalRequired) continue;
+                    if (selectedIds.has(q.id) || selectedIds.size >= totalRequired) continue;
 
-                    let qType = q.type;
-                    if (q.imageUrl && enableNewQuestions) qType = "IMAGE";
+                    const eType = getEffectiveType(q);
+                    const eAxis = getEffectiveAxis(q);
 
-                    const typeNeeded = typeQuota[qType as keyof typeof typeQuota] > 0;
-                    
-                    const isOtherAxis = OTHER_AXES.includes(q.axis) || (!axisQuota[q.axis] && axisQuota[q.axis] !== 0); // fallback if axis not recognized
-                    const axisNeeded = isOtherAxis ? axisQuota.OTHER > 0 : axisQuota[q.axis] > 0;
+                    const typeNeeded = typeQuota[eType] > 0;
+                    const axisNeeded = axisQuota[eAxis] > 0;
 
-                    if (typeNeeded) {
-                        if (!enforceAxis || axisNeeded) {
-                            addQuestion(q, isOtherAxis);
-                        }
+                    const passType = enforceType ? typeNeeded : true;
+                    const passAxis = enforceAxis ? axisNeeded : true;
+
+                    if (passType && passAxis) {
+                        selectedIds.add(q.id);
+                        if (typeNeeded) typeQuota[eType]--;
+                        if (axisNeeded) axisQuota[eAxis]--;
                     }
                 }
             };
 
-            // Phase 1: Unseen, enforce both Type and Axis
-            pickQuestionsFromPool(unseenBank, true);
+            // The selection phases as planned:
+            
+            // Phase 1: Unseen, strict (Type + Axis)
+            pickQuestions(unseenBank, true, true);
 
-            // Phase 2: Unseen, relax Axis, enforce Type only
-            if (selectedQuestions.length < totalRequired) {
-                pickQuestionsFromPool(unseenBank, false);
+            // Phase 2: Unseen, fallback missing special types to MCQ quota, enforce Axis
+            if (selectedIds.size < totalRequired) {
+                // convert missing types to MCQ
+                const missingSpecials = typeQuota.IMAGE + typeQuota.TRUE_FALSE + typeQuota.FILL_BLANK;
+                typeQuota.MCQ += missingSpecials;
+                typeQuota.IMAGE = 0; typeQuota.TRUE_FALSE = 0; typeQuota.FILL_BLANK = 0;
+                pickQuestions(unseenBank, true, true); 
             }
 
-            // Phase 3: Seen (Fallback), enforce both Type and Axis
-            if (selectedQuestions.length < totalRequired) {
-                pickQuestionsFromPool(seenBank, true);
+            // Phase 3: Unseen, relax Axis, enforce Type only
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(unseenBank, true, false);
             }
 
-            // Phase 4: Seen, relax Axis, enforce Type only
-            if (selectedQuestions.length < totalRequired) {
-                pickQuestionsFromPool(seenBank, false);
+            // Phase 4: Seen (Fallback), strict (Type + Axis)
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(seenBank, true, true);
             }
 
-            // Phase 5: Absolute Emergency, fill with whatever is left (Ignore quotas)
-            if (selectedQuestions.length < totalRequired) {
-                const remainingUnseen = unseenBank.filter(q => !pickedIds.has(q.id));
-                const remainingSeen = seenBank.filter(q => !pickedIds.has(q.id));
-                const emergencyPool = [...remainingUnseen, ...remainingSeen];
-                
-                for (const q of emergencyPool) {
-                    if (selectedQuestions.length >= totalRequired) break;
-                    selectedQuestions.push(q);
-                    pickedIds.add(q.id);
-                }
+            // Phase 5: Seen, relax Axis, enforce Type only
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(seenBank, true, false);
             }
 
-            // Final shuffle so the axes and difficulties are mixed up in the actual exam
-            selectedQuestions = shuffleArray(selectedQuestions);
+            // Phase 6: Emergency grab any unseen then seen
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(unseenBank, false, false);
+                pickQuestions(seenBank, false, false);
+            }
 
-            if (selectedQuestions.length === 0) {
+            if (selectedIds.size === 0) {
                 return NextResponse.json({ error: "Not enough questions in bank to generate exam" }, { status: 500 });
             }
+
+            // 5. Fetch full data for the selected 30 IDs
+            const selectedFullQuestions = await prisma.question.findMany({
+                where: { id: { in: Array.from(selectedIds) } },
+                include: { options: true }
+            });
+
+            let finalQuestions = shuffleArray(selectedFullQuestions);
 
             const updates: any[] = [
                 prisma.examSession.update({
@@ -290,19 +303,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     }
                 }),
                 prisma.examSessionQuestion.createMany({
-                    data: selectedQuestions.map(q => ({
+                    data: finalQuestions.map(q => ({
                         sessionId: session.id,
                         questionId: q.id
                     }))
                 })
             ];
 
-
-
             // Save relationship
             await prisma.$transaction(updates);
 
-            const safeQuestions = selectedQuestions.map(q => ({
+            const safeQuestions = finalQuestions.map(q => ({
                 questionId: q.id,
                 question: {
                     type: q.type,

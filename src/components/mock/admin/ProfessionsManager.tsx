@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2, Edit2 } from "lucide-react";
+import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2, Edit2, CheckSquare, Image, ListChecks, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ export function ProfessionsManager() {
     const [showAdd, setShowAdd] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [formData, setFormData] = useState({
-        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 20, description: ""
+        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ"
     });
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -68,7 +68,7 @@ export function ProfessionsManager() {
 
     const openAddModal = () => {
         setEditingId(null);
-        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 20, description: "" });
+        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ" });
         setShowAdd(true);
     };
 
@@ -80,7 +80,8 @@ export function ProfessionsManager() {
             passingScore: prof.passingScore,
             examDuration: prof.examDuration,
             questionCount: prof.questionCount,
-            description: prof.description || ""
+            description: prof.description || "",
+            enabledQuestionTypes: prof.enabledQuestionTypes || "MCQ"
         });
         setShowAdd(true);
     };
@@ -235,6 +236,64 @@ export function ProfessionsManager() {
                             <label className="text-sm font-semibold block text-gray-700">مدة الاختبار (دقيقة)</label>
                             <Input type="number" value={formData.examDuration} onChange={e => setFormData({ ...formData, examDuration: Number(e.target.value) })} className="bg-gray-50 focus:bg-white transition-colors" />
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-semibold block text-gray-700">عدد الأسئلة في كل جلسة اختبار</label>
+                            <Input type="number" min="1" value={formData.questionCount} onChange={e => setFormData({ ...formData, questionCount: Number(e.target.value) })} className="bg-gray-50 focus:bg-white transition-colors" />
+                            <p className="text-xs text-gray-500">عدد الأسئلة التي ستظهر للممتحن في كل جلسة اختبار (الافتراضي: 30).</p>
+                        </div>
+                        <div className="space-y-3 pt-4 border-t">
+                            <label className="text-sm font-semibold block text-gray-700">أنواع الأسئلة المفعلة في الاختبار</label>
+                            <p className="text-xs text-gray-500 -mt-1">حدد أنواع الأسئلة التي ستظهر للممتحن. النوع الأساسي (اختيار من متعدد) مفعل دائماً.</p>
+                            <div className="space-y-2">
+                                {/* MCQ - Always enabled */}
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><ListChecks className="h-4 w-4 text-blue-600" /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-blue-800">اختيار من متعدد (MCQ)</p>
+                                            <p className="text-[11px] text-blue-500">النوع الأساسي — مفعل دائماً</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-blue-400 text-xs font-bold bg-blue-100 px-2 py-1 rounded-md">مفعل ✓</div>
+                                </div>
+                                {/* TRUE_FALSE */}
+                                {(() => {
+                                    const types = formData.enabledQuestionTypes.split(",");
+                                    const toggleType = (type: string) => {
+                                        const current = formData.enabledQuestionTypes.split(",").filter(t => t);
+                                        const newTypes = current.includes(type) ? current.filter(t => t !== type) : [...current, type];
+                                        if (!newTypes.includes("MCQ")) newTypes.unshift("MCQ");
+                                        setFormData({ ...formData, enabledQuestionTypes: newTypes.join(",") });
+                                    };
+                                    const OPTIONAL_TYPES = [
+                                        { id: "TRUE_FALSE", label: "صح أو خطأ", desc: "أسئلة بخيارين فقط (صح / خطأ)", icon: <CheckSquare className="h-4 w-4" />, color: "emerald" },
+                                        { id: "FILL_BLANK", label: "إكمال الفراغات", desc: "أكمل الجملة من 4 خيارات", icon: <Target className="h-4 w-4" />, color: "purple" },
+                                        { id: "IMAGE", label: "أسئلة الصور", desc: "أسئلة مرفق بها صورة توضيحية", icon: <Image className="h-4 w-4" />, color: "amber" },
+                                    ];
+                                    return OPTIONAL_TYPES.map(t => {
+                                        const isEnabled = types.includes(t.id);
+                                        const colorMap: any = {
+                                            emerald: { bg: isEnabled ? "bg-emerald-50" : "bg-gray-50", border: isEnabled ? "border-emerald-200" : "border-gray-200", iconBg: isEnabled ? "bg-emerald-100" : "bg-gray-100", iconText: isEnabled ? "text-emerald-600" : "text-gray-400", title: isEnabled ? "text-emerald-800" : "text-gray-600", desc: isEnabled ? "text-emerald-500" : "text-gray-400" },
+                                            purple: { bg: isEnabled ? "bg-purple-50" : "bg-gray-50", border: isEnabled ? "border-purple-200" : "border-gray-200", iconBg: isEnabled ? "bg-purple-100" : "bg-gray-100", iconText: isEnabled ? "text-purple-600" : "text-gray-400", title: isEnabled ? "text-purple-800" : "text-gray-600", desc: isEnabled ? "text-purple-500" : "text-gray-400" },
+                                            amber: { bg: isEnabled ? "bg-amber-50" : "bg-gray-50", border: isEnabled ? "border-amber-200" : "border-gray-200", iconBg: isEnabled ? "bg-amber-100" : "bg-gray-100", iconText: isEnabled ? "text-amber-600" : "text-gray-400", title: isEnabled ? "text-amber-800" : "text-gray-600", desc: isEnabled ? "text-amber-500" : "text-gray-400" },
+                                        };
+                                        const c = colorMap[t.color];
+                                        return (
+                                            <button key={t.id} type="button" onClick={() => toggleType(t.id)} className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${c.bg} ${c.border} hover:shadow-sm`}>
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-lg ${c.iconBg} flex items-center justify-center ${c.iconText}`}>{t.icon}</div>
+                                                    <div className="text-right">
+                                                        <p className={`text-sm font-bold ${c.title}`}>{t.label}</p>
+                                                        <p className={`text-[11px] ${c.desc}`}>{t.desc}</p>
+                                                    </div>
+                                                </div>
+                                                {isEnabled ? <ToggleRight className="h-7 w-7 text-emerald-500" /> : <ToggleLeft className="h-7 w-7 text-gray-300" />}
+                                            </button>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                        </div>
                         <div className="space-y-2 pt-2 border-t">
                             <label className="text-sm font-semibold block text-gray-700">التوجيهات والوصف (للذكاء الاصطناعي)</label>
                             <textarea 
@@ -332,6 +391,14 @@ export function ProfessionsManager() {
                                 </Button>
                                 <Badge variant={prof.isActive ? "default" : "secondary"}>{prof.isActive ? "نشط" : "معطل"}</Badge>
                             </div>
+                        </div>
+                        {/* Question Type Badges */}
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                            {(() => {
+                                const types = (prof.enabledQuestionTypes || "MCQ").split(",");
+                                const typeLabels: any = { MCQ: { label: "متعدد", style: "bg-blue-50 text-blue-700 border-blue-200" }, TRUE_FALSE: { label: "صح/خطأ", style: "bg-emerald-50 text-emerald-700 border-emerald-200" }, FILL_BLANK: { label: "إكمال", style: "bg-purple-50 text-purple-700 border-purple-200" }, IMAGE: { label: "صور", style: "bg-amber-50 text-amber-700 border-amber-200" } };
+                                return types.map((t: string) => typeLabels[t] ? <span key={t} className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${typeLabels[t].style}`}>{typeLabels[t].label}</span> : null);
+                            })()}
                         </div>
                         
                         <div className="grid grid-cols-2 gap-3 mb-5 border-t border-gray-100 pt-4">
