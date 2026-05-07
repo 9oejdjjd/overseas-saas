@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
-import { callOpenAIWithRetry } from "@/lib/ai-rate-limiter";
+import { callGeminiWithRetry } from "@/lib/ai-rate-limiter";
 
 export const maxDuration = 60; // Max API duration for Vercel
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { professionId, axis, count } = body;
+        const { professionId, axis, count, difficulty = "HARD", questionType = "MCQ", focusTopic = "" } = body;
 
         if (!professionId || !axis || !count || count < 1 || count > 20) {
             return NextResponse.json({ error: "Invalid parameters. Required: professionId, axis, count (1-20)" }, { status: 400 });
@@ -26,9 +26,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Profession not found" }, { status: 404 });
         }
 
-        const openAiKey = process.env.OPENAI_API_KEY;
-        if (!openAiKey) {
-            return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) {
+            return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
         }
 
         let axisLabelArabic = "";
@@ -44,50 +44,103 @@ export async function POST(request: Request) {
             default: return NextResponse.json({ error: "Invalid axis" }, { status: 400 });
         }
 
-        const promptTemplate = `
-أنت خبير فني رفيع المستوى وممتحن معتمد في "الفحص المهني السعودي" (pacc.sa).
-مهمتك الآن هي صياغة ${count} أسئلة دقيقة (Single Best Answer) لمهنة: "${profession.name}" والمحصورة حصراً في هذا المحور التقني: [ ${axisLabelArabic} ].
+        let optionsTemplate = "";
+        let typeInstruction = "";
+
+        if (questionType === "TRUE_FALSE") {
+            typeInstruction = `
+🔴 نوع السؤال: صح أو خطأ (True/False)
+   - العبارة يجب أن تكون حقيقة مهنية دقيقة، ممارسة، أو خطوة فنية، ويجب أن تكون إما صحيحة تماماً أو خاطئة لسبب فني محدد.
+   - خيارين فقط: "صح" و "خطأ".`;
+            optionsTemplate = `
+    { "text": "صح", "isCorrect": true },
+    { "text": "خطأ", "isCorrect": false }`;
+        } else if (questionType === "FILL_BLANK") {
+            typeInstruction = `
+🔴 نوع السؤال: إكمال فراغ (Fill in the Blank)
+   - السيناريو يجب أن يحتوي على فراغ واحد يعبر عن مصطلح فني، أداة، أو معيار قياسي. استخدم "_____" لتمثيل الفراغ.
+   - الخيارات يجب أن تكون كلمات مفردة أو مصطلحات قصيرة جداً متقاربة في الشكل أو المعنى.
+   - 4 خيارات (واحد فقط صحيح).`;
+            optionsTemplate = `
+    { "text": "المصطلح 1", "isCorrect": false },
+    { "text": "المصطلح الصحيح", "isCorrect": true },
+    { "text": "المصطلح 3", "isCorrect": false },
+    { "text": "المصطلح 4", "isCorrect": false }`;
+        } else {
+            typeInstruction = `
+🔴 نوع السؤال: اختيار من متعدد (MCQ)
+   - 4 خيارات متقاربة بالطول تماماً (واحد فقط صحيح).`;
+            optionsTemplate = `
+    { "text": "خيار 1", "isCorrect": false },
+    { "text": "خيار 2", "isCorrect": true },
+    { "text": "خيار 3", "isCorrect": false },
+    { "text": "خيار 4", "isCorrect": false }`;
+        }
+
+        const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
+
+        const promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+خبرتك تزيد عن 20 عاماً في مهنة "${profession.name}".
+مهمتك صياغة ${count} أسئلة دقيقة (Single Best Answer) 
+محصورة في المحور: [ ${axisLabelArabic} ]
 
 ${profession.description ? `تنويــه: مقتطف عن المهنة من الإدارة: "${profession.description}"` : ""}
+${focusString}
 
-═══════════════════════════════════════════════════════
-⚠️ قواعد صياغة الأسئلة — خالفها يعتبر فشلاً ذريعاً:
-═══════════════════════════════════════════════════════
-🔴 القاعدة 1: حظر البديهيات والإجابة النموذجية الكاذبة
-   - الإجابات يجب أن تكون سيناريوهات مهنية وعملية دقيقة تتضمن: أسماء أدوات محددة، خطوات عمل قياسية، علامات الخطر، أو تفاصيل المواد.
-   - ممنوع صياغة إجابات تبدو "مثالية" يسهل تخمينها.
+═══════════════════════════════════════════
+📊 مستوى الصعوبة المطلوب: ${difficulty === "EXPERT" ? "💀 EXPERT — صعب جداً (120%)" : "🔴 HARD — صعب"}
 
-🔴 القاعدة 2: الخيارات الخاطئة (Distractors)
-   - جميع الخيارات الخاطئة يجب أن تبدو صحيحة لمن ليس خبيراً وتكون ممارسات شائعة خاطئة في سوق العمل الفعلي.
-   - 4 خيارات متقاربة بالطول تماماً (واحد فقط صحيح).
+${difficulty === "EXPERT" ? `■ تعريف مستوى EXPERT (120%):
+  - سيناريو معقد متعدد المراحل مع ظروف استثنائية
+  - جميع الخيارات تبدو صحيحة جزئياً — واحد فقط "الأنسب"
+  - يتطلب تشخيص + تحليل + اتخاذ قرار
+  - يحتاج خبرة ميدانية عميقة لا تقل عن 7 سنوات
+  - يتضمن أرقام دقيقة ومعايير ومواصفات
+  - المستوى المعرفي: K3 (تقييم + اتخاذ قرار)` : `■ تعريف مستوى HARD:
+  - سيناريو مهني واقعي يتطلب معرفة تقنية جيدة
+  - الخيارات الخاطئة تبدو معقولة لغير المتخصص
+  - يحتاج خبرة عملية لا تقل عن 3 سنوات
+  - المستوى المعرفي: K2 (تطبيق + تحليل)`}
 
-🔴 القاعدة 3: السيناريوهات والصعوبة (90% HARD)
-   - صغ الأسئلة بصعوبة HARD (تحدي تقني صعب للممارس البارع).
-   - يجب أن يبدأ السيناريو بمشكلة أو حالة دقيقة محصورة بـ [ ${axisLabelArabic} ].
+═══════════════════════════════════════════
+⚠️ القواعد الحديدية — خالفها يعتبر فشلاً:
+═══════════════════════════════════════════
 
-📋 تنسيق الإخراج النهائي (JSON ONLY):
-أخرج البيانات كمصفوفة JSON صالحة مكونة من ${count} عناصر فقط.
+🔴 القاعدة 1: حظر البديهيات المطلق
+   - ممنوع أي سؤال يمكن لشخص عادي الإجابة عليه بالتخمين
+   - ممنوع صياغة إجابة تبدو "مثالية" يسهل تخمينها
+   - كل خيار يتضمن تفصيلة تقنية دقيقة
+
+🔴 القاعدة 2: الخيارات الخاطئة (Distractors) الذكية
+   - كل خيار خاطئ = ممارسة شائعة خاطئة يقع فيها المهنيون فعلاً
+${typeInstruction}
+
+🔴 القاعدة 3: السيناريو القصصي
+   - كل سؤال يبدأ بسيناريو واقعي من بيئة العمل
+   - يتضمن: مكان + مشكلة + ظروف محددة
+
+🔴 القاعدة 4: الشرح التفصيلي الإلزامي
+   - لماذا الإجابة الصحيحة صحيحة
+   - لماذا كل خيار خاطئ هو خاطئ بالتحديد
+
+📋 تنسيق الإخراج (JSON فقط):
 [{
-  "text": "السؤال هنا",
-  "explanation": "الشرح المهني هنا",
-  "difficulty": "HARD",
+  "text": "السيناريو + السؤال",
+  "explanation": "الشرح المهني التفصيلي",
+  "difficulty": "${difficulty}",
   "axis": "${axis}",
-  "cognitiveLevel": "K2",
-  "options": [
-    { "text": "خيار صحيح", "isCorrect": true },
-    { "text": "خيار خاطئ", "isCorrect": false },
-    { "text": "خيار خاطئ", "isCorrect": false },
-    { "text": "خيار خاطئ", "isCorrect": false }
+  "cognitiveLevel": "${difficulty === 'EXPERT' ? 'K3' : 'K2'}",
+  "type": "${questionType}",
+  "options": [${optionsTemplate}
   ]
-}]
-`;
+}]`;
 
         console.log(`[AI Gen Partial] 🔄 Generating ${count} questions for axis [${axis}] - profession: "${profession.name}"`);
 
-        const result = await callOpenAIWithRetry({
-            apiKey: openAiKey,
-            model: "gpt-4o-mini",
-            prompt: "You are a specialized JSON data generator for Saudi professional certification exams. Output ONLY a valid JSON array.\n\n" + promptTemplate,
+        const result = await callGeminiWithRetry({
+            apiKey: geminiKey,
+            model: "gemini-2.5-flash",
+            prompt: promptTemplate,
             maxRetries: 3,         // Faster failure, lighter limit
             baseDelayMs: 3000,     // Only 3 seconds base wait for retries
             timeoutMs: 45000,

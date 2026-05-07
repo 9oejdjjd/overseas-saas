@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2, Edit2, CheckSquare, Image, ListChecks, ToggleLeft, ToggleRight } from "lucide-react";
+import { Loader2, Plus, Sparkles, Target, AlertCircle, RefreshCw, Search, Trash2, Edit2, CheckSquare, Image, ListChecks, ToggleLeft, ToggleRight, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +20,7 @@ export function ProfessionsManager() {
     const [aiLoading, setAiLoading] = useState<string | null>(null);
     const [purging, setPurging] = useState(false);
     
-    // New Partial AI Generation States
-    const [generatorModal, setGeneratorModal] = useState<{isOpen: boolean, professionId: string, name: string} | null>(null);
-    const [axisStats, setAxisStats] = useState<Record<string, number>>({});
-    const [partialFormData, setPartialFormData] = useState({ axis: "HEALTH_SAFETY", count: 4 });
+
 
     const AXES = [
         { id: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل" },
@@ -114,50 +111,7 @@ export function ProfessionsManager() {
         }
     };
 
-    const openGeneratorModal = async (prof: any) => {
-        setGeneratorModal({ isOpen: true, professionId: prof.id, name: prof.name });
-        setAxisStats({});
-        try {
-            const res = await fetch(`/api/mock/admin/professions/${prof.id}/axis-stats`);
-            const data = await res.json();
-            if (data.success) {
-                setAxisStats(data.stats || {});
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    };
 
-    const generatePartialAI = async () => {
-        if (!generatorModal) return;
-        setAiLoading(generatorModal.professionId);
-        try {
-            const res = await fetch("/api/mock/admin/generate-ai-partial", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    professionId: generatorModal.professionId, 
-                    axis: partialFormData.axis, 
-                    count: partialFormData.count 
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                alert(data.message);
-                fetchProfessions();
-                setAxisStats(prev => ({
-                    ...prev,
-                    [partialFormData.axis]: (prev[partialFormData.axis] || 0) + (data.savedCount || 0)
-                }));
-            } else {
-                alert(`خطأ: ${data.error}`);
-            }
-        } catch (e: any) {
-            alert(`خطأ في الاتصال: ${e.message}`);
-        } finally {
-            setAiLoading(null);
-        }
-    };
 
     const purgeAllQuestions = async () => {
         if (!confirm("⚠️ تحذير: سيتم حذف جميع الأسئلة والخيارات والجلسات المرتبطة نهائياً.\nهل أنت متأكد تماماً؟")) return;
@@ -314,67 +268,7 @@ export function ProfessionsManager() {
                 </SheetContent>
             </Sheet>
 
-            {/* Generator Modal */}
-            {generatorModal && generatorModal.isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" dir="rtl">
-                    <div className="bg-white rounded-xl shadow-xl w-[90%] max-w-md p-6 overflow-hidden">
-                        <div className="flex justify-between items-center mb-5 border-b pb-3">
-                            <h2 className="text-xl font-bold flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-purple-600" />
-                                التوليد حسب المحور
-                            </h2>
-                            <button onClick={() => setGeneratorModal(null)} className="text-gray-400 hover:text-gray-600">✕</button>
-                        </div>
-                        
-                        <div className="mb-4">
-                            <p className="text-sm text-gray-500 mb-2">المهنة:</p>
-                            <p className="font-bold text-gray-800">{generatorModal.name}</p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold block text-gray-700">اختر المحور <span className="text-red-500">*</span></label>
-                                <select 
-                                    className="w-full border rounded-md p-2.5 bg-gray-50 focus:bg-white transition-colors text-sm"
-                                    value={partialFormData.axis}
-                                    onChange={(e) => setPartialFormData(prev => ({ ...prev, axis: e.target.value }))}
-                                >
-                                    {AXES.map(axis => (
-                                        <option key={axis.id} value={axis.id}>
-                                            {axis.label} (متوفر: {axisStats[axis.id] || 0} أسئلة)
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold block text-gray-700">عدد الأسئلة المطلوب توليدها <span className="text-red-500">*</span></label>
-                                <Input 
-                                    type="number" 
-                                    min="1" 
-                                    max="20"
-                                    value={partialFormData.count} 
-                                    onChange={(e) => setPartialFormData(prev => ({ ...prev, count: Number(e.target.value) }))} 
-                                    className="bg-gray-50 focus:bg-white transition-colors" 
-                                />
-                                <p className="text-xs text-gray-500">يفضل ألا يزيد عن 10 في المرة الواحدة لضمان الاستقرار.</p>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex justify-end gap-3">
-                            <Button variant="outline" onClick={() => setGeneratorModal(null)}>إلغاء</Button>
-                            <Button 
-                                onClick={generatePartialAI} 
-                                disabled={aiLoading === generatorModal.professionId}
-                                className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-lg gap-2"
-                            >
-                                {aiLoading === generatorModal.professionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                {aiLoading === generatorModal.professionId ? "جاري التوليد..." : "توليد الآن"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Generator Modal Removed */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {professions.filter(p => p.name.includes(searchTerm) || p.slug.includes(searchTerm)).map((prof) => (
@@ -449,19 +343,7 @@ export function ProfessionsManager() {
                                         </div>
                                     )}
 
-                                    <Button 
-                                        onClick={() => openGeneratorModal(prof)} 
-                                        disabled={isProcessing}
-                                        className={`w-full gap-2 transition-all ${
-                                            prof._count?.questions > 0 
-                                                ? "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 disabled:opacity-50" 
-                                                : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-lg disabled:opacity-50"
-                                        }`}
-                                        variant={prof._count?.questions > 0 ? "outline" : "default"}
-                                    >
-                                        {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                        {isProcessing ? "عملية توليد قيد التنفيذ..." : "توليد أسئلة حسب المحور"}
-                                    </Button>
+
                                 </>
                             );
                         })()}

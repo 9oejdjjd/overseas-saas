@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FileDown, UploadCloud, AlertCircle, FileJson, CheckCircle2, Copy, Search } from "lucide-react";
+import { FileDown, UploadCloud, AlertCircle, FileJson, CheckCircle2, Copy, Search, Sparkles, Loader2, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -17,43 +17,32 @@ interface Props {
 }
 
 const AXIS_OPTIONS = [
-    { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل للمهنه" },
-    { value: "PROFESSION_KNOWLEDGE", label: "المعرفه المهنيه التخصصيه للمهنه" },
-    { value: "GENERAL_SKILLS", label: "المهارات العامه وجوده تنفيذ المهام في هذه المهنه" },
-    { value: "OCCUPATIONAL_SAFETY", label: "السلامه المهنيه والمخاطر المباشره في هذه المهنه" },
-    { value: "CORRECT_METHODS", label: "الاساليب الصحيحة والقياسية في هذه المهنه" },
-    { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك الوظيفي والانظباط المهني في هذه المهنه" },
-    { value: "TOOLS_AND_EQUIPMENT", label: "استخدام الادوات والمعدات الخاصه لهذه المهنه وتشخيصها" },
-    { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والاسعافات الاوليه" }
+    { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل" },
+    { value: "PROFESSION_KNOWLEDGE", label: "المعرفة المهنية التخصصية" },
+    { value: "GENERAL_SKILLS", label: "المهارات العامة وجودة التنفيذ" },
+    { value: "OCCUPATIONAL_SAFETY", label: "السلامة المهنية والمخاطر المباشرة" },
+    { value: "CORRECT_METHODS", label: "الأساليب الصحيحة والقياسية للمهنة" },
+    { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك الوظيفي والانضباط المهني" },
+    { value: "TOOLS_AND_EQUIPMENT", label: "استخدام الأدوات والمعدات وتشخيصها" },
+    { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والإسعافات الأولية" }
 ];
-
-const JSON_TEMPLATE = `[
-  {
-    "text": "نص السؤال",
-    "explanation": "شرح مختصر احترافي",
-    "difficulty": "HARD",
-    "cognitiveLevel": "K2 أو K1",
-    "options": [
-      { "text": "الخيار 1", "isCorrect": false },
-      { "text": "الخيار 2", "isCorrect": true },
-      { "text": "الخيار 3", "isCorrect": false },
-      { "text": "الخيار 4", "isCorrect": false }
-    ]
-  }
-]`;
 
 export function QuestionsImportModal({ professions, questions, onSuccess }: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState<"input" | "preview" | "report">("input");
 
-    // Form State
+    // Unified Form State
     const [professionId, setProfessionId] = useState("");
     const [searchProfession, setSearchProfession] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    
     const [axis, setAxis] = useState("");
     const [questionType, setQuestionType] = useState("MCQ");
+    const [difficulty, setDifficulty] = useState("HARD");
     const [focusTopic, setFocusTopic] = useState("");
-    const [includeExisting, setIncludeExisting] = useState(false);
+    const [questionCount, setQuestionCount] = useState(10);
+    
+    // Import Mode
     const [mode, setMode] = useState("skip_duplicates");
     const [jsonText, setJsonText] = useState("");
     const [parsedData, setParsedData] = useState<any[]>([]);
@@ -63,6 +52,23 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const [isLoading, setIsLoading] = useState(false);
     const [report, setReport] = useState<any>(null);
 
+    // Prompt Engineering UI
+    const [promptCopied, setPromptCopied] = useState(false);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [axisStats, setAxisStats] = useState<Record<string, number>>({});
+
+    // Fetch stats when profession or question type changes
+    useEffect(() => {
+        if (!professionId) return;
+        fetch(`/api/mock/admin/professions/${professionId}/axis-stats?type=${questionType}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) setAxisStats(data.stats || {});
+            })
+            .catch(e => console.error(e));
+    }, [professionId, questionType, report]);
+
+    // Handle File Upload
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -73,14 +79,166 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
         reader.readAsText(file);
     };
 
+    // Prompt Builder Logic
+    const buildPrompt = () => {
+        const axisLabel = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
+        const profName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
+
+        let optionsTemplate = "";
+        let typeInstruction = "";
+
+        if (questionType === "TRUE_FALSE") {
+            typeInstruction = `
+🔴 نوع السؤال: صح أو خطأ (True/False)
+   - العبارة يجب أن تكون حقيقة مهنية دقيقة، ممارسة، أو خطوة فنية، ويجب أن تكون إما صحيحة تماماً أو خاطئة لسبب فني محدد.
+   - خيارين فقط: "صح" و "خطأ".`;
+            optionsTemplate = `
+    { "text": "صح", "isCorrect": true },
+    { "text": "خطأ", "isCorrect": false }`;
+        } else if (questionType === "FILL_BLANK") {
+            typeInstruction = `
+🔴 نوع السؤال: إكمال فراغ (Fill in the Blank)
+   - السيناريو يجب أن يحتوي على فراغ واحد يعبر عن مصطلح فني، أداة، أو معيار قياسي. استخدم "_____" لتمثيل الفراغ.
+   - الخيارات يجب أن تكون كلمات مفردة أو مصطلحات قصيرة جداً متقاربة في الشكل أو المعنى.
+   - 4 خيارات (واحد فقط صحيح).`;
+            optionsTemplate = `
+    { "text": "المصطلح 1", "isCorrect": false },
+    { "text": "المصطلح الصحيح", "isCorrect": true },
+    { "text": "المصطلح 3", "isCorrect": false },
+    { "text": "المصطلح 4", "isCorrect": false }`;
+        } else {
+            typeInstruction = `
+🔴 نوع السؤال: اختيار من متعدد (MCQ)
+   - 4 خيارات متقاربة بالطول تماماً (واحد فقط صحيح).`;
+            optionsTemplate = `
+    { "text": "خيار 1", "isCorrect": false },
+    { "text": "خيار 2", "isCorrect": true },
+    { "text": "خيار 3", "isCorrect": false },
+    { "text": "خيار 4", "isCorrect": false }`;
+        }
+
+        const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
+
+        return `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+خبرتك تزيد عن 20 عاماً في مهنة "${profName}".
+مهمتك صياغة ${questionCount} أسئلة دقيقة (Single Best Answer) 
+محصورة في المحور: [ ${axisLabel} ]${focusString}
+
+═══════════════════════════════════════════
+📊 مستوى الصعوبة المطلوب: ${difficulty === "EXPERT" ? "💀 EXPERT — صعب جداً (120%)" : "🔴 HARD — صعب"}
+
+${difficulty === "EXPERT" ? `■ تعريف مستوى EXPERT (120%):
+  - سيناريو معقد متعدد المراحل مع ظروف استثنائية
+  - جميع الخيارات تبدو صحيحة جزئياً — واحد فقط "الأنسب"
+  - يتطلب تشخيص + تحليل + اتخاذ قرار
+  - يحتاج خبرة ميدانية عميقة لا تقل عن 7 سنوات
+  - يتضمن أرقام دقيقة ومعايير ومواصفات
+  - المستوى المعرفي: K3 (تقييم + اتخاذ قرار)` : `■ تعريف مستوى HARD:
+  - سيناريو مهني واقعي يتطلب معرفة تقنية جيدة
+  - الخيارات الخاطئة تبدو معقولة لغير المتخصص
+  - يحتاج خبرة عملية لا تقل عن 3 سنوات
+  - المستوى المعرفي: K2 (تطبيق + تحليل)`}
+
+═══════════════════════════════════════════
+⚠️ القواعد الحديدية — خالفها يعتبر فشلاً:
+═══════════════════════════════════════════
+
+🔴 القاعدة 1: حظر البديهيات المطلق
+   - ممنوع أي سؤال يمكن لشخص عادي الإجابة عليه بالتخمين
+   - ممنوع صياغة إجابة تبدو "مثالية" يسهل تخمينها
+   - كل خيار يتضمن تفصيلة تقنية دقيقة
+
+🔴 القاعدة 2: الخيارات الخاطئة (Distractors) الذكية
+   - كل خيار خاطئ = ممارسة شائعة خاطئة يقع فيها المهنيون فعلاً
+${typeInstruction}
+
+🔴 القاعدة 3: السيناريو القصصي
+   - كل سؤال يبدأ بسيناريو واقعي من بيئة العمل
+   - يتضمن: مكان + مشكلة + ظروف محددة
+
+🔴 القاعدة 4: الشرح التفصيلي الإلزامي
+   - لماذا الإجابة الصحيحة صحيحة
+   - لماذا كل خيار خاطئ هو خاطئ بالتحديد
+
+📋 تنسيق الإخراج (JSON فقط):
+[{
+  "text": "السيناريو + السؤال",
+  "explanation": "الشرح المهني التفصيلي",
+  "difficulty": "${difficulty}",
+  "axis": "${axis}",
+  "cognitiveLevel": "${difficulty === 'EXPERT' ? 'K3' : 'K2'}",
+  "options": [${optionsTemplate}
+  ]
+}]`;
+    };
+
+    const copyPrompt = () => {
+        if (!professionId || !axis) {
+            setError("يجب اختيار المهنة والمحور أولاً لبناء البرومبت");
+            return;
+        }
+        navigator.clipboard.writeText(buildPrompt());
+        setPromptCopied(true);
+        setTimeout(() => setPromptCopied(false), 3000);
+    };
+
+    const generatePartialAI = async () => {
+        if (!professionId || !axis) {
+            setError("يجب اختيار المهنة والمحور أولاً للتوليد");
+            return;
+        }
+        setAiLoading(true);
+        setError(null);
+        try {
+            const res = await fetch("/api/mock/admin/generate-ai-partial", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    professionId, 
+                    axis, 
+                    count: questionCount,
+                    difficulty,
+                    questionType,
+                    focusTopic
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                alert(data.message);
+                onSuccess(); // refresh parent
+                
+                // Refresh local stats
+                fetch(`/api/mock/admin/professions/${professionId}/axis-stats?type=${questionType}`)
+                    .then(r => r.json())
+                    .then(d => d.success && setAxisStats(d.stats || {}))
+                    .catch(() => {});
+            } else {
+                setError(`خطأ التوليد: ${data.error}`);
+            }
+        } catch (e: any) {
+            setError(`فشل الاتصال: ${e.message}`);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    // Validation Logic
     const validateAndPreview = () => {
         setError(null);
         if (!professionId) return setError("يجب اختيار المهنة أولاً");
         if (!axis) return setError("يجب اختيار المحور أولاً");
-        if (!jsonText.trim()) return setError("يجب إدخال كود الـ JSON أو رفع ملف");
+        if (!jsonText.trim()) return setError("يجب إدخال نص الـ JSON في الحقل المخصص");
 
         try {
-            const parsed = JSON.parse(jsonText);
+            // Smart JSON parsing (extracts array if it's within markdown block)
+            let cleanedText = jsonText;
+            const startIdx = cleanedText.indexOf('[');
+            const endIdx = cleanedText.lastIndexOf(']');
+            if (startIdx !== -1 && endIdx !== -1) {
+                cleanedText = cleanedText.substring(startIdx, endIdx + 1);
+            }
+
+            const parsed = JSON.parse(cleanedText);
             if (!Array.isArray(parsed)) return setError("يجب أن يكون الـ JSON عبارة عن مصفوفة Array [...]");
             if (parsed.length === 0) return setError("المصفوفة فارغة. لا يوجد أسئلة.");
 
@@ -91,7 +249,7 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
                 
                 const expectedOptions = questionType === "TRUE_FALSE" ? 2 : 4;
                 if (!q.options || !Array.isArray(q.options) || q.options.length !== expectedOptions) {
-                    return setError(`السؤال رقم ${i + 1} يجب أن يحتوي على ${expectedOptions} خيارات بالضبط`);
+                    return setError(`السؤال رقم ${i + 1} يجب أن يحتوي على ${expectedOptions} خيارات بالضبط لنوع الأسئلة المحدد`);
                 }
                 const correctCount = q.options.filter((o: any) => o.isCorrect).length;
                 if (correctCount !== 1) {
@@ -102,10 +260,11 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
             setParsedData(parsed);
             setStep("preview");
         } catch (err: any) {
-            setError("خطأ في قراءة ملف الـ JSON: الرجاء التأكد من صحة الصيغة. " + err.message);
+            setError("خطأ في قراءة نص الـ JSON: الرجاء التأكد من صحة الصيغة. " + err.message);
         }
     };
 
+    // Import Logic
     const handleImport = async () => {
         setIsLoading(true);
         setError(null);
@@ -142,7 +301,6 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     const resetForm = () => {
         setStep("input");
         setJsonText("");
-        setFocusTopic("");
         setParsedData([]);
         setReport(null);
         setError(null);
@@ -151,167 +309,18 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     // Calculate stats for preview
     const previewStats = useMemo(() => {
         if (!parsedData.length) return null;
-        let hard = 0, medium = 0, easy = 0, k1 = 0, k2 = 0;
+        let hard = 0, expert = 0, k1 = 0, k2 = 0, k3 = 0;
         parsedData.forEach(q => {
-            if (q.difficulty === "HARD") hard++;
-            else if (q.difficulty === "EASY") easy++;
-            else medium++;
+            if (q.difficulty === "EXPERT") expert++;
+            else hard++;
 
             if (q.cognitiveLevel === "K1") k1++;
+            else if (q.cognitiveLevel === "K3") k3++;
             else k2++;
         });
-        return { total: parsedData.length, hard, medium, easy, k1, k2 };
+        return { total: parsedData.length, hard, expert, k1, k2, k3 };
     }, [parsedData]);
 
-    const getDynamicPrompt = () => {
-        const professionName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
-        const axisName = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
-
-        let existingQsText = "";
-        if (includeExisting && questions && questions.length > 0) {
-            const existingQs = questions
-                .filter(q => q.professionId === professionId && q.axis === axis && q.type === questionType)
-                .map(q => q.text);
-            
-            if (existingQs.length > 0) {
-                // Shuffle and take up to 40 random questions to avoid token limits
-                const shuffled = existingQs.sort(() => 0.5 - Math.random());
-                const sample = shuffled.slice(0, 40);
-                existingQsText = `\n\n🛑 تحذير صارم: الأسئلة التالية موجودة مسبقاً في النظام. يُمنع منعاً باتاً تكرارها، أو إعادة صياغتها، أو استخدام نفس فكرتها. ابتكر أفكاراً وسيناريوهات جديدة تماماً:\n` + sample.map(t => `- ${t}`).join("\n");
-            }
-        }
-
-        const expertPersona = `أريد منك أن تعمل كخبير معتمد في إعداد اختبارات الاعتماد المهني والفحص المهني وفق المعايير المستخدمة في الاختبارات المهنية الواقعية (مثل اختبارات الهيئة السعودية للتخصصات المهنية).`;
-
-        const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
-
-        const qualityRules = `🎯 الهدف:
-إنشاء بنك أسئلة عالي الجودة يحاكي الاختبارات الحقيقية من حيث:
-- مستوى الصعوبة
-- دقة الصياغة
-- الواقعية المهنية
-- تنوع السيناريوهات
-
-📊 توزيع الصعوبة:
-- 2 سؤال بمستوى MEDIUM
-- 28 سؤال بمستوى HARD (ويجب أن تكون صعبة فعلاً وليست سطحية)
-
-🧠 توزيع المستوى المعرفي (cognitiveLevel):
-- 15 سؤال K1:
-  أسئلة تعتمد على المعرفة الأساسية ولكن بصياغة احترافية عميقة تتطلب فهم دقيق (ليس حفظ مباشر)
-  
-- 15 سؤال K2:
-  أسئلة تعتمد على مواقف واقعية (سيناريوهات عمل حقيقية) تتطلب تحليل واتخاذ قرار صحيح
-
-⚠️ شروط صارمة للجودة:
-- كل سؤال يجب أن يكون واضح، دقيق، وخالي من الغموض
-- لا تستخدم أسئلة عامة أو نظرية سطحية
-- يجب أن تكون جميع الأسئلة مرتبطة مباشرة ببيئة العمل الفعلية للمهنة
-- لا تكرر نفس الفكرة بصياغات مختلفة
-- تجنب الأسئلة السهلة أو البدائية
-
-📌 الشرح (explanation):
-- شرح مختصر لكنه احترافي
-- يوضح لماذا الإجابة صحيحة أو العبارة خاطئة
-- ويشير بشكل غير مباشر لماذا الخيارات الأخرى غير مناسبة
-
-🧠 أسلوب الأسئلة في أسئلة K2:
-- ابدأ بسيناريو واقعي (مثال: "أثناء العمل..." أو "في حالة حدوث...")
-
-🚫 ممنوع:
-- عدم استخدام أسئلة إنشائية أو رأي
-- عدم تكرار نفس المصطلحات بشكل ممل
-- عدم الخروج عن المحور المحدد`;
-
-        if (questionType === "TRUE_FALSE") {
-            return `${expertPersona}
-
-المطلوب:
-توليد 30 سؤال "صح أو خطأ" لمهنة: ${professionName}
-وفي محور: ${axisName}${focusString}
-
-${qualityRules}
-
-🎯 هيكل سؤال (صح أو خطأ):
-- كل سؤال يجب أن يكون عبارة مهنية فنية واضحة يمكن الحكم عليها بـ "صح" أو "خطأ".
-- العبارات الخاطئة يجب أن تمثل أخطاء شائعة في المهنة وليست أخطاء بديهية يمكن لأي شخص اكتشافها.
-
-📦 الإخراج حصرياً بصيغة JSON فقط:
-[
-  {
-    "text": "العبارة المهنية الفنية هنا (تكون صحيحة أو خاطئة)",
-    "explanation": "شرح مختصر يوضح لماذا العبارة صحيحة أو خطأ",
-    "difficulty": "HARD",
-    "cognitiveLevel": "K1",
-    "options": [
-      { "text": "صح", "isCorrect": true },
-      { "text": "خطأ", "isCorrect": false }
-    ]
-  }
-]${existingQsText}`;
-        }
-
-        if (questionType === "FILL_BLANK") {
-            return `${expertPersona}
-
-المطلوب:
-توليد 30 سؤال "إكمال الفراغ" لمهنة: ${professionName}
-وفي محور: ${axisName}${focusString}
-
-${qualityRules}
-
-🎯 هيكل سؤال (إكمال الفراغ):
-- كل سؤال يجب أن يكون عبارة أو جملة مهنية تحتوي على فراغ (_____).
-- يجب على المتدرب اختيار الكلمة أو العبارة المناسبة لملء الفراغ من بين 4 خيارات.
-- الخيارات الـ 4 يجب أن تكون مصطلحات فنية أو إجراءات قريبة جداً من بعضها للتمويه وزيادة الصعوبة.
-
-📦 الإخراج حصرياً بصيغة JSON فقط:
-[
-  {
-    "text": "أثناء استخدام آلة القطع، يجب دائماً ارتداء _____ لحماية العينين من الشظايا.",
-    "explanation": "النظارات الواقية هي من أساسيات السلامة...",
-    "difficulty": "HARD",
-    "cognitiveLevel": "K2",
-    "options": [
-      { "text": "القفازات", "isCorrect": false },
-      { "text": "النظارات الواقية", "isCorrect": true },
-      { "text": "الخوذة", "isCorrect": false },
-      { "text": "الحذاء الواقي", "isCorrect": false }
-    ]
-  }
-]${existingQsText}`;
-        }
-
-        return `${expertPersona}
-
-المطلوب:
-توليد 30 سؤالًا احترافيًا (اختيار من متعدد) لمهنة: ${professionName}
-وفي محور: ${axisName}${focusString}
-
-${qualityRules}
-
-🧩 هيكل سؤال (الاختيار من متعدد):
-- كل سؤال يحتوي على 4 خيارات
-- خيار واحد فقط صحيح 100%
-- الخيارات الخاطئة يجب أن تكون "مقنعة ومنطقية" وليست واضحة الخطأ
-- لا تجعل الإجابة الصحيحة أطول أو أوضح بشكل يكشفها
-- ممنوع استخدام "جميع ما سبق" أو "لا شيء مما سبق"
-
-📦 الإخراج (مهم جدًا):
-أعد النتيجة حصريًا بصيغة JSON فقط بدون أي نص إضافي، وبالشكل التالي:
-
-${JSON_TEMPLATE}
-
-⚠️ تأكد:
-- أن عدد الأسئلة = 30
-- التوزيع صحيح (MEDIUM / HARD)
-- التوزيع المعرفي صحيح (K1 / K2)
-- JSON صحيح 100% بدون أخطاء${existingQsText}`;
-    };
-
-    const copyTemplate = () => {
-        navigator.clipboard.writeText(getDynamicPrompt());
-    };
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => {
@@ -319,290 +328,348 @@ ${JSON_TEMPLATE}
             if (!open) setTimeout(resetForm, 300);
         }}>
             <DialogTrigger asChild>
-                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-                    <FileDown className="h-4 w-4" />
-                    استيراد أسئلة (JSON)
+                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-md">
+                    <Sparkles className="h-4 w-4" />
+                    استيراد وتوليد الأسئلة بـ الذكاء الاصطناعي
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
-                <DialogHeader>
-                    <DialogTitle className="flex flex-col gap-1">
-                        <span className="text-xl">استيراد الأسئلة بالجملة</span>
-                        <span className="text-sm font-normal text-gray-500">
-                            أدخل الأسئلة دفعة واحدة باستخدام ملف JSON لتسريع الإدخال اليدوي.
-                        </span>
-                    </DialogTitle>
-                </DialogHeader>
+            <DialogContent className="max-w-[95vw] w-full max-h-[95vh] overflow-y-auto p-0 rounded-xl" dir="rtl">
+                <div className="bg-white rounded-xl">
+                    <DialogHeader className="p-6 border-b bg-gray-50/50">
+                        <DialogTitle className="flex flex-col gap-1">
+                            <span className="text-2xl flex items-center gap-2">
+                                <Sparkles className="h-6 w-6 text-purple-600" />
+                                استيراد وتوليد بنك الأسئلة المتقدم
+                            </span>
+                            <span className="text-sm font-normal text-gray-500">
+                                استخدم محرك Gemini الاحترافي لتوليد أسئلة عالية الجودة، أو استوردها يدوياً باستخدام الـ JSON.
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
 
-                <div className="mt-4">
-                    {/* STEP 1: INPUT */}
                     {step === "input" && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2 relative">
-                                    <Label>المهنة المستهدفة</Label>
-                                    <div className="relative">
-                                        <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-                                        <Input
-                                            className="pr-9 focus:bg-white transition-colors"
-                                            placeholder="ابحث واختر المهنة..."
-                                            value={searchProfession}
-                                            onChange={(e) => {
-                                                setSearchProfession(e.target.value);
-                                                setDropdownOpen(true);
-                                                setProfessionId(""); // Reset id if user is typing
-                                            }}
-                                            onFocus={() => setDropdownOpen(true)}
-                                            onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
-                                        />
-                                    </div>
-                                    {dropdownOpen && (
-                                        <div className="absolute top-[68px] right-0 left-0 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                                            {professions.filter(p => p.name.includes(searchProfession)).sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(p => (
-                                                <div
-                                                    key={p.id}
-                                                    className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
-                                                    onClick={() => {
-                                                        setProfessionId(p.id);
-                                                        setSearchProfession(p.name);
-                                                        setDropdownOpen(false);
-                                                    }}
-                                                >
-                                                    {p.name}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse">
+                            {/* RIGHT PANEL: Prompt Engineering */}
+                            <div className="p-6 space-y-6 bg-slate-50/50">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                                        <span className="bg-purple-100 text-purple-600 p-1.5 rounded-lg">1</span>
+                                        هندسة الذكاء الاصطناعي (Prompt Engineering)
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        {/* Row 1 */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2 relative">
+                                                <Label className="font-semibold text-gray-700">المهنة المستهدفة <span className="text-red-500">*</span></Label>
+                                                <div className="relative">
+                                                    <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
+                                                    <Input
+                                                        className="pr-9 focus:bg-white transition-colors bg-white shadow-sm"
+                                                        placeholder="ابحث واختر المهنة..."
+                                                        value={searchProfession}
+                                                        onChange={(e) => {
+                                                            setSearchProfession(e.target.value);
+                                                            setDropdownOpen(true);
+                                                        }}
+                                                        onFocus={() => setDropdownOpen(true)}
+                                                        onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
+                                                    />
                                                 </div>
-                                            ))}
-                                            {professions.filter(p => p.name.includes(searchProfession)).length === 0 && (
-                                                <div className="px-4 py-3 text-sm text-gray-500 text-center">لا توجد نتائج مطابقة</div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>المحور المعرفي</Label>
-                                    <Select value={axis} onValueChange={setAxis}>
-                                        <SelectTrigger><SelectValue placeholder="اختر المحور" /></SelectTrigger>
-                                        <SelectContent>
-                                            {AXIS_OPTIONS.map(a => {
-                                                const count = professionId ? questions.filter(q => q.professionId === professionId && q.axis === a.value && q.type === questionType).length : 0;
-                                                return (
-                                                    <SelectItem key={a.value} value={a.value}>
-                                                        {a.label} {professionId ? `(${count} أسئلة ${questionType})` : ''}
-                                                    </SelectItem>
-                                                );
-                                            })}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-blue-600 font-bold">موضوع فرعي للتركيز (اختياري)</Label>
-                                    <Input
-                                        placeholder="مثال: التعامل مع الحروق والصدمات الكهربائية..."
-                                        value={focusTopic}
-                                        onChange={(e) => setFocusTopic(e.target.value)}
-                                        className="bg-blue-50/30 border-blue-100 focus:border-blue-400 focus:ring-blue-400"
-                                    />
-                                    <p className="text-[10px] text-gray-500">يساعد في تقييد ChatGPT لإنتاج أسئلة جديدة غير مكررة</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>نوع الأسئلة</Label>
-                                    <Select value={questionType} onValueChange={setQuestionType}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="MCQ">اختيار من متعدد (عادي)</SelectItem>
-                                            <SelectItem value="TRUE_FALSE">صح أو خطأ</SelectItem>
-                                            <SelectItem value="FILL_BLANK">إكمال الفراغات</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2 lg:col-span-2">
-                                    <Label>طريقة الاستيراد والتعارض</Label>
-                                    <Select value={mode} onValueChange={setMode}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="skip_duplicates">تخطي المكرر وإضافة الجديد</SelectItem>
-                                            <SelectItem value="replace_axis_questions">مسح كل أسئلة هذا المحور بالكامل ثم الاستيراد</SelectItem>
-                                            <SelectItem value="append">إضافة (رفض التكرار مع إظهار خطأ)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
+                                                {dropdownOpen && (
+                                                    <div className="absolute top-full right-0 left-0 mt-1 bg-white border border-gray-100 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
+                                                        {professions.filter(p => p.name.includes(searchProfession)).map(p => (
+                                                            <div
+                                                                key={p.id}
+                                                                className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer text-sm font-medium border-b last:border-0 border-gray-50"
+                                                                onClick={() => {
+                                                                    setProfessionId(p.id);
+                                                                    setSearchProfession(p.name);
+                                                                    setDropdownOpen(false);
+                                                                }}
+                                                            >
+                                                                {p.name}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
 
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center">
-                                    <Label>محتوى ملف JSON</Label>
-                                    <div className="flex gap-2">
-                                        <Button variant="outline" size="sm" onClick={(e) => {
-                                            copyTemplate();
-                                            const btn = e.currentTarget;
-                                            const originalText = btn.innerHTML;
-                                            btn.innerHTML = 'تم النسخ بنجاح!';
-                                            btn.classList.add('text-green-600', 'border-green-600');
-                                            setTimeout(() => {
-                                                btn.innerHTML = originalText;
-                                                btn.classList.remove('text-green-600', 'border-green-600');
-                                            }, 2000);
-                                        }} className="h-7 text-xs flex items-center">
-                                            <Copy className="h-3 w-3 ml-1" /> نسخ Prompt للأدوات (ChatGPT)
-                                        </Button>
-                                        <div className="relative">
-                                            <Button variant="secondary" size="sm" className="h-7 text-xs">
-                                                <UploadCloud className="h-3 w-3 ml-1" /> رفع ملف
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700">المحور المهني <span className="text-red-500">*</span></Label>
+                                                <Select value={axis} onValueChange={setAxis}>
+                                                    <SelectTrigger className="bg-white shadow-sm">
+                                                        <SelectValue placeholder="اختر المحور" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {AXIS_OPTIONS.map((opt) => (
+                                                            <SelectItem key={opt.value} value={opt.value}>
+                                                                {opt.label}
+                                                                {professionId && axisStats[opt.value] !== undefined && (
+                                                                    <span className="text-xs text-gray-400 ml-2">(متوفر: {axisStats[opt.value] || 0})</span>
+                                                                )}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        {/* Row 2 */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700">نوع الأسئلة <span className="text-red-500">*</span></Label>
+                                                <Select value={questionType} onValueChange={setQuestionType}>
+                                                    <SelectTrigger className="bg-white shadow-sm">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="MCQ">اختيار من متعدد (MCQ)</SelectItem>
+                                                        <SelectItem value="TRUE_FALSE">صح أو خطأ (True/False)</SelectItem>
+                                                        <SelectItem value="FILL_BLANK">إكمال الفراغات (Fill in the Blank)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700">مستوى الصعوبة <span className="text-red-500">*</span></Label>
+                                                <Select value={difficulty} onValueChange={setDifficulty}>
+                                                    <SelectTrigger className="bg-white shadow-sm">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="HARD">🔴 HARD — صعب وواقعي (K2)</SelectItem>
+                                                        <SelectItem value="EXPERT">💀 EXPERT — معقد للخبراء (K3)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        {/* Row 3 */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700">الموضوع الفرعي <span className="text-gray-400 font-normal text-xs">(اختياري للتركيز)</span></Label>
+                                                <Input 
+                                                    placeholder="مثال: التعامل مع المواد الكيميائية..." 
+                                                    value={focusTopic} 
+                                                    onChange={e => setFocusTopic(e.target.value)}
+                                                    className="bg-white shadow-sm"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700">عدد الأسئلة المطلوب <span className="text-red-500">*</span></Label>
+                                                <Input 
+                                                    type="number" 
+                                                    min={1} 
+                                                    max={30} 
+                                                    value={questionCount} 
+                                                    onChange={e => setQuestionCount(Number(e.target.value))}
+                                                    className="bg-white shadow-sm"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-6 flex flex-col gap-3">
+                                            <Button 
+                                                onClick={copyPrompt} 
+                                                className="w-full bg-slate-900 hover:bg-slate-800 text-white gap-2 font-bold py-6 text-lg shadow-md"
+                                            >
+                                                {promptCopied ? <Check className="h-5 w-5 text-green-400" /> : <Copy className="h-5 w-5" />}
+                                                {promptCopied ? "تم نسخ البرومبت بنجاح! الصقه في Gemini" : "📋 نسخ البرومبت الاحترافي لـ Gemini"}
                                             </Button>
-                                            <input
-                                                type="file" accept=".json"
-                                                onChange={handleFileUpload}
-                                                className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                                            />
+
+                                            <Button 
+                                                onClick={generatePartialAI} 
+                                                disabled={aiLoading}
+                                                className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 gap-2 font-bold py-6 text-lg"
+                                            >
+                                                {aiLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+                                                {aiLoading ? "جاري التوليد وحفظ الأسئلة مباشرة..." : "⚡ توليد تلقائي (مباشر عبر API)"}
+                                            </Button>
                                         </div>
                                     </div>
                                 </div>
-                                <Textarea
-                                    className="font-mono text-left opacity-90 h-64 text-sm bg-gray-50 border-gray-200 focus:bg-white transition-colors custom-scrollbar"
-                                    dir="ltr"
-                                    placeholder="يلصق محتوى مصفوفة ال JSON هنا..."
-                                    value={jsonText}
-                                    onChange={(e) => setJsonText(e.target.value)}
-                                />
                             </div>
 
-                            {error && (
-                                <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-start gap-2">
-                                    <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
-                                    <p className="text-sm font-medium">{error}</p>
-                                </div>
-                            )}
+                            {/* LEFT PANEL: Import & Validation */}
+                            <div className="p-6 space-y-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                                        <span className="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg">2</span>
+                                        إدخال المخرجات والاستيراد (JSON)
+                                    </h3>
 
-                            <div className="flex justify-end pt-2">
-                                <Button onClick={validateAndPreview} size="lg" className="w-full sm:w-auto">متابعة ومعاينة</Button>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label className="font-semibold text-gray-700">ألصق الكود (JSON) الذي ولّده Gemini هنا <span className="text-red-500">*</span></Label>
+                                            <Textarea
+                                                placeholder='[{ "text": "...", "options": [...] }]'
+                                                className="font-mono text-left w-full h-[250px] resize-none bg-slate-50 border-slate-200 focus:bg-white shadow-inner"
+                                                dir="ltr"
+                                                value={jsonText}
+                                                onChange={(e) => setJsonText(e.target.value)}
+                                            />
+                                            
+                                            <div className="flex items-center gap-3 mt-2">
+                                                <div className="relative overflow-hidden">
+                                                    <input 
+                                                        type="file" 
+                                                        accept=".json" 
+                                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                                        onChange={handleFileUpload}
+                                                    />
+                                                    <Button type="button" variant="outline" size="sm" className="gap-2 text-gray-600 bg-white shadow-sm pointer-events-none">
+                                                        <UploadCloud className="h-4 w-4" />
+                                                        أو رفع ملف .json
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 p-4 bg-orange-50 border border-orange-100 rounded-xl">
+                                            <Label className="font-semibold text-orange-800 flex items-center gap-2">
+                                                <AlertCircle className="h-4 w-4" />
+                                                آلية التعامل مع التكرار (عند الاستيراد)
+                                            </Label>
+                                            <Select value={mode} onValueChange={setMode}>
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="skip_duplicates">تخطي الأسئلة المكررة فقط (آمن)</SelectItem>
+                                                    <SelectItem value="append">إضافة قسرية بدون فحص التكرار</SelectItem>
+                                                    <SelectItem value="replace_axis_questions">مسح جميع أسئلة المحور للمهنة، ثم إضافة الجديدة (خطر)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {error && (
+                                            <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl flex gap-3 text-sm font-medium">
+                                                <AlertCircle className="h-5 w-5 shrink-0" />
+                                                <p>{error}</p>
+                                            </div>
+                                        )}
+
+                                        <Button 
+                                            onClick={validateAndPreview} 
+                                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-6 text-lg shadow-md gap-2"
+                                        >
+                                            <FileJson className="h-5 w-5" />
+                                            معاينة الأسئلة وتدقيق الجودة
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {/* STEP 2: PREVIEW */}
-                    {step === "preview" && previewStats && (
-                        <div className="space-y-6">
-                            <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-xl">
-                                <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-                                    <FileJson className="h-5 w-5" />
-                                    تم قراءة وتحليل الـ JSON بنجاح
-                                </h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                                    <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                                        <p className="text-gray-500 mb-1">إجمالي الأسئلة</p>
-                                        <p className="text-xl font-bold">{previewStats.total}</p>
-                                    </div>
-                                    <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                                        <p className="text-gray-500 mb-1">توزيع الصعوبة</p>
-                                        <p className="font-bold text-red-600">{previewStats.hard} صعب <span className="text-gray-300 mx-1">|</span> <span className="text-blue-600">{previewStats.medium} م</span></p>
-                                    </div>
-                                    <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                                        <p className="text-gray-500 mb-1">المستوى المعرفي</p>
-                                        <p className="font-bold text-purple-700">{previewStats.k2} تطبيق (K2)</p>
-                                    </div>
-                                    <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                                        <p className="text-gray-500 mb-1">وضعية الإدخال</p>
-                                        <p className="font-bold text-orange-600 text-xs mt-1">
-                                            {mode === "replace_axis_questions" ? "استبدال المحور بالكامل" :
-                                                mode === "skip_duplicates" ? "تجاوز المكرر" : "إضافة (رفض التكرار)"}
-                                        </p>
-                                    </div>
-                                    
-                                    <div className="col-span-4 flex items-center gap-3 bg-blue-50 border border-blue-100 p-4 rounded-xl cursor-pointer hover:bg-blue-100/50 transition-colors" onClick={() => setIncludeExisting(!includeExisting)}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${includeExisting ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'}`}>
-                                            {includeExisting && <CheckCircle2 size={14} />}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-bold text-gray-800">تضمين الأسئلة السابقة كتحذير لمنع التكرار</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">يرفق عينة من الأسئلة الموجودة حالياً في الـ Prompt ليقوم الذكاء الاصطناعي بتجنبها. (قد يزيد من استهلاك الـ Tokens)</p>
-                                        </div>
-                                    </div>
+                    {step === "preview" && (
+                        <div className="p-6 space-y-6">
+                            <div className="flex items-center justify-between border-b pb-4">
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                        <CheckCircle2 className="h-6 w-6 text-green-500" />
+                                        تم التدقيق بنجاح: {parsedData.length} أسئلة جاهزة للاستيراد
+                                    </h3>
+                                    <p className="text-gray-500 mt-1">تأكد من جودة وتوزيع الأسئلة قبل الاعتماد النهائي في النظام.</p>
+                                </div>
+                                <Button variant="outline" onClick={() => setStep("input")}>العودة والتعديل</Button>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="p-4 rounded-xl bg-slate-50 border text-center">
+                                    <p className="text-sm text-gray-500 mb-1">الأسئلة الصعبة (HARD)</p>
+                                    <p className="text-2xl font-black text-slate-700">{previewStats?.hard}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-purple-50 border border-purple-100 text-center">
+                                    <p className="text-sm text-purple-600 mb-1">الخبراء (EXPERT)</p>
+                                    <p className="text-2xl font-black text-purple-700">{previewStats?.expert}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-center">
+                                    <p className="text-sm text-blue-600 mb-1">تطبيقي (K2)</p>
+                                    <p className="text-2xl font-black text-blue-700">{previewStats?.k2}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 text-center">
+                                    <p className="text-sm text-indigo-600 mb-1">تقييمي (K3)</p>
+                                    <p className="text-2xl font-black text-indigo-700">{previewStats?.k3}</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <Label className="text-gray-500">معاينة أول سؤالين (للتأكد):</Label>
-                                {parsedData.slice(0, 2).map((q, idx) => (
-                                    <div key={idx} className="p-4 border rounded-lg bg-gray-50">
-                                        <p className="font-bold mb-2">{q.text}</p>
-                                        <div className="flex flex-wrap gap-2 text-xs">
-                                            <Badge variant="outline">{q.difficulty || "MEDIUM"}</Badge>
-                                            <Badge variant="outline">{q.cognitiveLevel || "K2"}</Badge>
+                            <div className="bg-gray-50 border rounded-xl p-4 max-h-[40vh] overflow-y-auto space-y-4">
+                                {parsedData.slice(0, 5).map((q, idx) => (
+                                    <div key={idx} className="bg-white border p-4 rounded-lg shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <p className="font-bold text-gray-800 text-sm">{idx + 1}. {q.text}</p>
+                                            <div className="flex gap-2">
+                                                {q.difficulty === "EXPERT" ? <Badge className="bg-purple-500">EXPERT 💀</Badge> : <Badge variant="secondary">HARD</Badge>}
+                                                <Badge variant="outline">{q.cognitiveLevel}</Badge>
+                                            </div>
                                         </div>
-                                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
-                                            {q.options.map((opt: any, i: number) => (
-                                                <div key={i} className={`p-2 rounded ${opt.isCorrect ? 'bg-green-100 text-green-800 font-medium' : 'bg-gray-100 border border-gray-200'}`}>
-                                                    {opt.text}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                                            {q.options.map((opt: any, oIdx: number) => (
+                                                <div key={oIdx} className={`p-2 text-xs rounded-md border ${opt.isCorrect ? 'bg-green-50 border-green-200 text-green-800 font-bold' : 'bg-gray-50 border-gray-100 text-gray-600'}`}>
+                                                    {opt.text} {opt.isCorrect && '✓'}
                                                 </div>
                                             ))}
                                         </div>
+                                        <div className="mt-3 p-3 bg-blue-50/50 rounded-md border border-blue-100 text-xs text-blue-800">
+                                            <span className="font-bold text-blue-600">الشرح: </span>
+                                            {q.explanation || "لا يوجد شرح"}
+                                        </div>
                                     </div>
                                 ))}
+                                {parsedData.length > 5 && (
+                                    <div className="text-center p-4 text-gray-500 text-sm bg-white border border-dashed rounded-lg">
+                                        و {parsedData.length - 5} أسئلة أخرى ...
+                                    </div>
+                                )}
                             </div>
 
                             {error && (
-                                <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-start gap-2">
-                                    <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
-                                    <p className="text-sm font-medium">{error}</p>
+                                <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl flex gap-3 text-sm font-medium">
+                                    <AlertCircle className="h-5 w-5 shrink-0" />
+                                    <p>{error}</p>
                                 </div>
                             )}
 
-                            <div className="flex justify-end gap-3 pt-4 border-t">
-                                <Button variant="outline" onClick={() => setStep("input")} disabled={isLoading}>الرجوع للتعديل</Button>
-                                <Button onClick={handleImport} disabled={isLoading} className="gap-2 bg-green-600 hover:bg-green-700">
-                                    {isLoading ? "جاري الإدخال..." : "تأكيد واستيراد الأسئلة"}
-                                </Button>
-                            </div>
+                            <Button 
+                                onClick={handleImport} 
+                                disabled={isLoading} 
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-6 text-lg shadow-md gap-2"
+                            >
+                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />}
+                                {isLoading ? "جاري الاستيراد والحفظ..." : "اعتماد واستيراد الأسئلة للنظام بشكل نهائي"}
+                            </Button>
                         </div>
                     )}
 
                     {/* STEP 3: REPORT */}
                     {step === "report" && report && (
-                        <div className="space-y-6">
-                            <div className="text-center py-6 bg-green-50 rounded-xl border border-green-100">
-                                <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-3" />
-                                <h3 className="text-xl font-bold text-green-900">تم اكتمال عملية الاستيراد</h3>
-                                <p className="text-green-700 mt-1">المهنة: {professions.find(p => p.id === professionId)?.name} | {AXIS_OPTIONS.find(a => a.value === axis)?.label}</p>
+                        <div className="p-8 text-center space-y-6 flex flex-col items-center">
+                            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-2">
+                                <CheckCircle2 className="h-10 w-10 text-green-600" />
+                            </div>
+                            
+                            <h3 className="text-2xl font-black text-gray-900">تمت العملية بنجاح!</h3>
+                            
+                            <div className="bg-gray-50 border rounded-2xl p-6 w-full max-w-lg space-y-4">
+                                <div className="flex justify-between items-center border-b pb-3">
+                                    <span className="text-gray-600 font-medium">إجمالي الأسئلة المستوردة</span>
+                                    <span className="text-xl font-bold text-green-600 bg-green-50 px-3 py-1 rounded-lg">{report.imported} سؤال</span>
+                                </div>
+                                <div className="flex justify-between items-center border-b pb-3">
+                                    <span className="text-gray-600 font-medium">الأسئلة المكررة (تم تخطيها)</span>
+                                    <span className="text-xl font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">{report.skippedDuplicates} سؤال</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-600 font-medium">حالة العملية</span>
+                                    <Badge variant="default" className="bg-blue-600">مكتملة</Badge>
+                                </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="text-center p-4 border rounded-lg bg-gray-50">
-                                    <p className="text-3xl font-bold text-green-600">{report.imported}</p>
-                                    <p className="text-sm text-gray-500 mt-1">تم إدخاله بنجاح</p>
-                                </div>
-                                <div className="text-center p-4 border rounded-lg bg-gray-50">
-                                    <p className="text-3xl font-bold text-orange-500">{report.skippedDuplicates}</p>
-                                    <p className="text-sm text-gray-500 mt-1">مكرر تم تجاوزه</p>
-                                </div>
-                                <div className="text-center p-4 border rounded-lg bg-gray-50">
-                                    <p className="text-3xl font-bold text-red-600">{report.failed}</p>
-                                    <p className="text-sm text-gray-500 mt-1">أسئلة فاشلة (أخطاء)</p>
-                                </div>
-                            </div>
-
-                            {report.errors?.length > 0 && (
-                                <div className="mt-4 border rounded-lg overflow-hidden">
-                                    <div className="bg-red-50 p-3 border-b border-red-100 font-bold text-red-800 text-sm">
-                                        تفاصيل الأخطاء والمشاكل ({report.errors.length})
-                                    </div>
-                                    <div className="max-h-60 overflow-y-auto bg-gray-50 p-0 text-sm">
-                                        <table className="w-full text-right">
-                                            <tbody className="divide-y">
-                                                {report.errors.map((err: any, i: number) => (
-                                                    <tr key={i} className="hover:bg-gray-100">
-                                                        <td className="p-3 w-12 text-gray-400 font-mono text-xs">#{err.index + 1}</td>
-                                                        <td className="p-3 text-red-700 font-medium w-1/3">{err.reason}</td>
-                                                        <td className="p-3 text-gray-600 truncate max-w-xs">{err.text}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end pt-4">
-                                <Button onClick={() => setIsOpen(false)}>إغلاق النافذة</Button>
-                            </div>
+                            <Button onClick={() => setIsOpen(false)} className="px-8 mt-4">إغلاق النافذة</Button>
                         </div>
                     )}
                 </div>

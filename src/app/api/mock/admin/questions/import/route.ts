@@ -252,7 +252,7 @@ export async function POST(request: Request) {
             validQuestionsToInsert.push({
                 text: qText,
                 explanation: q.explanation || null,
-                difficulty: q.difficulty || "MEDIUM",
+                difficulty: q.difficulty || "HARD",
                 cognitiveLevel: q.cognitiveLevel || "K2",
                 imageUrl: q.imageUrl || null,
                 options: q.options.map(opt => ({

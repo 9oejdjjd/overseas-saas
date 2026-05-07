@@ -60,7 +60,7 @@ export async function POST(request: Request) {
                 text,
                 explanation,
                 axis: axis || "PROFESSION_KNOWLEDGE",
-                difficulty: difficulty || "MEDIUM",
+                difficulty: difficulty || "HARD",
                 cognitiveLevel: cognitiveLevel || "K2",
                 isActive: isActive ?? true,
                 options: {

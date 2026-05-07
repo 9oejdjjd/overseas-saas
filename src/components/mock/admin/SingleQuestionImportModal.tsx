@@ -31,7 +31,7 @@ export function SingleQuestionImportModal({ professions, onSuccess }: Props) {
     const [professionId, setProfessionId] = useState("");
     const [axis, setAxis] = useState("");
     const [type, setType] = useState("MCQ");
-    const [difficulty, setDifficulty] = useState("MEDIUM");
+    const [difficulty, setDifficulty] = useState("HARD");
     const [cognitiveLevel, setCognitiveLevel] = useState("K2");
     
     const [text, setText] = useState("");
@@ -220,9 +220,8 @@ export function SingleQuestionImportModal({ professions, onSuccess }: Props) {
                                 <Select value={difficulty} onValueChange={setDifficulty}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="EASY">سهل</SelectItem>
-                                        <SelectItem value="MEDIUM">متوسط</SelectItem>
-                                        <SelectItem value="HARD">صعب</SelectItem>
+                                        <SelectItem value="HARD">صعب 🔴</SelectItem>
+                                        <SelectItem value="EXPERT">صعب جداً 💀</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

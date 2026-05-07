@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
-import { callOpenAIWithRetry, sleep } from "@/lib/ai-rate-limiter";
+import { callGeminiWithRetry, sleep } from "@/lib/ai-rate-limiter";
 
 export const maxDuration = 60;
 
@@ -50,8 +50,8 @@ export async function POST(request: Request) {
 // Background Processor — Saudi Professional Exam (SBA) Style - Batch Generation
 async function triggerAIGenerationBg(jobId: string, professionName: string, professionDescription: string, professionId: string) {
     try {
-        const openAiKey = process.env.OPENAI_API_KEY;
-        if (!openAiKey) throw new Error("Missing OPENAI_API_KEY");
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) throw new Error("Missing GEMINI_API_KEY");
 
         const axes = [
             "HEALTH_SAFETY", "PROFESSION_KNOWLEDGE", "GENERAL_SKILLS",
@@ -80,50 +80,64 @@ async function triggerAIGenerationBg(jobId: string, professionName: string, prof
                     case "EMERGENCIES_FIRST_AID": axisLabelArabic = "الطوارئ والإسعافات الأولية"; break;
                 }
 
-                const promptTemplate = `
-أنت خبير فني رفيع المستوى وممتحن معتمد في "الفحص المهني السعودي" (pacc.sa).
-مهمتك الآن هي صياغة 4 أسئلة دقيقة (Single Best Answer) لمهنة: "${professionName}" والمحصورة حصراً في هذا المحور التقني: [ ${axisLabelArabic} ].
+                const promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+خبرتك تزيد عن 20 عاماً في مهنة "${professionName}".
+مهمتك صياغة 4 أسئلة دقيقة (Single Best Answer) 
+محصورة في المحور: [ ${axisLabelArabic} ]
 
 ${professionDescription ? `تنويــه: مقتطف عن المهنة من الإدارة: "${professionDescription}"` : ""}
 
-═══════════════════════════════════════════════════════
-⚠️ قواعد صياغة الأسئلة — خالفها يعتبر فشلاً ذريعاً:
-═══════════════════════════════════════════════════════
-🔴 القاعدة 1: حظر البديهيات والإجابة النموذجية الكاذبة
-   - الإجابات يجب أن تكون سيناريوهات مهنية وعملية دقيقة تتضمن: أسماء أدوات محددة، خطوات عمل قياسية، علامات الخطر، أو تفاصيل المواد.
-   - ممنوع صياغة إجابات تبدو "مثالية" يسهل تخمينها.
+═══════════════════════════════════════════
+📊 مستوى الصعوبة المطلوب: 🔴 HARD — صعب
 
-🔴 القاعدة 2: الخيارات الخاطئة (Distractors)
-   - جميع الخيارات الخاطئة يجب أن تبدو صحيحة لمن ليس خبيراً وتكون ممارسات شائعة خاطئة في سوق العمل الفعلي.
-   - 4 خيارات متقاربة بالطول تماماً (واحد فقط صحيح).
+■ تعريف مستوى HARD:
+  - سيناريو مهني واقعي يتطلب معرفة تقنية جيدة
+  - الخيارات الخاطئة تبدو معقولة لغير المتخصص
+  - يحتاج خبرة عملية لا تقل عن 3 سنوات
+  - المستوى المعرفي: K2 (تطبيق + تحليل)
 
-🔴 القاعدة 3: السيناريوهات والصعوبة (90% HARD)
-   - صغ 3 أسئلة بصعوبة HARD (تحدي تقني صعب للممارس البارع) وسؤال 1 MEDIUM.
-   - يجب أن يبدأ السيناريو بمشكلة أو حالة دقيقة محصورة بـ [ ${axisLabelArabic} ].
+═══════════════════════════════════════════
+⚠️ القواعد الحديدية — خالفها يعتبر فشلاً:
+═══════════════════════════════════════════
 
-📋 تنسيق الإخراج النهائي (JSON ONLY):
-أخرج البيانات كمصفوفة JSON صالحة مكونة من 4 عناصر فقط.
+🔴 القاعدة 1: حظر البديهيات المطلق
+   - ممنوع أي سؤال يمكن لشخص عادي الإجابة عليه بالتخمين
+   - ممنوع صياغة إجابة تبدو "مثالية" يسهل تخمينها
+   - كل خيار يتضمن تفصيلة تقنية دقيقة
+
+🔴 القاعدة 2: الخيارات الخاطئة (Distractors) الذكية
+   - كل خيار خاطئ = ممارسة شائعة خاطئة يقع فيها المهنيون فعلاً
+   - 4 خيارات متقاربة بالطول تماماً
+
+🔴 القاعدة 3: السيناريو القصصي
+   - كل سؤال يبدأ بسيناريو واقعي من بيئة العمل
+   - يتضمن: مكان + مشكلة + ظروف محددة
+
+🔴 القاعدة 4: الشرح التفصيلي الإلزامي
+   - لماذا الإجابة الصحيحة صحيحة
+   - لماذا كل خيار خاطئ هو خاطئ بالتحديد
+
+📋 تنسيق الإخراج (JSON فقط):
 [{
-  "text": "السؤال هنا",
-  "explanation": "الشرح المهني هنا",
+  "text": "السيناريو + السؤال",
+  "explanation": "الشرح المهني التفصيلي",
   "difficulty": "HARD",
   "axis": "${axis}",
   "cognitiveLevel": "K2",
   "options": [
-    { "text": "خيار صحيح", "isCorrect": true },
-    { "text": "خيار خاطئ", "isCorrect": false },
-    { "text": "خيار خاطئ", "isCorrect": false },
-    { "text": "خيار خاطئ", "isCorrect": false }
+    { "text": "خيار 1", "isCorrect": false },
+    { "text": "خيار 2", "isCorrect": true },
+    { "text": "خيار 3", "isCorrect": false },
+    { "text": "خيار 4", "isCorrect": false }
   ]
-}]
-`;
+}]`;
 
                 console.log(`[AI Gen] 🔄 Starting axis [${axis}] for profession "${professionName}"...`);
 
-                const result = await callOpenAIWithRetry({
-                    apiKey: openAiKey,
-                    model: "gpt-4o-mini",
-                    prompt: "You are a specialized JSON data generator for Saudi professional certification exams. Output ONLY a valid JSON array.\n\n" + promptTemplate,
+                const result = await callGeminiWithRetry({
+                    apiKey: geminiKey,
+                    model: "gemini-2.5-flash",
+                    prompt: promptTemplate,
                     maxRetries: 5,
                     baseDelayMs: 10000,
                     timeoutMs: 60000,

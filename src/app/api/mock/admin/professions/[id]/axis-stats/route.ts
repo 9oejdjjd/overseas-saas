@@ -25,10 +25,18 @@ export async function GET(
             return NextResponse.json({ error: "Profession not found" }, { status: 404 });
         }
 
+        const { searchParams } = new URL(request.url);
+        const questionType = searchParams.get("type");
+
+        const whereClause: any = { professionId };
+        if (questionType) {
+            whereClause.type = questionType;
+        }
+
         // Aggregate questions count by axis
         const axisGroup = await prisma.question.groupBy({
             by: ['axis'],
-            where: { professionId },
+            where: whereClause,
             _count: {
                 axis: true
             }

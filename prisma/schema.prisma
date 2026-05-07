@@ -618,9 +618,8 @@ enum QuestionAxis {
 }
 
 enum QuestionDifficulty {
-  EASY
-  MEDIUM
-  HARD
+  HARD       // صعب — سيناريو مهني يتطلب خبرة 3+ سنوات
+  EXPERT     // صعب جداً 120% — لا يجيب عليه إلا خبير متمرس 7+ سنوات
 }
 
 enum QuestionType {
@@ -637,7 +636,7 @@ model Question {
   text         String             @db.Text
   imageUrl     String?            // رابط الصورة (Cloudinary) - اختياري
   explanation  String?            @db.Text
-  difficulty     QuestionDifficulty @default(MEDIUM)
+  difficulty     QuestionDifficulty @default(HARD)
   cognitiveLevel String?            @default("K2") // K1=تذكر واسترجاع, K2=تطبيق وتحليل سيناريو
   isActive       Boolean            @default(true)
   createdAt    DateTime           @default(now())

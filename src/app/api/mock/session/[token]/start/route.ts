@@ -154,9 +154,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 where: { 
                     professionId: session.professionId, 
                     isActive: true,
-                    difficulty: "HARD" // Strictly HARD difficulty as requested
+                    difficulty: { in: ["HARD", "EXPERT"] }
                 },
-                select: { id: true, type: true, axis: true, imageUrl: true }
+                select: { id: true, type: true, axis: true, imageUrl: true, cognitiveLevel: true, difficulty: true, createdAt: true }
             });
 
             const totalRequired = 30; // Hardcoded to 30 as requested
@@ -166,12 +166,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             const enableNewQuestions = enabledTypes.length > 1;
 
             const shuffleArray = (array: any[]) => {
-                const newArr = [...array];
-                for (let i = newArr.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-                }
-                return newArr;
+                // Weighted shuffle: prioritize newer questions but add up to ~30 days of random noise 
+                // so it's not strictly deterministic.
+                const randomNoiseMax = 1000 * 60 * 60 * 24 * 30; // 30 days in ms
+                return [...array]
+                    .map(item => {
+                        const timeWeight = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+                        const randomizedWeight = timeWeight + (Math.random() * randomNoiseMax);
+                        return { item, weight: randomizedWeight };
+                    })
+                    .sort((a, b) => b.weight - a.weight) // Descending (higher weight = newer/luckier)
+                    .map(a => a.item);
             };
 
             // 3. Setup Dynamic Quotas
@@ -209,6 +214,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return "CORE"; // fallback any unrecognized to CORE
             };
 
+            const getEffectiveCognitive = (q: any) => {
+                return (q.cognitiveLevel === "K3" || q.difficulty === "EXPERT") ? "K3" : "K2";
+            };
+
             // 4. Separate and Filter Valid Questions
             let validQuestions = questionBankMeta.filter(q => {
                 const eType = getEffectiveType(q);
@@ -217,6 +226,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return true;
             });
 
+            // Calculate Dynamic K-Quota based on actual bank availability
+            const totalK3Available = validQuestions.filter(q => getEffectiveCognitive(q) === "K3").length;
+            const targetK3 = Math.min(20, totalK3Available);
+            let kQuota: Record<string, number> = {
+                K3: targetK3,
+                K2: totalRequired - targetK3
+            };
+
             // Separate unseen and seen
             let unseenBank = shuffleArray(validQuestions.filter(q => !seenQuestionIds.has(q.id)));
             let seenBank = shuffleArray(validQuestions.filter(q => seenQuestionIds.has(q.id)));
@@ -224,60 +241,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             const selectedIds = new Set<string>();
 
             // Picker Helper
-            const pickQuestions = (pool: any[], enforceType: boolean, enforceAxis: boolean) => {
+            const pickQuestions = (pool: any[], enforceType: boolean, enforceAxis: boolean, enforceCognitive: boolean) => {
                 for (const q of pool) {
                     if (selectedIds.has(q.id) || selectedIds.size >= totalRequired) continue;
 
                     const eType = getEffectiveType(q);
                     const eAxis = getEffectiveAxis(q);
+                    const eK = getEffectiveCognitive(q);
 
                     const typeNeeded = typeQuota[eType] > 0;
                     const axisNeeded = axisQuota[eAxis] > 0;
+                    const kNeeded = kQuota[eK] > 0;
 
                     const passType = enforceType ? typeNeeded : true;
                     const passAxis = enforceAxis ? axisNeeded : true;
+                    const passCognitive = enforceCognitive ? kNeeded : true;
 
-                    if (passType && passAxis) {
+                    if (passType && passAxis && passCognitive) {
                         selectedIds.add(q.id);
                         if (typeNeeded) typeQuota[eType]--;
                         if (axisNeeded) axisQuota[eAxis]--;
+                        if (kNeeded) kQuota[eK]--;
                     }
                 }
             };
 
             // The selection phases as planned:
             
-            // Phase 1: Unseen, strict (Type + Axis)
-            pickQuestions(unseenBank, true, true);
+            // Phase 1: Unseen, strict (Type + Axis + Cognitive)
+            pickQuestions(unseenBank, true, true, true);
 
-            // Phase 2: Unseen, fallback missing special types to MCQ quota, enforce Axis
+            // Phase 2: Unseen, fallback missing special types to MCQ quota, enforce Axis & Cognitive
             if (selectedIds.size < totalRequired) {
-                // convert missing types to MCQ
                 const missingSpecials = typeQuota.IMAGE + typeQuota.TRUE_FALSE + typeQuota.FILL_BLANK;
                 typeQuota.MCQ += missingSpecials;
                 typeQuota.IMAGE = 0; typeQuota.TRUE_FALSE = 0; typeQuota.FILL_BLANK = 0;
-                pickQuestions(unseenBank, true, true); 
+                pickQuestions(unseenBank, true, true, true); 
             }
 
-            // Phase 3: Unseen, relax Axis, enforce Type only
+            // Phase 3: Unseen, relax Axis, enforce Type & Cognitive
             if (selectedIds.size < totalRequired) {
-                pickQuestions(unseenBank, true, false);
+                pickQuestions(unseenBank, true, false, true);
             }
 
-            // Phase 4: Seen (Fallback), strict (Type + Axis)
+            // Phase 4: Unseen, relax Cognitive, enforce Type only
             if (selectedIds.size < totalRequired) {
-                pickQuestions(seenBank, true, true);
+                pickQuestions(unseenBank, true, false, false);
             }
 
-            // Phase 5: Seen, relax Axis, enforce Type only
+            // Phase 5: Seen (Fallback), strict (Type + Axis + Cognitive)
             if (selectedIds.size < totalRequired) {
-                pickQuestions(seenBank, true, false);
+                pickQuestions(seenBank, true, true, true);
             }
 
-            // Phase 6: Emergency grab any unseen then seen
+            // Phase 6: Seen, relax Axis, enforce Type & Cognitive
             if (selectedIds.size < totalRequired) {
-                pickQuestions(unseenBank, false, false);
-                pickQuestions(seenBank, false, false);
+                pickQuestions(seenBank, true, false, true);
+            }
+            
+            // Phase 7: Seen, relax Cognitive, enforce Type only
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(seenBank, true, false, false);
+            }
+
+            // Phase 8: Emergency grab any unseen then seen
+            if (selectedIds.size < totalRequired) {
+                pickQuestions(unseenBank, false, false, false);
+                pickQuestions(seenBank, false, false, false);
             }
 
             if (selectedIds.size === 0) {
