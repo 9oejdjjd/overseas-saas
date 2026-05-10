@@ -14,8 +14,9 @@ function normalizePhone(phone: string): string {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { visitorName, professionSlug, deviceFingerprint } = body;
+        const { visitorName, professionSlug, deviceFingerprint, otp } = body;
         const visitorPhone = normalizePhone(body.visitorPhone || "");
+        const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
 
         if (!visitorName || !visitorPhone || !professionSlug) {
             return NextResponse.json({ error: "Name, WhatsApp number, and profession are required" }, { status: 400 });
@@ -34,9 +35,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Not enough questions in bank for this profession to start exam." }, { status: 400 });
         }
 
-        // 1. Look for an existing UNFINISHED session (NEW, STARTED, RESUMED) for this phone/fingerprint
-        //    Also try matching phone without leading + for compatibility
         const phoneWithoutPlus = visitorPhone.replace(/^\+/, "");
+        
+        // --- 1. Smart Fingerprint Extraction ---
+        // Fingerprint is "browserId-localId". We only want "browserId" to prevent bypassing via cleared localStorage.
+        let baseFingerprint = deviceFingerprint || null;
+        if (baseFingerprint && baseFingerprint.includes("-")) {
+            baseFingerprint = baseFingerprint.split("-")[0];
+        }
+
+        // --- 2. Check for existing UNFINISHED session ---
         const existingSession = await prisma.examSession.findFirst({
             where: {
                 professionId: profession.id,
@@ -44,24 +52,20 @@ export async function POST(request: Request) {
                 OR: [
                     { visitorPhone: visitorPhone },
                     { visitorPhone: phoneWithoutPlus },
-                    ...(deviceFingerprint ? [{ deviceFingerprint }] : [])
+                    ...(baseFingerprint ? [{ deviceFingerprint: { startsWith: baseFingerprint } }] : [])
                 ]
             },
             orderBy: { createdAt: "desc" }
         });
 
-        // 2. Auto-resume logic
         if (existingSession) {
             if (existingSession.status === "STARTED" || existingSession.status === "RESUMED") {
-                // Check if time has expired
                 if (existingSession.startedAt) {
                     const elapsed = new Date().getTime() - existingSession.startedAt.getTime();
                     const durationMs = (profession.examDuration || 60) * 60 * 1000;
                     if (elapsed < durationMs) {
-                        // Still active, return it directly!
                         return NextResponse.json({ token: existingSession.token, professionName: profession.name });
                     } else {
-                        // Time is up, mark as TIMEOUT and fall back to create new if limits allow
                         await prisma.examSession.update({
                             where: { id: existingSession.id },
                             data: { status: "TIMEOUT" }
@@ -69,8 +73,6 @@ export async function POST(request: Request) {
                     }
                 }
             } else if (existingSession.status === "NEW") {
-                // Just a fresh session the user (or admin) created but never started. Resume it!
-                // Update the phone/fingerprint on the session in case admin created it without fingerprint
                 await prisma.examSession.update({
                     where: { id: existingSession.id },
                     data: {
@@ -82,27 +84,23 @@ export async function POST(request: Request) {
             }
         }
 
-        // 3. Check attempt limits GLOBALLY across ALL professions (not per profession)
-        //    This prevents users from bypassing the limit by switching professions
+        // --- 3. Check Attempt Limits (GLOBAL) ---
         const MAX_GLOBAL_ATTEMPTS = 3;
 
         const previousAttemptsByPhone = await prisma.examSession.count({
             where: {
                 type: "PUBLIC",
-                OR: [
-                    { visitorPhone: visitorPhone },
-                    { visitorPhone: phoneWithoutPlus }
-                ],
+                OR: [{ visitorPhone: visitorPhone }, { visitorPhone: phoneWithoutPlus }],
                 status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
             }
         });
 
         let previousAttemptsByFingerprint = 0;
-        if (deviceFingerprint) {
+        if (baseFingerprint) {
             previousAttemptsByFingerprint = await prisma.examSession.count({
                 where: {
                     type: "PUBLIC",
-                    deviceFingerprint: deviceFingerprint,
+                    deviceFingerprint: { startsWith: baseFingerprint },
                     status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] }
                 }
             });
@@ -112,10 +110,29 @@ export async function POST(request: Request) {
 
         if (previousAttempts >= MAX_GLOBAL_ATTEMPTS) {
             return NextResponse.json({
-                error: `لقد استنفذت جميع محاولاتك (${MAX_GLOBAL_ATTEMPTS} محاولات). يرجى التواصل مع الإدارة للحصول على محاولات إضافية.`
+                error: `لقد استنفذت جميع محاولاتك (${MAX_GLOBAL_ATTEMPTS} محاولات مجانية). يرجى التواصل مع الإدارة.`
             }, { status: 403 });
         }
 
+        // --- 4. Strict Verification Check ---
+        const applicant = await prisma.applicant.findFirst({
+            where: {
+                OR: [
+                    { phone: visitorPhone },
+                    { phone: phoneWithoutPlus },
+                    { whatsappNumber: visitorPhone },
+                    { whatsappNumber: phoneWithoutPlus }
+                ]
+            }
+        });
+
+        const otpRecord = await prisma.mockVisitorOtp.findUnique({ where: { phone: visitorPhone } });
+        
+        if (!applicant && !otpRecord?.verified) {
+            return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });
+        }
+
+        // --- 5. Create New Session ---
         const session = await prisma.examSession.create({
             data: {
                 type: "PUBLIC",

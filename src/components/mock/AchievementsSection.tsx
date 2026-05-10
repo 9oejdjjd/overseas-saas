@@ -25,9 +25,26 @@ const Counter = ({ end, duration = 2 }: { end: number, duration?: number }) => {
 }
 
 export function AchievementsSection() {
+    const [professionCount, setProfessionCount] = useState(30);
+
+    useEffect(() => {
+        const fetchProfessionCount = async () => {
+            try {
+                const res = await fetch('/api/mock/public/professions');
+                const data = await res.json();
+                if (data.professions && data.professions.length > 0) {
+                    setProfessionCount(data.professions.length);
+                }
+            } catch (error) {
+                console.error("Failed to fetch profession count", error);
+            }
+        };
+        fetchProfessionCount();
+    }, []);
+
     const stats = [
         { id: 1, label: "عامل تم تجهيزهم", count: 2000, icon: <Users size={26} className="text-[#16539a]" />, suffix: "+" },
-        { id: 2, label: "مهنة متاحة", count: 30, icon: <BookOpen size={26} className="text-[#5c9e45]" />, suffix: "+" },
+        { id: 2, label: "مهنة متاحة", count: professionCount, icon: <BookOpen size={26} className="text-[#5c9e45]" />, suffix: "+" },
         { id: 3, label: "نسبة النجاح", count: 95, icon: <Award size={26} className="text-[#16539a]" />, suffix: "%" },
         { id: 4, label: "اختبار تجريبي منجز", count: 8500, icon: <TrendingUp size={26} className="text-[#5c9e45]" />, suffix: "+" },
     ];

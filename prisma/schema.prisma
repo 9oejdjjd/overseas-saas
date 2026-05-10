@@ -740,3 +740,11 @@ model AIGenerationJob {
 
   profession Profession @relation(fields: [professionId], references: [id], onDelete: Cascade)
 }
+
+model MockVisitorOtp {
+  phone     String   @id
+  code      String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

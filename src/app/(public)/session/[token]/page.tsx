@@ -362,7 +362,7 @@ export default function ExamSessionPage() {
             <div className="min-h-[100dvh] bg-[#0a0f1c] flex flex-col font-sans">
                 <MockExamNavbar title="بوابة الاعتماد المهني" />
                 <main className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.06] mix-blend-overlay pointer-events-none"></div>
+                    <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.06] mix-blend-overlay pointer-events-none"></div>
                     <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#16539a]/25 rounded-full blur-[120px] pointer-events-none" />
                     <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-[#5c9e45]/15 rounded-full blur-[100px] pointer-events-none" />
                     
@@ -599,7 +599,7 @@ export default function ExamSessionPage() {
             <div className="min-h-screen bg-[#0a0f1c] flex flex-col font-sans">
                 <MockExamNavbar title="الاعتماد المهني" />
                 <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.06] mix-blend-overlay pointer-events-none"></div>
+                    <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.06] mix-blend-overlay pointer-events-none"></div>
                     <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#16539a]/25 rounded-full blur-[120px] pointer-events-none" />
                     <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-[#5c9e45]/15 rounded-full blur-[100px] pointer-events-none" />
                     
@@ -643,8 +643,8 @@ export default function ExamSessionPage() {
     const progressPercent = (answeredCount / questions.length) * 100;
 
     const TimerComponent = (
-        <div className={`flex items-center gap-3 px-6 py-2 rounded-xl font-black text-xl border-2 transition-colors ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse shadow-inner' : 'bg-slate-100 text-[#16539a] border-slate-200'}`}>
-            <Clock size={24} className="shrink-0" />
+        <div className={`flex items-center gap-1.5 md:gap-3 px-3 md:px-5 py-1.5 md:py-2 rounded-lg md:rounded-xl font-black text-base md:text-xl border-2 transition-colors ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse shadow-inner' : 'bg-slate-100 text-[#16539a] border-slate-200'}`}>
+            <Clock size={18} className="shrink-0 md:w-6 md:h-6" />
             <span dir="ltr" className="tracking-widest">{formatTime(timeLeft)}</span>
         </div>
     );
@@ -748,7 +748,7 @@ export default function ExamSessionPage() {
                     </div>
 
                     {/* Scrollable Question area */}
-                    <div className="flex-1 overflow-y-auto p-4 md:p-10 lg:p-16 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-3 md:p-8 lg:p-14 custom-scrollbar">
                         <div className="max-w-[1200px] mx-auto w-full">
                             
                             <AnimatePresence mode="wait">
@@ -760,22 +760,22 @@ export default function ExamSessionPage() {
                                     transition={{ duration: 0.3 }}
                                 >
                                      {/* Question Card */}
-                                    <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-14 lg:p-16 shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-slate-100 mb-6 md:mb-8 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-2 h-full bg-[#16539a]"></div>
-                                        <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6">
-                                            <div className="w-12 h-12 md:w-16 md:h-16 shrink-0 bg-blue-50 text-[#16539a] rounded-xl md:rounded-2xl flex items-center justify-center font-black text-2xl md:text-3xl shadow-sm border border-blue-100">
+                                    <div className="bg-white rounded-xl md:rounded-[2rem] p-4 md:p-10 lg:p-14 shadow-[0_4px_20px_rgba(0,0,0,0.03)] md:shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-slate-100 mb-4 md:mb-8 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-1.5 md:w-2 h-full bg-[#16539a]"></div>
+                                        <div className="flex flex-row items-start gap-3 md:gap-6">
+                                            <div className="w-10 h-10 md:w-14 md:h-14 shrink-0 bg-blue-50 text-[#16539a] rounded-lg md:rounded-2xl flex items-center justify-center font-black text-lg md:text-2xl shadow-sm border border-blue-100">
                                                 {currentQuestionIdx + 1}
                                             </div>
-                                            <div className="flex-1 space-y-6">
-                                                <h2 className="text-xl md:text-3xl lg:text-4xl font-black text-slate-800 leading-[1.6] md:pt-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h2 className="text-base md:text-2xl lg:text-3xl font-black text-slate-800 leading-[1.7] md:leading-[1.6]">
                                                     {currentQuestion?.question.text}
                                                 </h2>
                                                 {currentQuestion?.question.imageUrl && (
-                                                    <div className="mt-4 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm inline-block max-w-full bg-slate-50">
+                                                    <div className="mt-3 md:mt-4 rounded-xl md:rounded-2xl overflow-hidden border border-slate-100 shadow-sm bg-slate-50 w-full">
                                                         <img 
                                                             src={currentQuestion.question.imageUrl} 
                                                             alt="صورة توضيحية للسؤال" 
-                                                            className="max-h-[300px] md:max-h-[400px] w-auto object-contain p-2"
+                                                            className="max-h-[180px] md:max-h-[350px] w-full object-contain p-1 md:p-2"
                                                         />
                                                     </div>
                                                 )}
@@ -785,7 +785,7 @@ export default function ExamSessionPage() {
 
                                     {/* Options Grid */}
                                     {currentQuestion?.question.type === "TRUE_FALSE" ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
+                                        <div className="grid grid-cols-2 gap-3 md:gap-6 w-full max-w-4xl mx-auto">
                                             {currentQuestion?.question.options.map((opt: any) => {
                                                 const isSelected = currentAnswer === opt.id;
                                                 const isTrueOption = opt.text.includes("صح");
@@ -794,26 +794,26 @@ export default function ExamSessionPage() {
                                                     <button
                                                         key={opt.id}
                                                         onClick={() => handleSelectOption(currentQuestion.questionId, opt.id)}
-                                                        className={`w-full p-8 md:p-12 rounded-2xl md:rounded-[2rem] border-2 transition-all duration-200 flex flex-col items-center justify-center gap-4 group relative overflow-hidden
+                                                        className={`w-full p-5 md:p-10 rounded-xl md:rounded-[2rem] border-2 transition-all duration-200 flex flex-col items-center justify-center gap-3 md:gap-4 group relative overflow-hidden
                                                             ${isSelected 
-                                                                ? (isTrueOption ? "bg-emerald-50 border-emerald-500 shadow-[0_8px_30px_rgba(16,185,129,0.15)]" : "bg-red-50 border-red-500 shadow-[0_8px_30px_rgba(239,68,68,0.15)]")
+                                                                ? "bg-blue-50 border-[#16539a] shadow-[0_8px_30px_rgba(22,83,154,0.12)]"
                                                                 : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md"
                                                             }
                                                         `}
                                                     >
-                                                        <div className={`w-16 h-16 md:w-20 md:h-20 shrink-0 rounded-2xl flex items-center justify-center transition-all
+                                                        <div className={`w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-xl md:rounded-2xl flex items-center justify-center transition-all
                                                             ${isSelected 
-                                                                ? (isTrueOption ? "bg-emerald-500 text-white" : "bg-red-500 text-white") 
+                                                                ? "bg-[#16539a] text-white" 
                                                                 : "bg-slate-100 text-slate-400 group-hover:scale-110"
                                                             }
                                                         `}>
                                                             {isTrueOption ? (
-                                                                <Check size={36} strokeWidth={3} />
+                                                                <CheckCircle size={28} strokeWidth={2.5} className="md:w-9 md:h-9" />
                                                             ) : (
-                                                                <AlertTriangle size={36} strokeWidth={3} className={isSelected ? "text-white" : "text-slate-400 group-hover:text-red-500"} />
+                                                                <XCircle size={28} strokeWidth={2.5} className="md:w-9 md:h-9" />
                                                             )}
                                                         </div>
-                                                        <span className={`text-2xl md:text-3xl font-black ${isSelected ? (isTrueOption ? "text-emerald-700" : "text-red-700") : "text-slate-700"}`}>
+                                                        <span className={`text-xl md:text-3xl font-black ${isSelected ? "text-[#16539a]" : "text-slate-700"}`}>
                                                             {opt.text}
                                                         </span>
                                                     </button>
@@ -821,7 +821,7 @@ export default function ExamSessionPage() {
                                             })}
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-5 w-full">
                                         {currentQuestion?.question.options.map((opt: any, index: number) => {
                                             const isSelected = currentAnswer === opt.id;
                                             const letters = ["أ", "ب", "ج", "د", "هـ"];
@@ -830,21 +830,20 @@ export default function ExamSessionPage() {
                                                 <button
                                                     key={opt.id}
                                                     onClick={() => handleSelectOption(currentQuestion.questionId, opt.id)}
-                                                    className={`w-full text-right p-6 md:p-8 lg:p-10 rounded-2xl md:rounded-[2rem] border-2 transition-all duration-200 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 group relative overflow-hidden
+                                                    className={`w-full text-right p-3.5 md:p-6 lg:p-8 rounded-xl md:rounded-2xl border-2 transition-all duration-200 flex flex-row items-center gap-3 md:gap-5 group relative overflow-hidden
                                                         ${isSelected 
-                                                            ? "bg-blue-50/80 border-[#16539a] shadow-[0_8px_30px_rgba(22,83,154,0.12)]" 
+                                                            ? "bg-blue-50/80 border-[#16539a] shadow-[0_4px_20px_rgba(22,83,154,0.1)]" 
                                                             : "bg-white border-slate-200 hover:border-[#16539a] hover:bg-slate-50 hover:shadow-md"
                                                         }
                                                     `}
                                                 >
-                                                    {/* Letter Indicator (A, B, C...) */}
-                                                    <div className={`w-10 h-10 md:w-14 md:h-14 shrink-0 rounded-xl md:rounded-2xl flex items-center justify-center text-xl md:text-2xl font-black transition-all border-2
+                                                    <div className={`w-9 h-9 md:w-12 md:h-12 shrink-0 rounded-lg md:rounded-xl flex items-center justify-center text-base md:text-xl font-black transition-all border-2
                                                         ${isSelected ? "bg-[#16539a] text-white border-[#16539a]" : "bg-slate-100 text-slate-400 border-slate-200 group-hover:border-[#16539a] group-hover:text-[#16539a]"}
                                                     `}>
                                                         {letters[index] || index + 1}
                                                     </div>
                                                     
-                                                    <span className={`text-base md:text-xl lg:text-2xl leading-[1.6] ${isSelected ? "text-[#16539a] font-black" : "text-slate-700 font-bold"}`}>
+                                                    <span className={`text-sm md:text-lg lg:text-xl leading-[1.6] ${isSelected ? "text-[#16539a] font-black" : "text-slate-700 font-bold"}`}>
                                                         {opt.text}
                                                     </span>
                                                 </button>
@@ -857,25 +856,25 @@ export default function ExamSessionPage() {
                         </div>
                     </div>
 
-                    {/* Fixed Navigation Footer within Main Area (Full Width of Content) */}
-                    <div className="h-24 md:h-28 bg-white border-t border-slate-200 px-4 md:px-8 lg:px-16 flex items-center justify-between shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.02)] z-10 w-full">
+                    {/* Fixed Navigation Footer */}
+                    <div className="h-16 md:h-20 bg-white border-t border-slate-200 px-3 md:px-8 lg:px-16 flex items-center justify-between shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-10 w-full">
                         <Button 
                             variant="outline"
                             onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))}
                             disabled={currentQuestionIdx === 0}
-                            className="h-14 md:h-16 px-6 md:px-10 text-base md:text-xl font-black rounded-xl md:rounded-2xl border-2 border-slate-200 text-slate-500 hover:bg-slate-50 gap-2 md:gap-3 hover:text-slate-800 disabled:opacity-40"
+                            className="h-11 md:h-14 px-4 md:px-8 text-sm md:text-lg font-black rounded-lg md:rounded-xl border-2 border-slate-200 text-slate-500 hover:bg-slate-50 gap-1.5 md:gap-3 hover:text-slate-800 disabled:opacity-40"
                         >
-                            <span className="hidden sm:inline">السؤال</span> السابق
+                            السابق
                         </Button>
                         
                         {currentQuestionIdx === questions.length - 1 ? (
                             <Button 
                                 onClick={() => submitExam()}
                                 disabled={isSubmitting || answers.length < questions.length - 5}
-                                className="h-14 md:h-16 px-6 md:px-12 text-base md:text-xl font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-xl md:rounded-2xl shadow-xl shadow-green-900/20 gap-2 md:gap-3 flex items-center justify-center disabled:opacity-50"
+                                className="h-11 md:h-14 px-5 md:px-10 text-sm md:text-lg font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-lg md:rounded-xl shadow-lg shadow-green-900/20 gap-1.5 md:gap-2 flex items-center justify-center disabled:opacity-50"
                             >
-                                <Check size={24} className="hidden md:block" />
-                                {isSubmitting ? "جاري الإرسال..." : "إنهاء الاختبار"}
+                                <Check size={18} className="md:w-6 md:h-6" />
+                                {isSubmitting ? "إرسال..." : "إنهاء الاختبار"}
                             </Button>
                         ) : (
                             <Button 
@@ -884,24 +883,24 @@ export default function ExamSessionPage() {
                                       setCurrentQuestionIdx(prev => prev + 1);
                                     }
                                 }}
-                                disabled={currentQuestionIdx === questions.length - 1} // Can't go next if last. use submit button in sidebar.
-                                className="h-14 md:h-16 px-6 md:px-12 text-base md:text-xl font-black bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-xl md:rounded-2xl shadow-xl shadow-blue-900/20 gap-2 md:gap-3 flex-row-reverse disabled:opacity-40"
+                                disabled={currentQuestionIdx === questions.length - 1}
+                                className="h-11 md:h-14 px-5 md:px-10 text-sm md:text-lg font-black bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-lg md:rounded-xl shadow-lg shadow-blue-900/20 gap-1.5 md:gap-2 flex-row-reverse disabled:opacity-40"
                             >
-                                <ArrowLeft size={24} className="md:w-7 md:h-7" />
-                                <span className="hidden sm:inline">السؤال</span> التالي
+                                <ArrowLeft size={18} className="md:w-6 md:h-6" />
+                                التالي
                             </Button>
                         )}
                     </div>
 
                     {/* Mobile Submit Button - fixed at bottom for easy thumb reach */}
-                    <div className="lg:hidden h-20 bg-white border-t border-slate-200 px-4 flex items-center shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+                    <div className="lg:hidden h-14 bg-white border-t border-slate-200 px-3 flex items-center shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
                         <Button 
                             onClick={() => submitExam()}
                             disabled={isSubmitting || answers.length < questions.length - 5}
-                            className="w-full h-14 text-base font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-2xl shadow-lg shadow-green-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="w-full h-11 text-sm font-black bg-[#5c9e45] hover:bg-[#4d853a] text-white rounded-xl shadow-lg shadow-green-900/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
                         >
-                            <Check size={20} />
-                            {isSubmitting ? "جاري الإرسال..." : `إنهاء الاختبار (${answers.length}/${questions.length})`}
+                            <Check size={16} />
+                            {isSubmitting ? "إرسال..." : `إنهاء (${answers.length}/${questions.length})`}
                         </Button>
                     </div>
 

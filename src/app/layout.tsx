@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Tajawal } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/simple-toast";
 import { GlobalSchema } from "@/components/seo/GlobalSchema";
 
-const ibmPlexArabic = IBM_Plex_Sans_Arabic({
+const tajawal = Tajawal({
   subsets: ["arabic"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-ibm-arabic",
+  weight: ["200", "300", "400", "500", "700", "800", "900"],
+  variable: "--font-tajawal",
   display: "swap",
 });
 
@@ -55,7 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${ibmPlexArabic.className} ${ibmPlexArabic.variable} antialiased bg-gray-50 text-gray-900`}>
+      <body className={`${tajawal.className} ${tajawal.variable} antialiased bg-gray-50 text-gray-900`}>
         <GlobalSchema />
         <ToastProvider>
           {children}

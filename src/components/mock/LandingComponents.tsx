@@ -133,7 +133,7 @@ export function SolutionSection() {
                 className="absolute bottom-0 left-1/4 w-80 h-80 bg-[#5c9e45]/20 rounded-full blur-[100px] pointer-events-none" 
             />
             {/* Ambient particles */}
-            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay"></div>
+            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[url('/noise.svg')] mix-blend-overlay"></div>
 
             <div className="max-w-7xl mx-auto px-6 md:px-10 grid lg:grid-cols-2 gap-14 items-center relative z-10">
                 <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer} className="relative">
@@ -290,7 +290,7 @@ export function TrustSection() {
     return (
         <section className="py-16 md:py-20 bg-slate-900 text-white relative overflow-hidden">
             {/* Ambient Background */}
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none" />
+            <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#16539a]/20 rounded-full blur-[100px] pointer-events-none" />
 
             <div className="max-w-7xl mx-auto px-6 md:px-10 relative z-10">
