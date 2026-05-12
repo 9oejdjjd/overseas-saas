@@ -742,9 +742,11 @@ model AIGenerationJob {
 }
 
 model MockVisitorOtp {
-  phone     String   @id
-  code      String
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  phone         String   @id
+  code          String
+  expiresAt     DateTime
+  verified      Boolean  @default(false)
+  dailyAttempts Int      @default(0)
+  lastAttemptAt DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
