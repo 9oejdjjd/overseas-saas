@@ -32,7 +32,8 @@ export default function ApplicantsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     status: 'ALL',
-    locationId: 'ALL'
+    locationId: 'ALL',
+    viewType: 'ALL'
   });
 
   const [locations, setLocations] = useState<{ id: string, name: string }[]>([]);
@@ -53,6 +54,7 @@ export default function ApplicantsPage() {
       if (searchTerm) params.set("search", searchTerm);
       if (filters.status !== 'ALL') params.set("status", filters.status);
       if (filters.locationId !== 'ALL') params.set("locationId", filters.locationId);
+      if (filters.viewType !== 'ALL') params.set("viewType", filters.viewType);
 
       if (sorting.length > 0) {
         params.set("sort", sorting[0].id);

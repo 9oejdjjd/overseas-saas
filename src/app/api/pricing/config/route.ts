@@ -14,7 +14,9 @@ export async function GET() {
                     id: "global",
                     registrationPrice: 0,
                     examChangeFee: 16000,
-                    maxFreeChanges: 1
+                    maxFreeChanges: 1,
+                    mockExamSinglePrice: 0,
+                    mockExamPackagesEnabled: true
                 }
             });
         }
@@ -39,12 +41,15 @@ export async function PATCH(request: Request) {
                 maxAllowedExamChanges: body.maxAllowedExamChanges,
                 examModificationDeadline: body.examModificationDeadline,
                 examCancellationDeadline: body.examCancellationDeadline,
-                enableMockExamNewQuestions: body.enableMockExamNewQuestions !== undefined ? body.enableMockExamNewQuestions : undefined
+                enableMockExamNewQuestions: body.enableMockExamNewQuestions !== undefined ? body.enableMockExamNewQuestions : undefined,
+                mockExamSinglePrice: body.mockExamSinglePrice !== undefined ? body.mockExamSinglePrice : undefined,
+                mockExamPackagesEnabled: body.mockExamPackagesEnabled !== undefined ? body.mockExamPackagesEnabled : undefined
             }
         });
 
         return NextResponse.json(config);
     } catch (error) {
+        console.error("Failed to update config:", error);
         return NextResponse.json({ error: "Failed to update service config" }, { status: 500 });
     }
 }

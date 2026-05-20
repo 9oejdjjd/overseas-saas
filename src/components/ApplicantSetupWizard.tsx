@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ExtendedApplicant, Transaction, Ticket as TicketType, ActivityLog } from "@/types/applicant";
 import { ApplicantInfoTab } from "./applicants/ApplicantInfoTab";
 import { ApplicantFinanceTab } from "./applicants/ApplicantFinanceTab";
 import { ApplicantTicketTab } from "./applicants/ApplicantTicketTab";
 import { ApplicantExamTab } from "./applicants/ApplicantExamTab";
+import { MockExamRenewalCard } from "./applicants/MockExamRenewalCard";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Lock, Beaker } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ApplicantSetupWizardProps {
@@ -44,11 +45,27 @@ export function ApplicantSetupWizard({
     const [currentStep, setCurrentStep] = useState<number>(() => {
         if (!hasPlatform) return 1;
         if (!hasExam) return 2;
-        // If ticket is needed (hasTransportation) and not issued yet, go to 3.
-        // If ticket issued or not needed, go to 4.
         if (applicant.hasTransportation && !hasTicket) return 3;
         return 4;
     });
+
+    // Fetch mock purchase data for this applicant
+    const [mockPurchase, setMockPurchase] = useState<any>(null);
+    useEffect(() => {
+        const fetchCredits = async () => {
+            try {
+                const res = await fetch(`/api/pricing/mock-packages/check-credits?applicantId=${applicant.id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.purchases?.length > 0) {
+                        const p = data.purchases[0];
+                        setMockPurchase(p);
+                    }
+                }
+            } catch { /* ignore */ }
+        };
+        if (applicant.id) fetchCredits();
+    }, [applicant.id]);
 
     const isStepLocked = (step: number) => {
         if (step === 1) return false;
@@ -72,7 +89,8 @@ export function ApplicantSetupWizard({
                     { id: 1, label: "بيانات المنصة" },
                     { id: 2, label: "حجز الموعد" },
                     { id: 3, label: "إصدار التذكرة" },
-                    { id: 4, label: "الأمور المالية" }
+                    { id: 4, label: "الأمور المالية" },
+                    { id: 5, label: "الاختبارات" }
                 ].map((step, index) => (
                     <div key={step.id}
                         className={cn(
@@ -89,7 +107,7 @@ export function ApplicantSetupWizard({
                             {step.id}
                         </div>
                         <span className="text-sm hidden sm:block">{step.label}</span>
-                        {index < 3 && <div className="w-10 h-[2px] bg-gray-200 mx-2 hidden md:block" />}
+                        {index < 4 && <div className="w-10 h-[2px] bg-gray-200 mx-2 hidden md:block" />}
                     </div>
                 ))}
             </div>
@@ -179,6 +197,35 @@ export function ApplicantSetupWizard({
                                 السابق
                             </Button>
                             {/* Finish Button usually leads to close, but we'll leave it as end of flow */}
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 5: Mock Exams */}
+                {currentStep === 5 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="bg-purple-50 p-3 rounded text-sm text-purple-800 mb-4 flex items-center gap-2">
+                            <Beaker className="h-4 w-4" />
+                            إدارة باقات الاختبارات التجريبية وتجديدها
+                        </div>
+                        <MockExamRenewalCard
+                            phone={applicant.phone}
+                            applicantId={applicant.id}
+                            currentPurchase={mockPurchase}
+                            onUpdate={() => {
+                                onUpdate();
+                                // Refresh mock purchase
+                                fetch(`/api/pricing/mock-packages/check-credits?applicantId=${applicant.id}`)
+                                    .then(r => r.json())
+                                    .then(d => { if (d.purchases?.length > 0) setMockPurchase(d.purchases[0]); })
+                                    .catch(() => {});
+                            }}
+                        />
+                        <div className="flex justify-start mt-4">
+                            <Button variant="outline" onClick={() => setCurrentStep(4)}>
+                                <ChevronRight className="h-4 w-4 ml-2" />
+                                السابق
+                            </Button>
                         </div>
                     </div>
                 )}

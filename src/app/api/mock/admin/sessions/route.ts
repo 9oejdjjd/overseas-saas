@@ -4,6 +4,84 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
 
+// ========================================
+// SUSPICION SCORING ENGINE
+// ========================================
+
+interface SuspicionResult {
+    score: number;
+    level: "CLEAN" | "WATCH" | "SUSPICIOUS" | "CRITICAL";
+    reasons: string[];
+}
+
+function calculateSuspicion(group: {
+    allNames: Set<string>;
+    allPhones: Set<string>;
+    allIps: Set<string>;
+    allFingerprints: Set<string>;
+    totalAttempts: number;
+    isBanned: boolean;
+    sessions: any[];
+}): SuspicionResult {
+    let score = 0;
+    const reasons: string[] = [];
+
+    // --- Rule 1: Same Fingerprint + Multiple Names (40 pts) ---
+    // This means the SAME device was used with different identities → definite fraud
+    if (group.allFingerprints.size >= 1 && group.allNames.size > 1) {
+        score += 40;
+        reasons.push(`نفس الجهاز استخدم ${group.allNames.size} أسماء مختلفة`);
+    }
+
+    // --- Rule 2: Same Fingerprint + Multiple Phones (40 pts) ---
+    if (group.allFingerprints.size >= 1 && group.allPhones.size > 1) {
+        score += 40;
+        reasons.push(`نفس الجهاز استخدم ${group.allPhones.size} أرقام مختلفة`);
+    }
+
+    // --- Rule 3: Same IP + Multiple Different Phones (30 pts for 3+) ---
+    if (group.allIps.size >= 1 && group.allPhones.size >= 3) {
+        score += 30;
+        reasons.push(`${group.allPhones.size} أرقام مختلفة من نفس عنوان الشبكة`);
+    } else if (group.allIps.size >= 1 && group.allPhones.size === 2) {
+        score += 15;
+        reasons.push(`رقمان مختلفان من نفس عنوان الشبكة`);
+    }
+
+    // --- Rule 4: Same Phone + Multiple Names (20 pts) ---
+    if (group.allPhones.size === 1 && group.allNames.size > 1) {
+        score += 20;
+        reasons.push(`نفس الرقم استخدم ${group.allNames.size} أسماء مختلفة`);
+    }
+
+    // --- Rule 5: Excessive Attempts (10 pts per attempt beyond 3) ---
+    if (group.totalAttempts > 3) {
+        const extraAttempts = group.totalAttempts - 3;
+        score += Math.min(extraAttempts * 10, 30);
+        reasons.push(`تجاوز الحد المجاني بـ ${extraAttempts} محاولات إضافية (${group.totalAttempts} إجمالي)`);
+    }
+
+    // --- Rule 6: Previously Banned (50 pts) ---
+    if (group.isBanned) {
+        score += 50;
+        reasons.push(`محظور سابقاً من قبل الإدارة`);
+    }
+
+    // Determine level
+    let level: SuspicionResult["level"] = "CLEAN";
+    if (score >= 60) level = "CRITICAL";
+    else if (score >= 30) level = "SUSPICIOUS";
+    else if (score >= 10) level = "WATCH";
+
+    return { score, level, reasons };
+}
+
+// Helper: Extract base fingerprint (browserId only)
+function extractBaseFingerprint(fp: string | null): string | null {
+    if (!fp) return null;
+    return fp.includes("-") ? fp.split("-")[0] : fp;
+}
+
 export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -14,19 +92,21 @@ export async function GET(request: Request) {
         const url = new URL(request.url);
         const professionId = url.searchParams.get("professionId");
         const type = url.searchParams.get("type");
-        const status = url.searchParams.get("status");
+        const statusFilter = url.searchParams.get("status");
         const search = url.searchParams.get("search");
+        const suspicionFilter = url.searchParams.get("suspicion"); // "ALL" | "WATCH" | "SUSPICIOUS" | "CRITICAL"
 
         const where: any = {};
         if (professionId) where.professionId = professionId;
         if (type) where.type = type;
-        if (status) where.status = status;
+        if (statusFilter) where.status = statusFilter;
         if (search) {
             where.OR = [
                 { visitorName: { contains: search, mode: "insensitive" } },
                 { visitorPhone: { contains: search } },
                 { applicant: { fullName: { contains: search, mode: "insensitive" } } },
-                { applicant: { whatsappNumber: { contains: search } } }
+                { applicant: { whatsappNumber: { contains: search } } },
+                { ipAddress: { contains: search } }
             ];
         }
 
@@ -37,74 +117,139 @@ export async function GET(request: Request) {
                 applicant: { select: { fullName: true, whatsappNumber: true } }
             },
             orderBy: { createdAt: 'desc' },
-            take: 500
+            take: 1000
         });
 
-        // Group sessions by Device Fingerprint, Applicant ID, or Visitor Phone
+        // ========================================
+        // INTELLIGENT GROUPING (Fingerprint-first)
+        // ========================================
+        // Step 1: Group by base fingerprint first (most reliable device identifier)
+        // Step 2: Sub-group ungrouped sessions by phone number
+        // Step 3: Apply suspicion scoring to each group
+
         const groupedMap = new Map<string, any>();
 
-        sessionsList.forEach((session: any) => {
-            // Priority for grouping: ApplicantId > DeviceFingerprint > VisitorPhone > Token
-            const groupKey = session.applicantId || session.deviceFingerprint || session.visitorPhone || session.token;
+        sessionsList.forEach((sess: any) => {
+            const baseFp = extractBaseFingerprint(sess.deviceFingerprint);
             
+            // Priority: Fingerprint > ApplicantId > Phone > Token
+            let groupKey: string;
+            if (baseFp && baseFp !== "fallback" && baseFp !== "unknown") {
+                groupKey = `fp:${baseFp}`;
+            } else if (sess.applicantId) {
+                groupKey = `app:${sess.applicantId}`;
+            } else if (sess.visitorPhone) {
+                groupKey = `ph:${sess.visitorPhone}`;
+            } else {
+                groupKey = `tok:${sess.token}`;
+            }
+
             if (!groupedMap.has(groupKey)) {
                 groupedMap.set(groupKey, {
                     id: groupKey,
-                    displayName: session.applicant?.fullName || session.visitorName || "غير معروف",
-                    displayPhone: session.applicant?.whatsappNumber || session.visitorPhone || "لا يوجد",
-                    type: session.type,
-                    profession: session.profession,
+                    displayName: sess.applicant?.fullName || sess.visitorName || "غير معروف",
+                    displayPhone: sess.applicant?.whatsappNumber || sess.visitorPhone || "لا يوجد",
+                    type: sess.type,
+                    profession: sess.profession,
                     allNames: new Set<string>(),
                     allPhones: new Set<string>(),
+                    allIps: new Set<string>(),
+                    allFingerprints: new Set<string>(),
+                    allProfessions: new Set<string>(),
                     sessions: [],
                     bestScore: 0,
                     lastScore: 0,
                     hasSetLastScore: false,
                     isPassed: false,
                     totalAttempts: 0,
-                    status: session.status,
-                    createdAt: session.createdAt
+                    isBanned: false,
+                    status: sess.status,
+                    createdAt: sess.createdAt
                 });
             }
 
             const group = groupedMap.get(groupKey);
-            
-            const name = session.applicant?.fullName || session.visitorName;
+
+            // Collect identity data
+            const name = sess.applicant?.fullName || sess.visitorName;
             if (name) group.allNames.add(name);
-            
-            const phone = session.applicant?.whatsappNumber || session.visitorPhone;
+
+            const phone = sess.applicant?.whatsappNumber || sess.visitorPhone;
             if (phone) group.allPhones.add(phone);
 
-            group.sessions.push(session);
+            if (sess.ipAddress && sess.ipAddress !== "unknown") group.allIps.add(sess.ipAddress);
+            
+            if (baseFp && baseFp !== "fallback" && baseFp !== "unknown") {
+                group.allFingerprints.add(baseFp);
+            }
+
+            if (sess.profession?.name) group.allProfessions.add(sess.profession.name);
+
+            group.sessions.push(sess);
             group.totalAttempts += 1;
 
-            if (session.status === "SUBMITTED" && session.score !== null) {
-                const scoreNum = Number(session.score);
+            if (sess.isBanned) group.isBanned = true;
+
+            if (sess.status === "SUBMITTED" && sess.score !== null) {
+                const scoreNum = Number(sess.score);
                 if (scoreNum > group.bestScore) group.bestScore = scoreNum;
-                // Since sessions are ordered by desc, the first SUBMITTED one encountered is the latest
                 if (!group.hasSetLastScore) {
                     group.lastScore = scoreNum;
                     group.hasSetLastScore = true;
                 }
-                if (scoreNum >= session.passingScore) {
+                if (scoreNum >= sess.passingScore) {
                     group.isPassed = true;
                 }
             }
 
             // Keep status of the latest session
             if (group.sessions.length === 1) {
-                group.status = session.status;
+                group.status = sess.status;
             }
         });
 
-        const finalGroupedList = Array.from(groupedMap.values()).map(g => ({
-            ...g,
-            allNames: Array.from(g.allNames),
-            allPhones: Array.from(g.allPhones),
-            isSuspicious: g.allNames.size > 1 || g.allPhones.size > 1
-        }));
+        // Apply suspicion scoring and serialize
+        const finalGroupedList = Array.from(groupedMap.values()).map(g => {
+            const suspicion = calculateSuspicion(g);
 
-        return NextResponse.json(finalGroupedList);
+            return {
+                id: g.id,
+                displayName: g.displayName,
+                displayPhone: g.displayPhone,
+                type: g.type,
+                profession: g.profession,
+                allNames: Array.from(g.allNames),
+                allPhones: Array.from(g.allPhones),
+                allIps: Array.from(g.allIps),
+                allFingerprints: Array.from(g.allFingerprints),
+                allProfessions: Array.from(g.allProfessions),
+                sessions: g.sessions,
+                bestScore: g.bestScore,
+                lastScore: g.lastScore,
+                isPassed: g.isPassed,
+                totalAttempts: g.totalAttempts,
+                isBanned: g.isBanned,
+                status: g.status,
+                createdAt: g.createdAt,
+                // Suspicion data
+                suspicionScore: suspicion.score,
+                suspicionLevel: suspicion.level,
+                suspicionReasons: suspicion.reasons,
+                isSuspicious: suspicion.level !== "CLEAN" // backward compat
+            };
+        });
+
+        // Apply suspicion filter if provided
+        let filtered = finalGroupedList;
+        if (suspicionFilter && suspicionFilter !== "ALL") {
+            if (suspicionFilter === "ANY") {
+                filtered = finalGroupedList.filter(g => g.suspicionLevel !== "CLEAN");
+            } else {
+                filtered = finalGroupedList.filter(g => g.suspicionLevel === suspicionFilter);
+            }
+        }
+
+        return NextResponse.json(filtered);
     } catch (error) {
         console.error("GET Sessions Error:", error);
         return NextResponse.json({ error: "Failed to fetch sessions" }, { status: 500 });
@@ -130,10 +275,9 @@ export async function POST(request: Request) {
             // Normalize phone for consistent matching
             const normalizedPhone = visitorPhone.replace(/[\s\-\(\)]/g, "");
 
-            // Count ALL consumed attempts (SUBMITTED, EXPIRED, TIMEOUT) - consistent with public init
+            // Count ALL consumed attempts (SUBMITTED, EXPIRED, TIMEOUT)
             const prevAttempts = await prisma.examSession.count({
                 where: { 
-                    professionId, 
                     OR: [
                         { visitorPhone: normalizedPhone },
                         { visitorPhone: normalizedPhone.replace(/^\+/, "") },
@@ -197,7 +341,7 @@ export async function POST(request: Request) {
     }
 }
 
-// Stop/Cancel session attempt
+// Ban/Update session — enhanced to ban all related identities
 export async function PATCH(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -210,6 +354,66 @@ export async function PATCH(request: Request) {
 
         if (!sessionId || !status) {
             return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
+        }
+
+        if (status === "EXPIRED" || status === "BANNED") {
+            // Get the session to find related identities
+            const targetSession = await prisma.examSession.findUnique({
+                where: { id: sessionId }
+            });
+
+            if (!targetSession) {
+                return NextResponse.json({ error: "Session not found" }, { status: 404 });
+            }
+
+            // Build conditions to find ALL related sessions
+            const relatedConditions: any[] = [];
+            if (targetSession.visitorPhone) {
+                relatedConditions.push({ visitorPhone: targetSession.visitorPhone });
+                const phoneWithoutPlus = targetSession.visitorPhone.replace(/^\+/, "");
+                relatedConditions.push({ visitorPhone: phoneWithoutPlus });
+            }
+            if (targetSession.deviceFingerprint) {
+                const baseFp = extractBaseFingerprint(targetSession.deviceFingerprint);
+                if (baseFp) {
+                    relatedConditions.push({ deviceFingerprint: { startsWith: baseFp } });
+                }
+            }
+
+            // Ban ALL related sessions (same phone or same fingerprint)
+            if (relatedConditions.length > 0) {
+                await prisma.examSession.updateMany({
+                    where: { OR: relatedConditions },
+                    data: { isBanned: true }
+                });
+            }
+
+            // Also ban the specific session
+            const updated = await prisma.examSession.update({
+                where: { id: sessionId },
+                data: { status: "EXPIRED", isBanned: true }
+            });
+
+            return NextResponse.json(updated);
+        }
+
+        // Regular status update
+        const allowedTransitions: Record<string, string[]> = {
+            "NEW": ["EXPIRED"],
+            "STARTED": ["EXPIRED", "TIMEOUT"],
+            "RESUMED": ["EXPIRED", "TIMEOUT"],
+        };
+
+        const targetSession = await prisma.examSession.findUnique({ where: { id: sessionId } });
+        if (!targetSession) {
+            return NextResponse.json({ error: "Session not found" }, { status: 404 });
+        }
+
+        const allowed = allowedTransitions[targetSession.status] || [];
+        if (!allowed.includes(status)) {
+            return NextResponse.json({ 
+                error: `لا يمكن تغيير الحالة من ${targetSession.status} إلى ${status}` 
+            }, { status: 400 });
         }
 
         const updated = await prisma.examSession.update({

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { 
     Trophy, XCircle, CheckCircle2, AlertCircle, ArrowLeft, BookOpen, Clock, ChevronDown, 
     Award, Target, BarChart3, Briefcase, ShieldCheck, HelpCircle, ArrowRight, Star, Sparkles, Filter,
-    Home, RefreshCw, MessageSquare, Phone, GraduationCap, Rocket, Users, HeartHandshake
+    Home, RefreshCw, MessageSquare, Phone, GraduationCap, Rocket, Users, HeartHandshake, Lock
 } from "lucide-react";
 import Link from "next/link";
 
@@ -45,6 +45,12 @@ interface ResultData {
     isRegistered: boolean;
     startedAt: string;
     completedAt: string;
+    restricted?: boolean;
+    packageFeatures?: {
+        showResultScore: boolean;
+        showResultQuestions: boolean;
+        showResultCorrectAnswers: boolean;
+    };
     questions: QuestionResult[];
 }
 
@@ -64,7 +70,15 @@ export default function ExamResultPage() {
     useEffect(() => {
         const fetchResult = async () => {
             try {
-                const res = await fetch(`/api/mock/session/${token}/result`);
+                // Send fingerprint header for access control verification
+                let fpHeader = "";
+                try {
+                    const { getDeviceFingerprint } = await import("@/lib/fingerprint");
+                    fpHeader = await getDeviceFingerprint();
+                } catch { /* ignore */ }
+                const res = await fetch(`/api/mock/session/${token}/result`, {
+                    headers: fpHeader ? { "x-device-fingerprint": fpHeader } : {}
+                });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "فشل تحميل النتيجة");
                 setResult(data);
@@ -305,12 +319,20 @@ export default function ExamResultPage() {
                                 />
                             </svg>
 
-                            <div className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-1 relative z-10 transition-all duration-75">
-                                {animatedScore}<span className="text-2xl md:text-3xl opacity-50">%</span>
-                            </div>
-                            <div className={`text-xs md:text-sm font-black uppercase tracking-widest px-3 md:px-4 py-1 md:py-1.5 rounded-full border relative z-10 ${result.score >= 80 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/20' : result.score >= 70 ? 'text-blue-400 border-blue-500/30 bg-blue-500/20' : result.score >= 60 ? 'text-amber-400 border-amber-500/30 bg-amber-500/20' : 'text-red-400 border-red-500/30 bg-red-500/20'}`}>
-                                {result.score >= 60 ? 'اجتياز ✓' : 'لم يجتز ✕'}
-                            </div>
+                            {result.packageFeatures?.showResultScore === false ? (
+                                <div className="text-3xl md:text-5xl font-black text-white tracking-tighter mb-1 relative z-10 transition-all duration-75 flex flex-col items-center">
+                                    <Lock className="w-10 h-10 md:w-14 md:h-14 text-slate-400 mb-2" strokeWidth={2} />
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-1 relative z-10 transition-all duration-75">
+                                        {animatedScore}<span className="text-2xl md:text-3xl opacity-50">%</span>
+                                    </div>
+                                    <div className={`text-xs md:text-sm font-black uppercase tracking-widest px-3 md:px-4 py-1 md:py-1.5 rounded-full border relative z-10 ${result.score >= 80 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/20' : result.score >= 70 ? 'text-blue-400 border-blue-500/30 bg-blue-500/20' : result.score >= 60 ? 'text-amber-400 border-amber-500/30 bg-amber-500/20' : 'text-red-400 border-red-500/30 bg-red-500/20'}`}>
+                                        {result.score >= 60 ? 'اجتياز ✓' : 'لم يجتز ✕'}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </motion.div>
@@ -464,6 +486,18 @@ export default function ExamResultPage() {
                     </div>
 
                     <div className="space-y-6">
+                        {result.packageFeatures?.showResultQuestions === false ? (
+                            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center">
+                                <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6 border border-white/5">
+                                    <Lock size={36} className="text-slate-400" />
+                                </div>
+                                <h3 className="text-xl md:text-2xl font-black text-white mb-3">محتوى الأسئلة محمي</h3>
+                                <p className="text-slate-400 text-sm md:text-base max-w-md mx-auto leading-relaxed">
+                                    بناءً على باقتك الحالية، لا تتوفر ميزة مراجعة الأسئلة وتصحيح الأخطاء. يمكنك الاشتراك في الباقة المتقدمة للاستفادة الكاملة من هذه الميزة.
+                                </p>
+                            </div>
+                        ) : (
+                        <>
                         <AnimatePresence mode="popLayout">
                             {filteredQuestions.map((q, idx) => {
                                 const isExpanded = expandedQuestion === q.id;
@@ -601,6 +635,8 @@ export default function ExamResultPage() {
                                 <h3 className="text-2xl md:text-3xl font-black text-slate-300 mb-4 italic">لا توجد سجلات مطابقة</h3>
                                 <p className="text-slate-500 font-bold text-lg md:text-xl">لم نجد أسئلة تطابق فلتر البحث الذي اخترته.</p>
                             </motion.div>
+                        )}
+                        </>
                         )}
                     </div>
 

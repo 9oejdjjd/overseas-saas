@@ -6,6 +6,11 @@ import { hasPermission } from "@/lib/rbac";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
         const { id } = await params;
         const body = await request.json();
 
@@ -42,19 +47,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const { id } = await params;
-
-        // Ensure no active sessions depend on it before deleting
-        const activeSessions = await prisma.examSession.count({
-            where: { professionId: id, status: { in: ['NEW', 'STARTED'] } }
-        });
-
-        if (activeSessions > 0) {
-            return NextResponse.json({ error: "Cannot delete profession with active exam sessions" }, { status: 400 });
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        await prisma.profession.delete({
-            where: { id }
+        const { id } = await params;
+
+        // Safely delete all related entities using a transaction
+        await prisma.$transaction(async (tx) => {
+            // Find questions to delete their dependencies first
+            const questions = await tx.question.findMany({ where: { professionId: id }, select: { id: true } });
+            const questionIds = questions.map(q => q.id);
+            
+            if (questionIds.length > 0) {
+                await tx.examSessionQuestion.deleteMany({ where: { questionId: { in: questionIds } } });
+                await tx.questionOption.deleteMany({ where: { questionId: { in: questionIds } } });
+                await tx.question.deleteMany({ where: { professionId: id } });
+            }
+
+            await tx.aIGenerationJob.deleteMany({ where: { professionId: id } });
+            await tx.examSession.deleteMany({ where: { professionId: id } });
+            
+            await tx.profession.delete({ where: { id } });
         });
 
         return NextResponse.json({ success: true });

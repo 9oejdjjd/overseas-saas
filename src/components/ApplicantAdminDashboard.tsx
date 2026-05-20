@@ -1,14 +1,16 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { ExtendedApplicant, Transaction, Ticket as TicketType, ActivityLog } from "@/types/applicant";
 import { ApplicantInfoTab } from "./applicants/ApplicantInfoTab";
 import { ApplicantFinanceTab } from "./applicants/ApplicantFinanceTab";
 import { ApplicantTicketTab } from "./applicants/ApplicantTicketTab";
 import { ApplicantExamTab } from "./applicants/ApplicantExamTab";
 import { ApplicantActivityLog } from "./applicants/ApplicantActivityLog";
+import { MockExamRenewalCard } from "./applicants/MockExamRenewalCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { User, CalendarClock, Ticket, Wallet, History } from "lucide-react";
+import { User, CalendarClock, Ticket, Wallet, History, Beaker } from "lucide-react";
 
 interface ApplicantAdminDashboardProps {
     applicant: ExtendedApplicant;
@@ -34,11 +36,27 @@ export function ApplicantAdminDashboard({
 
     const isPlatformRegistered = !!applicant.platformEmail;
 
+    // Fetch mock purchase data
+    const [mockPurchase, setMockPurchase] = useState<any>(null);
+    useEffect(() => {
+        const fetchCredits = async () => {
+            try {
+                const res = await fetch(`/api/pricing/mock-packages/check-credits?applicantId=${applicant.id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.purchases?.length > 0) setMockPurchase(data.purchases[0]);
+                }
+            } catch { /* ignore */ }
+        };
+        if (applicant.id) fetchCredits();
+    }, [applicant.id]);
+
     const tabs = [
         { value: "details", label: "البيانات الشخصية", icon: User },
         { value: "finance", label: "المالية", icon: Wallet },
         { value: "ticket", label: "التذاكر والنقل", icon: Ticket },
         { value: "exam", label: "الاختبار", icon: CalendarClock },
+        { value: "mockExam", label: "التجريبي", icon: Beaker },
         { value: "activity", label: "السجل", icon: History },
     ];
 
@@ -104,6 +122,21 @@ export function ApplicantAdminDashboard({
                             applicant={applicant}
                             onUpdate={onUpdate}
                             viewMode="admin"
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="mockExam" className="mt-0 focus-visible:outline-none">
+                        <MockExamRenewalCard
+                            phone={applicant.phone}
+                            applicantId={applicant.id}
+                            currentPurchase={mockPurchase}
+                            onUpdate={() => {
+                                onUpdate();
+                                fetch(`/api/pricing/mock-packages/check-credits?applicantId=${applicant.id}`)
+                                    .then(r => r.json())
+                                    .then(d => { if (d.purchases?.length > 0) setMockPurchase(d.purchases[0]); })
+                                    .catch(() => {});
+                            }}
                         />
                     </TabsContent>
 

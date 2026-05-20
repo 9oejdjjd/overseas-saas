@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { QuestionsImportModal } from "./QuestionsImportModal";
 import { SingleQuestionImportModal } from "./SingleQuestionImportModal";
 import { DuplicateScannerModal } from "./DuplicateScannerModal";
+import { EditQuestionModal } from "./EditQuestionModal";
+import { Trash2, Edit2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function QuestionsManager() {
     const [questions, setQuestions] = useState<any[]>([]);
@@ -17,12 +20,20 @@ export function QuestionsManager() {
     const [searchProfession, setSearchProfession] = useState<string>("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
-    const fetchQuestions = async () => {
+    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
+    const [editingQuestion, setEditingQuestion] = useState<any | null>(null);
+
+    const fetchQuestions = async (page = 1) => {
         setLoading(true);
         try {
-            const res = await fetch("/api/mock/admin/questions");
+            const res = await fetch(`/api/mock/admin/questions?page=${page}&limit=50`);
             const data = await res.json();
-            if (Array.isArray(data)) setQuestions(data);
+            if (data.data && Array.isArray(data.data)) {
+                setQuestions(data.data);
+                setPagination(data.pagination);
+            } else if (Array.isArray(data)) {
+                setQuestions(data);
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -41,9 +52,20 @@ export function QuestionsManager() {
     };
 
     useEffect(() => {
-        fetchQuestions();
+        fetchQuestions(1);
         fetchProfessions();
     }, []);
+
+    const deleteQuestion = async (id: string) => {
+        if (!confirm("هل أنت متأكد من حذف هذا السؤال نهائياً؟")) return;
+        try {
+            const res = await fetch(`/api/mock/admin/questions/${id}`, { method: "DELETE" });
+            if (res.ok) fetchQuestions(pagination.page);
+            else alert("فشل الحذف");
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const axisLabels: any = {
         "HEALTH_SAFETY": "الصحة والسلامة",
@@ -69,7 +91,7 @@ export function QuestionsManager() {
                     <p className="text-sm text-gray-500">عرض وإدارة الأسئلة المولدة أو المضافة لكل مهنة</p>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                    <button onClick={fetchQuestions} className="flex items-center gap-2 text-sm text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-blue-100 flex-1 justify-center sm:flex-none">
+                    <button onClick={() => fetchQuestions(pagination.page)} className="flex items-center gap-2 text-sm text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-blue-100 flex-1 justify-center sm:flex-none">
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         تحديث
                     </button>
@@ -142,26 +164,36 @@ export function QuestionsManager() {
                         }).map((q, idx) => {
                             const correctOption = q.options?.find((o: any) => o.isCorrect);
                             return (
-                                <div key={q.id} className="border rounded-xl p-5 bg-white shadow-sm">
-                                    <div className="flex flex-wrap gap-2 items-center mb-3">
-                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
-                                            {q.profession?.name}
-                                        </Badge>
-                                        <Badge variant="outline" className={diffColors[q.difficulty] || "bg-gray-100"}>
-                                            {q.difficulty}
-                                        </Badge>
-                                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 flex items-center gap-1">
-                                            <Layers className="h-3 w-3" />
-                                            {axisLabels[q.axis] || q.axis}
-                                        </Badge>
-                                        <Badge variant="outline" className={q.cognitiveLevel === "K1"
-                                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                                            : "bg-purple-50 text-purple-700 border-purple-200"}>
-                                            {q.cognitiveLevel === "K1" ? "K1 تذكر" : "K2 تطبيق"}
-                                        </Badge>
-                                        <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
-                                            {q.type === "TRUE_FALSE" ? "صح أو خطأ" : q.type === "FILL_BLANK" ? "إكمال الفراغ" : "اختيار من متعدد"}
-                                        </Badge>
+                                <div key={q.id} className="border rounded-xl p-5 bg-white shadow-sm hover:border-blue-200 transition-colors">
+                                    <div className="flex flex-wrap gap-2 items-center justify-between mb-3">
+                                        <div className="flex flex-wrap gap-2 items-center">
+                                            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
+                                                {q.profession?.name}
+                                            </Badge>
+                                            <Badge variant="outline" className={diffColors[q.difficulty] || "bg-gray-100"}>
+                                                {q.difficulty}
+                                            </Badge>
+                                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 flex items-center gap-1">
+                                                <Layers className="h-3 w-3" />
+                                                {axisLabels[q.axis] || q.axis}
+                                            </Badge>
+                                            <Badge variant="outline" className={q.cognitiveLevel === "K1"
+                                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                : "bg-purple-50 text-purple-700 border-purple-200"}>
+                                                {q.cognitiveLevel === "K1" ? "K1 تذكر" : "K2 تطبيق"}
+                                            </Badge>
+                                            <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                                                {q.type === "TRUE_FALSE" ? "صح أو خطأ" : q.type === "FILL_BLANK" ? "إكمال الفراغ" : "اختيار من متعدد"}
+                                            </Badge>
+                                        </div>
+                                        <div className="flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                                            <Button variant="ghost" size="icon" onClick={() => setEditingQuestion(q)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
+                                                <Edit2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)} className="h-8 w-8 text-red-500 hover:bg-red-50">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                     <h3 className="font-bold text-gray-900 mb-4">{q.text}</h3>
                                     
@@ -202,7 +234,28 @@ export function QuestionsManager() {
                                 </div>
                             )}
                     </div>
+                    {pagination.totalPages > 1 && (
+                        <div className="flex justify-center items-center gap-4 mt-6 py-4">
+                            <Button variant="outline" disabled={pagination.page <= 1} onClick={() => fetchQuestions(pagination.page - 1)}>
+                                السابق
+                            </Button>
+                            <span className="text-sm text-gray-600 font-medium">صفحة {pagination.page} من {pagination.totalPages}</span>
+                            <Button variant="outline" disabled={pagination.page >= pagination.totalPages} onClick={() => fetchQuestions(pagination.page + 1)}>
+                                التالي
+                            </Button>
+                        </div>
+                    )}
                 </>
+            )}
+            
+            {editingQuestion && (
+                <EditQuestionModal 
+                    isOpen={!!editingQuestion} 
+                    setIsOpen={(open) => !open && setEditingQuestion(null)} 
+                    question={editingQuestion} 
+                    professions={professions}
+                    onSuccess={() => { setEditingQuestion(null); fetchQuestions(pagination.page); }} 
+                />
             )}
         </div>
     );

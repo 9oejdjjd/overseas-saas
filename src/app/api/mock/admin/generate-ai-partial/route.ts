@@ -31,18 +31,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
         }
 
-        let axisLabelArabic = "";
-        switch(axis) {
-            case "HEALTH_SAFETY": axisLabelArabic = "الصحة والسلامة في بيئة العمل"; break;
-            case "PROFESSION_KNOWLEDGE": axisLabelArabic = "المعرفة المهنية التخصصية"; break;
-            case "GENERAL_SKILLS": axisLabelArabic = "المهارات العامة وجودة التنفيذ"; break;
-            case "OCCUPATIONAL_SAFETY": axisLabelArabic = "السلامة المهنية والمخاطر المباشرة"; break;
-            case "CORRECT_METHODS": axisLabelArabic = "الأساليب الصحيحة والقياسية للمهنة"; break;
-            case "PROFESSIONAL_BEHAVIOR": axisLabelArabic = "السلوك الوظيفي والانضباط المهني"; break;
-            case "TOOLS_AND_EQUIPMENT": axisLabelArabic = "استخدام الأدوات والمعدات وتشخيصها"; break;
-            case "EMERGENCIES_FIRST_AID": axisLabelArabic = "الطوارئ والإسعافات الأولية"; break;
-            default: return NextResponse.json({ error: "Invalid axis" }, { status: 400 });
-        }
+        let axisLabelArabic = axis; // Axis is now a dynamic string directly sent from UI
 
         let optionsTemplate = "";
         let typeInstruction = "";

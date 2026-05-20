@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
         const session = await prisma.examSession.findUnique({
             where: { token },
-            include: { questions: true }
+            include: { questions: true, profession: { select: { examDuration: true } } }
         });
 
         if (!session) {
@@ -22,6 +22,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
         if (session.status !== "STARTED" && session.status !== "RESUMED") {
             return NextResponse.json({ error: "Session must be active" }, { status: 400 });
+        }
+
+        // === ANTI-CHEAT: Server-side timeout enforcement ===
+        if (session.startedAt) {
+            const examDurationMs = (session.profession?.examDuration || 60) * 60 * 1000;
+            const gracePeriodMs = 30 * 1000; // 30 seconds grace for network latency
+            const deadline = new Date(session.startedAt).getTime() + examDurationMs + gracePeriodMs;
+            if (Date.now() > deadline) {
+                // Mark session as timed out
+                await prisma.examSession.update({
+                    where: { id: session.id },
+                    data: { status: "TIMEOUT", completedAt: new Date(), score: 0, isPassed: false }
+                });
+                return NextResponse.json({ error: "انتهى الوقت المسموح للاختبار." }, { status: 400 });
+            }
         }
 
         const sessionQuestion = session.questions.find(q => q.questionId === questionId);
@@ -39,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
     } catch (error) {
         console.error("Save Answer Error:", error);
-        // Dont fail strictly, just log so UI doesn't crash
+        // Don't fail strictly, just log so UI doesn't crash
         return NextResponse.json({ error: "Server Error" }, { status: 500 });
     }
 }

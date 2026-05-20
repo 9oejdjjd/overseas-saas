@@ -24,148 +24,582 @@ model Location {
   id                     String        @id @default(uuid())
   name                   String        @unique
   code                   String?
-  address                String? // Full address text for messages
-  locationUrl            String? // Google Maps URL
   isActive               Boolean       @default(true)
+  address                String?
+  locationUrl            String?
   applicants             Applicant[]
-  transactions           Transaction[]
   transportingApplicants Applicant[]   @relation("TransportFrom")
-  vouchers               Voucher[]
   examCenters            ExamCenter[]
+  transactions           Transaction[]
+  vouchers               Voucher[]
 }
 
 model ServiceConfig {
-  id                       String   @id @default("global")
-  registrationPrice        Decimal  @default(0) @db.Decimal(10, 2)
-  registrationCost         Decimal  @default(0) @db.Decimal(10, 2)
-  examChangeFee            Decimal  @default(16000) @db.Decimal(10, 2)
-  examChangeCost           Decimal  @default(0) @db.Decimal(10, 2)
-  maxFreeChanges           Int      @default(1)
-  maxAllowedExamChanges    Int      @default(1)
-  examModificationDeadline Int      @default(72) // Hours before exam
-  examCancellationDeadline Int      @default(72) // Hours before exam
-  enableMockExamNewQuestions Boolean @default(false)
-  updatedAt                DateTime @updatedAt
+  id                         String   @id @default("global")
+  registrationPrice          Decimal  @default(0) @db.Decimal(10, 2)
+  examChangeFee              Decimal  @default(16000) @db.Decimal(10, 2)
+  maxFreeChanges             Int      @default(1)
+  updatedAt                  DateTime @updatedAt
+  examChangeCost             Decimal  @default(0) @db.Decimal(10, 2)
+  registrationCost           Decimal  @default(0) @db.Decimal(10, 2)
+  examCancellationDeadline   Int      @default(72)
+  examModificationDeadline   Int      @default(72)
+  maxAllowedExamChanges      Int      @default(1)
+  enableMockExamNewQuestions Boolean  @default(false)
+  mockExamPackagesEnabled    Boolean  @default(true)
+  mockExamSinglePrice        Decimal  @default(0) @db.Decimal(10, 2)
+}
+
+model MockExamPackage {
+  id                       String             @id @default(uuid())
+  name                     String
+  nameEn                   String?
+  description              String?
+  badge                    String?
+  color                    String?
+  icon                     String?
+  examCredits              Int
+  includesRegistration     Boolean            @default(false)
+  includesTransport        Boolean            @default(false)
+  transportType            String?
+  features                 Json?              @default("[]")
+  price                    Decimal            @default(0) @db.Decimal(10, 2)
+  actualCost               Decimal            @default(0) @db.Decimal(10, 2)
+  validityDays             Int?
+  isActive                 Boolean            @default(true)
+  isFeatured               Boolean            @default(false)
+  sortOrder                Int                @default(0)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  examPrice                Decimal            @default(0) @db.Decimal(10, 2)
+  registrationDiscount     Decimal            @default(0) @db.Decimal(10, 2)
+  transportDiscount        Decimal            @default(0) @db.Decimal(10, 2)
+  isFree                   Boolean            @default(false)
+  priceSAR                 Decimal            @default(0) @db.Decimal(10, 2)
+  showResultCorrectAnswers Boolean            @default(true)
+  showResultQuestions      Boolean            @default(true)
+  showResultScore          Boolean            @default(true)
+  purchases                MockExamPurchase[]
+}
+
+model MockExamPurchase {
+  id            String           @id @default(uuid())
+  phone         String
+  buyerName     String?
+  applicantId   String?
+  packageId     String?
+  totalCredits  Int
+  usedCredits   Int              @default(0)
+  amount        Decimal          @db.Decimal(10, 2)
+  isPaid        Boolean          @default(false)
+  paymentMethod String?
+  paymentNote   String?
+  status        String           @default("PENDING")
+  activatedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  profession    String?
+  sessions      ExamSession[]
+  package       MockExamPackage? @relation(fields: [packageId], references: [id])
 }
 
 model TransportDestination {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  code      String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tripsFrom ScheduledTrip[]     @relation("TripFrom")
-  tripsTo   ScheduledTrip[]     @relation("TripTo")
-  stops     ScheduledTripStop[]
-
+  id                 String                  @id @default(uuid())
+  name               String                  @unique
+  code               String?
+  isActive           Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  tripsFrom          ScheduledTrip[]         @relation("TripFrom")
+  tripsTo            ScheduledTrip[]         @relation("TripTo")
+  stops              ScheduledTripStop[]
   routeDefaultsFrom  TransportRouteDefault[] @relation("RouteDefaultFrom")
   routeDefaultsTo    TransportRouteDefault[] @relation("RouteDefaultTo")
   TransportRouteStop TransportRouteStop[]
 }
 
 model ScheduledTrip {
-  id         String @id @default(uuid())
-  tripNumber String @unique
-
+  id                String               @id @default(uuid())
+  tripNumber        String               @unique
   fromDestinationId String
   toDestinationId   String
-
-  date          DateTime  @db.Date
-  departureTime String
-  arrivalDate   DateTime? @db.Date
-  arrivalTime   String?
-
-  price       Decimal @db.Decimal(10, 2)
-  capacity    Int     @default(50)
-  bookedSeats Int     @default(0)
-
-  // existing fields for backward compatibility
-  busNumber  String?
-  driverName String?
-
-  status TripStatus @default(SCHEDULED)
-  notes  String?
-
-  // New architecture relations
-  routeId String?
-  route   TransportRoute? @relation(fields: [routeId], references: [id])
-
-  templateId String?
-  template   TripTemplate? @relation(fields: [templateId], references: [id])
-
-  groupId   String?
-  group     TripGroup?     @relation(fields: [groupId], references: [id])
-  groupRole TripGroupRole?
-
-  driverId String?
-  driver   Driver? @relation(fields: [driverId], references: [id])
-
-  vehicleId String?
-  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
-
-  isCustomized Boolean          @default(false)
-  customizedAt DateTime?
-  busClass     PricingBusClass?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  fromDestination TransportDestination @relation("TripFrom", fields: [fromDestinationId], references: [id])
-  toDestination   TransportDestination @relation("TripTo", fields: [toDestinationId], references: [id])
-
-  tickets       Ticket[]
-  returnTickets Ticket[]            @relation("ReturnTrip")
-  stops         ScheduledTripStop[]
+  date              DateTime             @db.Date
+  departureTime     String
+  arrivalTime       String?
+  price             Decimal              @db.Decimal(10, 2)
+  capacity          Int                  @default(50)
+  bookedSeats       Int                  @default(0)
+  busNumber         String?
+  driverName        String?
+  status            TripStatus           @default(SCHEDULED)
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  arrivalDate       DateTime?            @db.Date
+  busClass          PricingBusClass?
+  customizedAt      DateTime?
+  driverId          String?
+  groupId           String?
+  groupRole         TripGroupRole?
+  isCustomized      Boolean              @default(false)
+  routeId           String?
+  templateId        String?
+  vehicleId         String?
+  driver            Driver?              @relation(fields: [driverId], references: [id])
+  fromDestination   TransportDestination @relation("TripFrom", fields: [fromDestinationId], references: [id])
+  group             TripGroup?           @relation(fields: [groupId], references: [id])
+  route             TransportRoute?      @relation(fields: [routeId], references: [id])
+  template          TripTemplate?        @relation(fields: [templateId], references: [id])
+  toDestination     TransportDestination @relation("TripTo", fields: [toDestinationId], references: [id])
+  vehicle           Vehicle?             @relation(fields: [vehicleId], references: [id])
+  stops             ScheduledTripStop[]
+  returnTickets     Ticket[]             @relation("ReturnTrip")
+  tickets           Ticket[]
 }
 
 model ScheduledTripStop {
-  id            String  @id @default(uuid())
+  id            String               @id @default(uuid())
   tripId        String
   destinationId String
-  routeStopId   String?
-
   arrivalTime   String?
-  departureDate DateTime? @db.Date
   departureTime String?
-  price         Decimal   @db.Decimal(10, 2)
+  price         Decimal              @db.Decimal(10, 2)
   orderIndex    Int
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  departureDate DateTime?            @db.Date
+  routeStopId   String?
   boardingPoint String?
-
-  trip        ScheduledTrip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  destination TransportDestination @relation(fields: [destinationId], references: [id])
-  routeStop   TransportRouteStop?  @relation(fields: [routeStopId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  destination   TransportDestination @relation(fields: [destinationId], references: [id])
+  routeStop     TransportRouteStop?  @relation(fields: [routeStopId], references: [id])
+  trip          ScheduledTrip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
 }
 
 model TransportPricingRule {
-  id       String  @id @default(uuid())
-  name     String
-  isActive Boolean @default(true)
-  priority Int     @default(0) // 0=Base, 1=Adjustment, etc.
-
-  // Scope
-  routeFromId String?
-  routeToId   String?
-
-  // Conditions
-  passengerType PricingPassengerType?
-  tripType      PricingTripType?
-  busClass      PricingBusClass?
-
+  id                     String                @id @default(uuid())
+  name                   String
+  isActive               Boolean               @default(true)
+  priority               Int                   @default(0)
+  routeFromId            String?
+  routeToId              String?
+  passengerType          PricingPassengerType?
+  tripType               PricingTripType?
+  busClass               PricingBusClass?
   seasonStartDate        DateTime?
   seasonEndDate          DateTime?
   minAdvanceBookingHours Int?
+  actionType             PricingActionType
+  amount                 Decimal               @db.Decimal(10, 2)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+}
 
-  // Action
-  actionType PricingActionType
-  amount     Decimal           @db.Decimal(10, 2) // Fixed amount or Percentage value (e.g. 10.0 for 10%)
+model CancellationPolicy {
+  id           String   @id @default(uuid())
+  name         String
+  feeAmount    Decimal  @db.Decimal(10, 2)
+  isActive     Boolean  @default(true)
+  category     String
+  condition    String?
+  createdAt    DateTime @default(now())
+  hoursTrigger Int?
+  updatedAt    DateTime @updatedAt
+}
 
+model Applicant {
+  id                String          @id @default(uuid())
+  fullName          String
+  profession        String
+  phone             String
+  whatsappNumber    String
+  examDate          DateTime?
+  examTime          String?
+  platformEmail     String?         @unique
+  platformPassword  String?
+  examTicketImage   String?
+  certificateImage  String?
+  status            ApplicantStatus @default(NEW_REGISTRATION)
+  notes             String?
+  hasTransportation Boolean         @default(false)
+  travelDate        DateTime?
+  totalAmount       Decimal         @db.Decimal(10, 2)
+  amountPaid        Decimal         @default(0) @db.Decimal(10, 2)
+  remainingBalance  Decimal         @db.Decimal(10, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  discount          Decimal         @default(0) @db.Decimal(10, 2)
+  applicantType     String?         @default("RESIDENT")
+  dob               DateTime?
+  firstName         String?
+  gender            String?
+  lastName          String?
+  nationalId        String?
+  passportExpiry    DateTime?
+  passportNumber    String?
+  applicantCode     String?         @unique
+  locationId        String?
+  transportType     String?
+  transportFromId   String?
+  examLocation      String?
+  examCenterId      String?
+  activityLogs      ActivityLog[]
+  examCenter        ExamCenter?     @relation(fields: [examCenterId], references: [id])
+  location          Location?       @relation(fields: [locationId], references: [id])
+  transportFrom     Location?       @relation("TransportFrom", fields: [transportFromId], references: [id])
+  documents         Document[]
+  examSessions      ExamSession[]
+  messageLogs       MessageLog[]
+  ticket            Ticket?
+  transactions      Transaction[]
+  vouchers          Voucher[]
+}
+
+model ExamCenter {
+  id          String      @id @default(uuid())
+  name        String
+  address     String?
+  locationUrl String?
+  isActive    Boolean     @default(true)
+  locationId  String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  applicants  Applicant[]
+  location    Location    @relation(fields: [locationId], references: [id])
+}
+
+model MessageLog {
+  id          String    @id @default(uuid())
+  applicantId String
+  templateId  String?
+  trigger     String
+  channel     String    @default("WHATSAPP")
+  message     String
+  attachments String?
+  status      String    @default("SENT")
+  sentAt      DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+model PricingPackage {
+  id         String        @id @default(uuid())
+  name       String        @unique
+  location   ExamLocation?
+  price      Decimal       @db.Decimal(10, 2)
+  actualCost Decimal       @db.Decimal(10, 2)
+  active     Boolean       @default(true)
+}
+
+model Transaction {
+  id              String          @id @default(uuid())
+  applicantId     String?
+  amount          Decimal         @db.Decimal(10, 2)
+  type            TransactionType
+  date            DateTime        @default(now())
+  notes           String?
+  category        String?
+  description     String?
+  relatedLocation ExamLocation?
+  locationId      String?
+  isPending       Boolean         @default(false)
+  applicant       Applicant?      @relation(fields: [applicantId], references: [id])
+  location        Location?       @relation(fields: [locationId], references: [id])
+}
+
+model ActivityLog {
+  id          String     @id @default(uuid())
+  action      String
+  details     String?
+  userId      String?
+  applicantId String?
+  timestamp   DateTime   @default(now())
+  applicant   Applicant? @relation(fields: [applicantId], references: [id])
+  user        User?      @relation(fields: [userId], references: [id])
+}
+
+model MessagingTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  type      String
+  subject   String?
+  body      String
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  trigger   String?  @unique
+}
+
+model Document {
+  id          String       @id @default(uuid())
+  applicantId String
+  type        DocumentType
+  fileName    String
+  fileUrl     String
+  uploadedAt  DateTime     @default(now())
+  applicant   Applicant    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id                String         @id @default(uuid())
+  applicantId       String         @unique
+  ticketNumber      String         @unique
+  busNumber         String?
+  seatNumber        String?
+  departureDate     DateTime
+  departureLocation String
+  arrivalLocation   String
+  transportCompany  String
+  status            String         @default("ISSUED")
+  createdAt         DateTime       @default(now())
+  tripId            String?
+  returnBusNumber   String?
+  returnSeatNumber  String?
+  returnTripId      String?
+  agentName         String?
+  boardingPoint     String?
+  companions        Json?
+  applicant         Applicant      @relation(fields: [applicantId], references: [id])
+  returnTrip        ScheduledTrip? @relation("ReturnTrip", fields: [returnTripId], references: [id])
+  trip              ScheduledTrip? @relation(fields: [tripId], references: [id])
+}
+
+model Voucher {
+  id              String      @id @default(uuid())
+  applicantId     String
+  type            VoucherType
+  notes           String?
+  isUsed          Boolean     @default(false)
+  usedAt          DateTime?
+  createdAt       DateTime    @default(now())
+  expiresAt       DateTime?
+  discountPercent Float       @default(100)
+  locationId      String?
+  applicant       Applicant   @relation(fields: [applicantId], references: [id])
+  location        Location?   @relation(fields: [locationId], references: [id])
+}
+
+model TransportRouteDefault {
+  id                String               @id @default(uuid())
+  fromDestinationId String
+  toDestinationId   String
+  price             Decimal              @db.Decimal(10, 2)
+  priceRoundTrip    Decimal?             @db.Decimal(10, 2)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  cost              Decimal?             @default(0) @db.Decimal(10, 2)
+  costRoundTrip     Decimal?             @default(0) @db.Decimal(10, 2)
+  fromDestination   TransportDestination @relation("RouteDefaultFrom", fields: [fromDestinationId], references: [id])
+  toDestination     TransportDestination @relation("RouteDefaultTo", fields: [toDestinationId], references: [id])
+
+  @@unique([fromDestinationId, toDestinationId])
+}
+
+model TransportRoute {
+  id              String               @id @default(uuid())
+  name            String               @unique
+  code            String?
+  isActive        Boolean              @default(true)
+  returnRouteId   String?              @unique
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  trips           ScheduledTrip[]
+  returnRoute     TransportRoute?      @relation("RouteReturn", fields: [returnRouteId], references: [id])
+  inverseOfReturn TransportRoute?      @relation("RouteReturn")
+  stops           TransportRouteStop[]
+  templates       TripTemplate[]
+}
+
+model TransportRouteStop {
+  id                  String               @id @default(uuid())
+  routeId             String
+  destinationId       String
+  orderIndex          Int
+  minutesFromStart    Int                  @default(0)
+  stopDurationMinutes Int                  @default(0)
+  priceFromStart      Decimal              @default(0) @db.Decimal(10, 2)
+  allowBoarding       Boolean              @default(true)
+  allowDropoff        Boolean              @default(true)
+  boardingPoint       String?
+  tripStops           ScheduledTripStop[]
+  destination         TransportDestination @relation(fields: [destinationId], references: [id])
+  route               TransportRoute       @relation(fields: [routeId], references: [id], onDelete: Cascade)
+}
+
+model TripTemplate {
+  id                String          @id @default(uuid())
+  name              String
+  routeId           String
+  departureTime     String
+  busClass          PricingBusClass @default(STANDARD)
+  recurrenceRule    String
+  startDate         DateTime        @db.Date
+  endDate           DateTime?       @db.Date
+  defaultDriverName String?
+  defaultBusNumber  String?
+  defaultDriverId   String?
+  defaultVehicleId  String?
+  capacity          Int             @default(50)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  trips             ScheduledTrip[]
+  defaultDriver     Driver?         @relation(fields: [defaultDriverId], references: [id])
+  defaultVehicle    Vehicle?        @relation(fields: [defaultVehicleId], references: [id])
+  route             TransportRoute  @relation(fields: [routeId], references: [id])
+}
+
+model TripGroup {
+  id         String          @id @default(uuid())
+  name       String?
+  driverName String?
+  busNumber  String?
+  driverId   String?
+  vehicleId  String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  trips      ScheduledTrip[]
+  driver     Driver?         @relation(fields: [driverId], references: [id])
+  vehicle    Vehicle?        @relation(fields: [vehicleId], references: [id])
+}
+
+model Driver {
+  id        String          @id @default(uuid())
+  name      String
+  phone     String?
+  licenseNo String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  trips     ScheduledTrip[]
+  groups    TripGroup[]
+  templates TripTemplate[]
+}
+
+model Vehicle {
+  id          String          @id @default(uuid())
+  plateNumber String          @unique
+  name        String?
+  capacity    Int
+  busClass    PricingBusClass @default(STANDARD)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  trips       ScheduledTrip[]
+  groups      TripGroup[]
+  templates   TripTemplate[]
+}
+
+model Profession {
+  id                   String            @id @default(uuid())
+  name                 String            @unique
+  slug                 String            @unique
+  description          String?
+  examDuration         Int               @default(60)
+  questionCount        Int               @default(30)
+  passingScore         Int               @default(60)
+  isActive             Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  maxAttempts          Int               @default(3)
+  enabledQuestionTypes String            @default("MCQ")
+  algorithmConfig      Json?
+  aiJobs               AIGenerationJob[]
+  examSessions         ExamSession[]
+  questions            Question[]
+}
+
+model Question {
+  id             String                @id @default(uuid())
+  professionId   String
+  text           String
+  explanation    String?
+  difficulty     QuestionDifficulty    @default(HARD)
+  isActive       Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  axis           String                @default("CORE")
+  cognitiveLevel String?               @default("K2")
+  imageUrl       String?
+  type           QuestionType          @default(MCQ)
+  sessionAnswers ExamSessionQuestion[]
+  profession     Profession            @relation(fields: [professionId], references: [id], onDelete: Cascade)
+  options        QuestionOption[]
+}
+
+model QuestionOption {
+  id             String                @id @default(uuid())
+  questionId     String
+  text           String
+  isCorrect      Boolean               @default(false)
+  sessionAnswers ExamSessionQuestion[]
+  question       Question              @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model ExamSession {
+  id                String                @id @default(uuid())
+  token             String                @unique @default(uuid())
+  type              ExamSessionType
+  status            ExamSessionStatus     @default(NEW)
+  professionId      String
+  applicantId       String?
+  visitorName       String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  score             Decimal?              @db.Decimal(5, 2)
+  passingScore      Int                   @default(60)
+  isPassed          Boolean?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  visitorPhone      String?
+  attemptNumber     Int                   @default(1)
+  deviceFingerprint String?
+  ipAddress         String?
+  isBanned          Boolean               @default(false)
+  purchaseId        String?
+  applicant         Applicant?            @relation(fields: [applicantId], references: [id])
+  profession        Profession            @relation(fields: [professionId], references: [id], onDelete: Cascade)
+  purchase          MockExamPurchase?     @relation(fields: [purchaseId], references: [id])
+  questions         ExamSessionQuestion[]
+
+  @@index([token])
+  @@index([professionId])
+  @@index([deviceFingerprint])
+}
+
+model ExamSessionQuestion {
+  id               String          @id @default(uuid())
+  sessionId        String
+  questionId       String
+  selectedOptionId String?
+  isCorrect        Boolean?
+  question         Question        @relation(fields: [questionId], references: [id])
+  selectedOption   QuestionOption? @relation(fields: [selectedOptionId], references: [id])
+  session          ExamSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+}
+
+model AIGenerationJob {
+  id                 String      @id @default(uuid())
+  professionId       String
+  status             AIJobStatus @default(PENDING)
+  prompt             String?
+  questionsRequested Int
+  questionsGenerated Int         @default(0)
+  errorLog           String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  profession         Profession  @relation(fields: [professionId], references: [id], onDelete: Cascade)
+}
+
+model MockVisitorOtp {
+  phone         String   @id
+  code          String
+  expiresAt     DateTime
+  verified      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  dailyAttempts Int      @default(0)
+  lastAttemptAt DateTime @default(now())
 }
 
 enum PricingPassengerType {
@@ -194,194 +628,19 @@ enum PricingActionType {
 }
 
 enum TripStatus {
-  DRAFT
   SCHEDULED
-  CONFIRMED
   BOARDING
   DEPARTED
   COMPLETED
   CANCELLED
   DELAYED
+  DRAFT
+  CONFIRMED
 }
 
 enum TripGroupRole {
   OUTBOUND
   RETURN
-}
-
-model CancellationPolicy {
-  id           String   @id @default(uuid())
-  name         String
-  category     String
-  hoursTrigger Int?
-  condition    String?
-  feeAmount    Decimal  @db.Decimal(10, 2)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model Applicant {
-  id                String          @id @default(uuid())
-  fullName          String
-  profession        String
-  phone             String
-  whatsappNumber    String
-  examDate          DateTime?
-  examLocation      String?
-  examTime          String?
-  platformEmail     String?         @unique
-  platformPassword  String?
-  examTicketImage   String?
-  certificateImage  String?
-  status            ApplicantStatus @default(NEW_REGISTRATION)
-  notes             String?
-  hasTransportation Boolean         @default(false)
-  travelDate        DateTime?
-  totalAmount       Decimal         @db.Decimal(10, 2)
-  amountPaid        Decimal         @default(0) @db.Decimal(10, 2)
-  remainingBalance  Decimal         @db.Decimal(10, 2)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  discount          Decimal         @default(0) @db.Decimal(10, 2)
-  applicantType     String?         @default("RESIDENT")
-  dob               DateTime?
-  firstName         String?
-  gender            String?
-  lastName          String?
-  nationalId        String?
-  passportExpiry    DateTime?
-  passportNumber    String?
-  applicantCode     String?         @unique
-  locationId        String?
-  examCenterId      String?
-  transportFromId   String?
-  transportFrom     Location?       @relation("TransportFrom", fields: [transportFromId], references: [id])
-  location          Location?       @relation(fields: [locationId], references: [id])
-  examCenter        ExamCenter?     @relation(fields: [examCenterId], references: [id])
-  transportType     String?
-  activityLogs      ActivityLog[]
-  documents         Document[]
-  ticket            Ticket?
-  transactions      Transaction[]
-  messageLogs       MessageLog[]
-  vouchers          Voucher[]
-  examSessions      ExamSession[]
-}
-
-model ExamCenter {
-  id          String      @id @default(uuid())
-  name        String
-  address     String?
-  locationUrl String?
-  isActive    Boolean     @default(true)
-  locationId  String
-  location    Location    @relation(fields: [locationId], references: [id])
-  applicants  Applicant[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-}
-
-// Message Logging for Smart Messaging System
-model MessageLog {
-  id          String    @id @default(uuid())
-  applicantId String
-  templateId  String?
-  trigger     String // ON_ACCOUNT_CREATED, ON_EXAM_SCHEDULED, etc.
-  channel     String    @default("WHATSAPP") // WHATSAPP, SMS, EMAIL
-  message     String    @db.Text
-  attachments String? // JSON array of attachment URLs
-  status      String    @default("SENT") // PENDING, SENT, FAILED
-  sentAt      DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-}
-
-model PricingPackage {
-  id         String        @id @default(uuid())
-  name       String        @unique
-  location   ExamLocation?
-  price      Decimal       @db.Decimal(10, 2)
-  actualCost Decimal       @db.Decimal(10, 2)
-  active     Boolean       @default(true)
-}
-
-model Transaction {
-  id              String          @id @default(uuid())
-  applicantId     String?
-  amount          Decimal         @db.Decimal(10, 2)
-  type            TransactionType
-  date            DateTime        @default(now())
-  notes           String?
-  category        String?
-  description     String?
-  isPending       Boolean         @default(false)
-  relatedLocation ExamLocation?
-  locationId      String?
-  applicant       Applicant?      @relation(fields: [applicantId], references: [id])
-  location        Location?       @relation(fields: [locationId], references: [id])
-}
-
-model ActivityLog {
-  id          String     @id @default(uuid())
-  action      String
-  details     String?
-  userId      String?
-  applicantId String?
-  timestamp   DateTime   @default(now())
-  applicant   Applicant? @relation(fields: [applicantId], references: [id])
-  user        User?      @relation(fields: [userId], references: [id])
-}
-
-model MessagingTemplate {
-  id        String   @id @default(uuid())
-  name      String
-  type      String // WHATSAPP, EMAIL, SMS
-  trigger   String?  @unique // e.g., ON_REGISTRATION, ON_PASS, ON_FAIL
-  subject   String?
-  body      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Document {
-  id          String       @id @default(uuid())
-  applicantId String
-  type        DocumentType
-  fileName    String
-  fileUrl     String
-  uploadedAt  DateTime     @default(now())
-  applicant   Applicant    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-}
-
-model Ticket {
-  id                String   @id @default(uuid())
-  applicantId       String   @unique
-  ticketNumber      String   @unique
-  busNumber         String?
-  seatNumber        String?
-  departureDate     DateTime
-  departureLocation String
-  arrivalLocation   String
-  transportCompany  String
-  status            String   @default("ISSUED")
-
-  tripId String?
-  trip   ScheduledTrip? @relation(fields: [tripId], references: [id])
-
-  // Return Trip Details
-  returnTripId     String?
-  returnTrip       ScheduledTrip? @relation("ReturnTrip", fields: [returnTripId], references: [id])
-  returnBusNumber  String?
-  returnSeatNumber String?
-
-  agentName     String?
-  boardingPoint String?
-  companions    Json?
-
-  createdAt DateTime  @default(now())
-  applicant Applicant @relation(fields: [applicantId], references: [id])
 }
 
 enum ExamLocation {
@@ -425,185 +684,12 @@ enum DocumentType {
   OTHER
 }
 
-model Voucher {
-  id              String      @id @default(uuid())
-  applicantId     String
-  type            VoucherType
-  notes           String?
-  discountPercent Float       @default(100)
-  locationId      String?
-  location        Location?   @relation(fields: [locationId], references: [id])
-  isUsed          Boolean     @default(false)
-  usedAt          DateTime?
-  createdAt       DateTime    @default(now())
-  expiresAt       DateTime?
-  applicant       Applicant   @relation(fields: [applicantId], references: [id])
-}
-
 enum VoucherType {
   EXAM
-  EXAM_RETAKE
   TRANSPORT_ONEWAY
   TRANSPORT_ROUNDTRIP
   FULL_PROGRAM
-}
-
-model TransportRouteDefault {
-  id                String   @id @default(uuid())
-  fromDestinationId String
-  toDestinationId   String
-  price             Decimal  @db.Decimal(10, 2)
-  priceRoundTrip    Decimal? @db.Decimal(10, 2)
-  cost              Decimal? @default(0) @db.Decimal(10, 2)
-  costRoundTrip     Decimal? @default(0) @db.Decimal(10, 2)
-
-  fromDestination TransportDestination @relation("RouteDefaultFrom", fields: [fromDestinationId], references: [id])
-  toDestination   TransportDestination @relation("RouteDefaultTo", fields: [toDestinationId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([fromDestinationId, toDestinationId])
-}
-
-// === NEW TRANSPORT ARCHITECTURE ===
-
-model TransportRoute {
-  id       String  @id @default(uuid())
-  name     String  @unique
-  code     String?
-  isActive Boolean @default(true)
-
-  returnRouteId   String?         @unique
-  returnRoute     TransportRoute? @relation("RouteReturn", fields: [returnRouteId], references: [id])
-  inverseOfReturn TransportRoute? @relation("RouteReturn")
-
-  stops     TransportRouteStop[]
-  templates TripTemplate[]
-  trips     ScheduledTrip[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model TransportRouteStop {
-  id            String @id @default(uuid())
-  routeId       String
-  destinationId String
-  orderIndex    Int
-
-  minutesFromStart    Int     @default(0)
-  stopDurationMinutes Int     @default(0)
-  priceFromStart      Decimal @default(0) @db.Decimal(10, 2)
-  allowBoarding       Boolean @default(true)
-  allowDropoff        Boolean @default(true)
-  boardingPoint       String?
-
-  route       TransportRoute       @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  destination TransportDestination @relation(fields: [destinationId], references: [id])
-  tripStops   ScheduledTripStop[]
-}
-
-model TripTemplate {
-  id      String @id @default(uuid())
-  name    String
-  routeId String
-
-  departureTime String
-  busClass      PricingBusClass @default(STANDARD)
-
-  recurrenceRule String
-  startDate      DateTime  @db.Date
-  endDate        DateTime? @db.Date
-
-  defaultDriverName String?
-  defaultBusNumber  String?
-
-  defaultDriverId String?
-  defaultDriver   Driver? @relation(fields: [defaultDriverId], references: [id])
-
-  defaultVehicleId String?
-  defaultVehicle   Vehicle? @relation(fields: [defaultVehicleId], references: [id])
-
-  capacity Int @default(50)
-
-  route TransportRoute  @relation(fields: [routeId], references: [id])
-  trips ScheduledTrip[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model TripGroup {
-  id         String  @id @default(uuid())
-  name       String?
-  driverName String?
-  busNumber  String?
-
-  driverId String?
-  driver   Driver? @relation(fields: [driverId], references: [id])
-
-  vehicleId String?
-  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
-
-  trips ScheduledTrip[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Driver {
-  id        String  @id @default(uuid())
-  name      String
-  phone     String?
-  licenseNo String?
-  isActive  Boolean @default(true)
-
-  trips     ScheduledTrip[]
-  templates TripTemplate[]
-  groups    TripGroup[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Vehicle {
-  id          String          @id @default(uuid())
-  plateNumber String          @unique
-  name        String?
-  capacity    Int
-  busClass    PricingBusClass @default(STANDARD)
-  isActive    Boolean         @default(true)
-
-  trips     ScheduledTrip[]
-  templates TripTemplate[]
-  groups    TripGroup[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// -------------------------------------------------------------
-// MOCK EXAM SYSTEM
-// -------------------------------------------------------------
-
-model Profession {
-  id            String   @id @default(uuid())
-  name          String   @unique
-  slug          String   @unique // e.g. "plumber", "driver"
-  description   String?  @db.Text
-  examDuration  Int      @default(60) // in minutes
-  questionCount Int      @default(30) // Number of questions per exam
-  passingScore  Int      @default(60) // Percentage 0-100
-  maxAttempts   Int      @default(3) // Max exam attempts per visitor/applicant
-  isActive      Boolean  @default(true)
-  enabledQuestionTypes String @default("MCQ") // Comma-separated: "MCQ", "MCQ,TRUE_FALSE", "MCQ,TRUE_FALSE,FILL_BLANK,IMAGE"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  questions    Question[]
-  examSessions ExamSession[]
-  aiJobs       AIGenerationJob[]
+  EXAM_RETAKE
 }
 
 enum QuestionAxis {
@@ -618,43 +704,14 @@ enum QuestionAxis {
 }
 
 enum QuestionDifficulty {
-  HARD       // صعب — سيناريو مهني يتطلب خبرة 3+ سنوات
-  EXPERT     // صعب جداً 120% — لا يجيب عليه إلا خبير متمرس 7+ سنوات
+  HARD
+  EXPERT
 }
 
 enum QuestionType {
-  MCQ        // اختيار من متعدد (4 خيارات)
-  TRUE_FALSE // صح أو خطأ (خياران)
-  FILL_BLANK // إكمال الفراغات (4 خيارات)
-}
-
-model Question {
-  id           String             @id @default(uuid())
-  professionId String
-  type         QuestionType       @default(MCQ)
-  axis         QuestionAxis       @default(PROFESSION_KNOWLEDGE)
-  text         String             @db.Text
-  imageUrl     String?            // رابط الصورة (Cloudinary) - اختياري
-  explanation  String?            @db.Text
-  difficulty     QuestionDifficulty @default(HARD)
-  cognitiveLevel String?            @default("K2") // K1=تذكر واسترجاع, K2=تطبيق وتحليل سيناريو
-  isActive       Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-
-  profession     Profession            @relation(fields: [professionId], references: [id], onDelete: Cascade)
-  options        QuestionOption[]
-  sessionAnswers ExamSessionQuestion[]
-}
-
-model QuestionOption {
-  id         String  @id @default(uuid())
-  questionId String
-  text       String  @db.Text
-  isCorrect  Boolean @default(false)
-
-  question       Question              @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  sessionAnswers ExamSessionQuestion[]
+  MCQ
+  TRUE_FALSE
+  FILL_BLANK
 }
 
 enum ExamSessionType {
@@ -665,59 +722,10 @@ enum ExamSessionType {
 enum ExamSessionStatus {
   NEW
   STARTED
-  RESUMED
   SUBMITTED
   EXPIRED
+  RESUMED
   TIMEOUT
-}
-
-model ExamSession {
-  id     String            @id @default(uuid())
-  token  String            @unique @default(uuid()) // The URL hash/token
-  type   ExamSessionType
-  status ExamSessionStatus @default(NEW)
-
-  // Relations
-  professionId String
-  profession   Profession @relation(fields: [professionId], references: [id], onDelete: Cascade)
-
-  // Submitter details
-  applicantId  String? // For PRIVATE exams tied to an existing applicant
-  applicant    Applicant? @relation(fields: [applicantId], references: [id], onDelete: SetNull)
-  visitorName  String? // For PUBLIC anonymous exams
-  visitorPhone String? // For capturing WhatsApp number in PUBLIC exams
-  deviceFingerprint String? // Fingerprint of the visitor's device to prevent retakes
-
-  // Metrics
-  startedAt     DateTime?
-  completedAt   DateTime?
-  score         Decimal?  @db.Decimal(5, 2) // Percentage score
-  passingScore  Int       @default(60)
-  isPassed      Boolean?
-  attemptNumber Int       @default(1) // Which attempt this is (1, 2, 3...)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  questions ExamSessionQuestion[]
-
-  @@index([token])
-  @@index([professionId])
-  @@index([deviceFingerprint])
-}
-
-model ExamSessionQuestion {
-  id               String   @id @default(uuid())
-  sessionId        String
-  questionId       String
-  selectedOptionId String?
-  isCorrect        Boolean?
-
-  session        ExamSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question       Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  selectedOption QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
-
-  @@unique([sessionId, questionId])
 }
 
 enum AIJobStatus {
@@ -725,28 +733,4 @@ enum AIJobStatus {
   PROCESSING
   COMPLETED
   FAILED
-}
-
-model AIGenerationJob {
-  id                 String      @id @default(uuid())
-  professionId       String
-  status             AIJobStatus @default(PENDING)
-  prompt             String?     @db.Text
-  questionsRequested Int
-  questionsGenerated Int         @default(0)
-  errorLog           String?     @db.Text
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-
-  profession Profession @relation(fields: [professionId], references: [id], onDelete: Cascade)
-}
-
-model MockVisitorOtp {
-  phone         String   @id
-  code          String
-  expiresAt     DateTime
-  verified      Boolean  @default(false)
-  dailyAttempts Int      @default(0)
-  lastAttemptAt DateTime @default(now())
-  createdAt     DateTime @default(now())
 }

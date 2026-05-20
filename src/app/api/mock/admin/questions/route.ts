@@ -19,16 +19,35 @@ export async function GET(request: Request) {
         if (professionId) where.professionId = professionId;
         if (isActive !== null) where.isActive = isActive === "true";
 
-        const questions = await prisma.question.findMany({
-            where,
-            include: {
-                options: true,
-                profession: { select: { name: true, slug: true } }
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const page = parseInt(url.searchParams.get("page") || "1");
+        const limit = parseInt(url.searchParams.get("limit") || "50");
+        const skip = (page - 1) * limit;
+        
+        // if limit === -1, fetch all (useful for duplicate scanner if it needed it, but it doesn't currently)
+        const fetchAll = limit === -1;
 
-        return NextResponse.json(questions);
+        const [questions, total] = await Promise.all([
+            prisma.question.findMany({
+                where,
+                include: {
+                    options: true,
+                    profession: { select: { name: true, slug: true } }
+                },
+                orderBy: { createdAt: 'desc' },
+                ...(fetchAll ? {} : { skip, take: limit })
+            }),
+            prisma.question.count({ where })
+        ]);
+
+        return NextResponse.json({
+            data: questions,
+            pagination: {
+                total,
+                page: fetchAll ? 1 : page,
+                limit: fetchAll ? total : limit,
+                totalPages: fetchAll ? 1 : Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         console.error("GET Questions Error:", error);
         return NextResponse.json({ error: "Failed to fetch questions" }, { status: 500 });

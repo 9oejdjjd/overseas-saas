@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
-import { QuestionAxis, QuestionDifficulty } from "@prisma/client";
+import { QuestionDifficulty } from "@prisma/client";
 
 interface OptionInput {
     text: string;

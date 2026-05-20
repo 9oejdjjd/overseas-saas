@@ -768,9 +768,9 @@ export default function ExamSessionPage() {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <h2 className="text-base md:text-2xl lg:text-3xl font-black text-slate-800 leading-[1.7] md:leading-[1.6]">
-                                                    {currentQuestion?.question.text}
+                                                    {currentQuestion?.question?.text || "جاري تحميل السؤال..."}
                                                 </h2>
-                                                {currentQuestion?.question.imageUrl && (
+                                                {currentQuestion?.question?.imageUrl && (
                                                     <div className="mt-3 md:mt-4 rounded-xl md:rounded-2xl overflow-hidden border border-slate-100 shadow-sm bg-slate-50 w-full">
                                                         <img 
                                                             src={currentQuestion.question.imageUrl} 
@@ -784,9 +784,9 @@ export default function ExamSessionPage() {
                                     </div>
 
                                     {/* Options Grid */}
-                                    {currentQuestion?.question.type === "TRUE_FALSE" ? (
+                                    {currentQuestion?.question?.type === "TRUE_FALSE" ? (
                                         <div className="grid grid-cols-2 gap-3 md:gap-6 w-full max-w-4xl mx-auto">
-                                            {currentQuestion?.question.options.map((opt: any) => {
+                                            {currentQuestion?.question?.options?.map((opt: any) => {
                                                 const isSelected = currentAnswer === opt.id;
                                                 const isTrueOption = opt.text.includes("صح");
                                                 
@@ -822,7 +822,7 @@ export default function ExamSessionPage() {
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-5 w-full">
-                                        {currentQuestion?.question.options.map((opt: any, index: number) => {
+                                        {currentQuestion?.question?.options?.map((opt: any, index: number) => {
                                             const isSelected = currentAnswer === opt.id;
                                             const letters = ["أ", "ب", "ج", "د", "هـ"];
                                             

@@ -6,15 +6,28 @@ import { hasPermission } from "@/lib/rbac";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
         const { id } = await params;
         const body = await request.json();
-        const { text, explanation, difficulty, isActive, options } = body;
+        const { text, explanation, difficulty, isActive, options, axis, cognitiveLevel, imageUrl } = body;
 
         // Perform transactional update for question and options
         const question = await prisma.$transaction(async (tx) => {
             const updatedQuestion = await tx.question.update({
                 where: { id },
-                data: { text, explanation, difficulty, isActive }
+                data: { 
+                    text, 
+                    explanation, 
+                    difficulty, 
+                    isActive,
+                    axis,
+                    cognitiveLevel,
+                    imageUrl
+                }
             });
 
             if (options && Array.isArray(options) && options.length > 0) {
@@ -41,6 +54,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
         const { id } = await params;
 
         await prisma.question.delete({

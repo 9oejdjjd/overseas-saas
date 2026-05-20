@@ -32,6 +32,19 @@ export type Applicant = {
     transportFromId?: string | null;
     locationId?: string | null;
     applicantCode?: string | null; // PNR Field
+
+    // Mock Exam Package Integration
+    isVisitor?: boolean;
+    visitorPurchaseId?: string | null;
+    mockPurchase?: {
+        id: string;
+        packageId?: string | null;
+        packageName?: string | null;
+        totalCredits: number;
+        usedCredits: number;
+        status: string;
+        expiresAt?: string | null;
+    } | null;
 };
 
 export type Transaction = {

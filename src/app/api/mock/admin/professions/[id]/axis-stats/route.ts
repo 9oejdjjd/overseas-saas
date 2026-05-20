@@ -25,27 +25,22 @@ export async function GET(
             return NextResponse.json({ error: "Profession not found" }, { status: 404 });
         }
 
-        const { searchParams } = new URL(request.url);
-        const questionType = searchParams.get("type");
-
-        const whereClause: any = { professionId };
-        if (questionType) {
-            whereClause.type = questionType;
-        }
-
-        // Aggregate questions count by axis
+        // Aggregate questions count by axis and type
         const axisGroup = await prisma.question.groupBy({
-            by: ['axis'],
-            where: whereClause,
+            by: ['axis', 'type'],
+            where: { professionId },
             _count: {
-                axis: true
+                _all: true
             }
         });
 
-        // Format into a friendly dictionary: { "HEALTH_SAFETY": 12, ... }
-        const stats: Record<string, number> = {};
+        // Format into a friendly dictionary: { "HEALTH_SAFETY": { "MCQ": 10, "TRUE_FALSE": 5, ... }, ... }
+        const stats: Record<string, Record<string, number>> = {};
         axisGroup.forEach(group => {
-            stats[group.axis] = group._count.axis;
+            if (!stats[group.axis]) {
+                stats[group.axis] = { MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 };
+            }
+            stats[group.axis][group.type] = group._count._all;
         });
 
         return NextResponse.json({ success: true, stats });

@@ -90,12 +90,27 @@ export function ApplicantsTableToolbar<TData>({
                     </SelectContent>
                 </Select>
 
+                {/* View Type Filter */}
+                <Select
+                    value={filters.viewType || 'ALL'}
+                    onValueChange={(val) => setFilters({ ...filters, viewType: val })}
+                >
+                    <SelectTrigger className="h-9 w-[120px] border-dashed">
+                        <SelectValue placeholder="النوع" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="ALL">الكل</SelectItem>
+                        <SelectItem value="APPLICANTS">متقدمين</SelectItem>
+                        <SelectItem value="VISITORS">زوار</SelectItem>
+                    </SelectContent>
+                </Select>
+
                 {isFiltered && (
                     <Button
                         variant="ghost"
                         onClick={() => {
                             setSearchTerm("");
-                            setFilters({ status: 'ALL', locationId: 'ALL' });
+                            setFilters({ status: 'ALL', locationId: 'ALL', viewType: 'ALL' });
                         }}
                         className="h-8 px-2 lg:px-3 text-red-500"
                     >

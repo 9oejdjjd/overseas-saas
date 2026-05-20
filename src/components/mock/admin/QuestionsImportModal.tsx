@@ -16,16 +16,7 @@ interface Props {
     onSuccess: () => void;
 }
 
-const AXIS_OPTIONS = [
-    { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل" },
-    { value: "PROFESSION_KNOWLEDGE", label: "المعرفة المهنية التخصصية" },
-    { value: "GENERAL_SKILLS", label: "المهارات العامة وجودة التنفيذ" },
-    { value: "OCCUPATIONAL_SAFETY", label: "السلامة المهنية والمخاطر المباشرة" },
-    { value: "CORRECT_METHODS", label: "الأساليب الصحيحة والقياسية للمهنة" },
-    { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك الوظيفي والانضباط المهني" },
-    { value: "TOOLS_AND_EQUIPMENT", label: "استخدام الأدوات والمعدات وتشخيصها" },
-    { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والإسعافات الأولية" }
-];
+// Removed hardcoded AXIS_OPTIONS, will be computed dynamically
 
 export function QuestionsImportModal({ professions, questions, onSuccess }: Props) {
     const [isOpen, setIsOpen] = useState(false);
@@ -55,18 +46,18 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     // Prompt Engineering UI
     const [promptCopied, setPromptCopied] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
-    const [axisStats, setAxisStats] = useState<Record<string, number>>({});
+    const [axisStats, setAxisStats] = useState<Record<string, Record<string, number>>>({});
 
-    // Fetch stats when profession or question type changes
+    // Fetch stats when profession changes
     useEffect(() => {
         if (!professionId) return;
-        fetch(`/api/mock/admin/professions/${professionId}/axis-stats?type=${questionType}`)
+        fetch(`/api/mock/admin/professions/${professionId}/axis-stats`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) setAxisStats(data.stats || {});
             })
             .catch(e => console.error(e));
-    }, [professionId, questionType, report]);
+    }, [professionId, report]);
 
     // Handle File Upload
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,10 +70,31 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
         reader.readAsText(file);
     };
 
+    const selectedProfessionData = professions.find(p => p.id === professionId);
+
+    const dynamicAxes = useMemo(() => {
+        if (!selectedProfessionData) return [];
+        const config = selectedProfessionData.algorithmConfig as any;
+        if (config && config.axes && config.axes.length > 0) {
+            return config.axes.map((a: any) => ({ value: a.name, label: a.name }));
+        }
+        // Fallback to old hardcoded axes if config doesn't exist
+        return [
+            { value: "HEALTH_SAFETY", label: "الصحة والسلامة في بيئة العمل" },
+            { value: "PROFESSION_KNOWLEDGE", label: "المعرفة المهنية التخصصية" },
+            { value: "GENERAL_SKILLS", label: "المهارات العامة وجودة التنفيذ" },
+            { value: "OCCUPATIONAL_SAFETY", label: "السلامة المهنية والمخاطر المباشرة" },
+            { value: "CORRECT_METHODS", label: "الأساليب الصحيحة والقياسية للمهنة" },
+            { value: "PROFESSIONAL_BEHAVIOR", label: "السلوك الوظيفي والانضباط المهني" },
+            { value: "TOOLS_AND_EQUIPMENT", label: "استخدام الأدوات والمعدات وتشخيصها" },
+            { value: "EMERGENCIES_FIRST_AID", label: "الطوارئ والإسعافات الأولية" }
+        ];
+    }, [selectedProfessionData]);
+
     // Prompt Builder Logic
     const buildPrompt = () => {
-        const axisLabel = AXIS_OPTIONS.find(a => a.value === axis)?.label || "[اسم المحور]";
-        const profName = professions.find(p => p.id === professionId)?.name || "[اسم المهنة]";
+        const axisLabel = dynamicAxes.find((a: any) => a.value === axis)?.label || axis || "[اسم المحور]";
+        const profName = selectedProfessionData?.name || "[اسم المهنة]";
 
         let optionsTemplate = "";
         let typeInstruction = "";
@@ -208,7 +220,7 @@ ${typeInstruction}
                 onSuccess(); // refresh parent
                 
                 // Refresh local stats
-                fetch(`/api/mock/admin/professions/${professionId}/axis-stats?type=${questionType}`)
+                fetch(`/api/mock/admin/professions/${professionId}/axis-stats`)
                     .then(r => r.json())
                     .then(d => d.success && setAxisStats(d.stats || {}))
                     .catch(() => {});
@@ -402,12 +414,18 @@ ${typeInstruction}
                                                         <SelectValue placeholder="اختر المحور" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {AXIS_OPTIONS.map((opt) => (
+                                                        {dynamicAxes.map((opt: any) => (
                                                             <SelectItem key={opt.value} value={opt.value}>
-                                                                {opt.label}
-                                                                {professionId && axisStats[opt.value] !== undefined && (
-                                                                    <span className="text-xs text-gray-400 ml-2">(متوفر: {axisStats[opt.value] || 0})</span>
-                                                                )}
+                                                                <div className="flex flex-col gap-1 py-1">
+                                                                    <span>{opt.label}</span>
+                                                                    {professionId && axisStats[opt.value] && (
+                                                                        <div className="flex gap-2 text-[10px] text-gray-500 font-medium" dir="rtl">
+                                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">متعدد: {axisStats[opt.value].MCQ || 0}</span>
+                                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">صح/خطأ: {axisStats[opt.value].TRUE_FALSE || 0}</span>
+                                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">فراغات: {axisStats[opt.value].FILL_BLANK || 0}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>

@@ -15,6 +15,8 @@ export async function GET() {
         const totalSessions = await prisma.examSession.count({ where: { status: "SUBMITTED" } });
         const passedSessions = await prisma.examSession.count({ where: { status: "SUBMITTED", isPassed: true } });
         const failedSessions = await prisma.examSession.count({ where: { status: "SUBMITTED", isPassed: false } });
+        const activeSessions = await prisma.examSession.count({ where: { status: { in: ["NEW", "STARTED", "RESUMED"] } } });
+        const bannedCount = await prisma.examSession.count({ where: { isBanned: true } });
 
         // Average score across all submitted sessions
         const avgScoreResult = await prisma.examSession.aggregate({
@@ -55,12 +57,8 @@ export async function GET() {
             };
         }).sort((a, b) => b.total - a.total);
 
-        // Axis-based performance
-        const axisStats: Record<string, { total: number; correct: number }> = {
-            "HEALTH_SAFETY": { total: 0, correct: 0 },
-            "PROFESSION_KNOWLEDGE": { total: 0, correct: 0 },
-            "GENERAL_SKILLS": { total: 0, correct: 0 },
-        };
+        // Dynamic axis-based performance (supports ALL axes automatically)
+        const axisStats: Record<string, { total: number; correct: number }> = {};
 
         const sessionQuestions = await prisma.examSessionQuestion.findMany({
             where: { session: { status: "SUBMITTED" } },
@@ -70,15 +68,17 @@ export async function GET() {
         });
 
         const questionStats: Record<string, { text: string; profession: string; total: number; correct: number }> = {};
+        
         for (const sq of sessionQuestions) {
             if (!sq.questionId || !sq.question) continue;
 
-            // Axis tracking
+            // Dynamic axis tracking — creates entries for any axis encountered
             const axis = sq.question.axis;
-            if (axisStats[axis]) {
-                axisStats[axis].total++;
-                if (sq.isCorrect) axisStats[axis].correct++;
+            if (!axisStats[axis]) {
+                axisStats[axis] = { total: 0, correct: 0 };
             }
+            axisStats[axis].total++;
+            if (sq.isCorrect) axisStats[axis].correct++;
 
             // Individual question tracking
             if (!questionStats[sq.questionId]) {
@@ -93,23 +93,10 @@ export async function GET() {
             if (sq.isCorrect) questionStats[sq.questionId].correct++;
         }
 
-        const axisBreakdown = {
-            HEALTH_SAFETY: axisStats.HEALTH_SAFETY.total > 0 ? Math.round((axisStats.HEALTH_SAFETY.correct / axisStats.HEALTH_SAFETY.total) * 100) : 0,
-            PROFESSION_KNOWLEDGE: axisStats.PROFESSION_KNOWLEDGE.total > 0 ? Math.round((axisStats.PROFESSION_KNOWLEDGE.correct / axisStats.PROFESSION_KNOWLEDGE.total) * 100) : 0,
-            GENERAL_SKILLS: axisStats.GENERAL_SKILLS.total > 0 ? Math.round((axisStats.GENERAL_SKILLS.correct / axisStats.GENERAL_SKILLS.total) * 100) : 0,
-        };
-        for (const sq of sessionQuestions) {
-            if (!sq.questionId) continue;
-            if (!questionStats[sq.questionId]) {
-                questionStats[sq.questionId] = {
-                    text: sq.question.text,
-                    profession: sq.question.profession.name,
-                    total: 0,
-                    correct: 0
-                };
-            }
-            questionStats[sq.questionId].total++;
-            if (sq.isCorrect) questionStats[sq.questionId].correct++;
+        // Build axis breakdown with percentages
+        const axisBreakdown: Record<string, number> = {};
+        for (const [axis, stats] of Object.entries(axisStats)) {
+            axisBreakdown[axis] = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
         }
 
         const hardestQuestions = Object.entries(questionStats)
@@ -125,14 +112,21 @@ export async function GET() {
             .sort((a, b) => a.correctRate - b.correctRate)
             .slice(0, 10);
 
+        // Pass rate
+        const passRate = totalSessions > 0 ? Math.round((passedSessions / totalSessions) * 100) : 0;
+
         return NextResponse.json({
             overview: {
                 totalSessions,
                 passedSessions,
                 failedSessions,
-                avgScore: Math.round(Number(avgScoreResult._avg.score) || 0)
+                activeSessions,
+                bannedCount,
+                avgScore: Math.round(Number(avgScoreResult._avg.score) || 0),
+                passRate
             },
             professionStats,
+            axisBreakdown,
             hardestQuestions
         });
 
@@ -141,3 +135,4 @@ export async function GET() {
         return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
     }
 }
+

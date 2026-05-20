@@ -101,17 +101,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 if (isFakePhone(body.phone)) {
                     return NextResponse.json({ error: "رقم الهاتف غير صحيح أو وهمي." }, { status: 400 });
                 }
-                
-                try {
-                    const { onWhatsApp } = await import("@/lib/evolution");
-                    const exists = await onWhatsApp(body.phone);
-                    if (!exists) {
-                        return NextResponse.json({ error: "هذا الرقم غير مسجل في واتساب. يرجى استخدام رقم فعال لاستلام النتيجة." }, { status: 400 });
-                    }
-                } catch (waError) {
-                    console.warn("[WhatsApp Check] Evolution API unreachable, skipping check:", waError);
-                    // Don't block the exam if WhatsApp check fails
-                }
             }
         }
         // ---------------------------
@@ -159,15 +148,56 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 select: { id: true, type: true, axis: true, imageUrl: true, cognitiveLevel: true, difficulty: true, createdAt: true }
             });
 
-            const totalRequired = 30; // Hardcoded to 30 as requested
+            const totalRequired = session.profession.questionCount || 30;
+            const algorithmConfig = (session.profession as any).algorithmConfig;
 
-            // Read enabled question types from the profession itself
+            let typeQuota: Record<string, number> = { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
+            let axisQuota: Record<string, number> = {};
+            let isCustomAlgorithm = false;
+            
             const enabledTypes = ((session.profession as any).enabledQuestionTypes || "MCQ").split(",");
             const enableNewQuestions = enabledTypes.length > 1;
 
+            if (algorithmConfig && algorithmConfig.typeQuota && algorithmConfig.axes) {
+                isCustomAlgorithm = true;
+                typeQuota = { ...algorithmConfig.typeQuota };
+                for (const a of algorithmConfig.axes) {
+                    axisQuota[a.name] = a.quota;
+                }
+            } else {
+                // Fallback to original hardcoded logic
+                if (enableNewQuestions) {
+                    const allowImg = enabledTypes.includes("IMAGE");
+                    const allowTf = enabledTypes.includes("TRUE_FALSE");
+                    const allowFb = enabledTypes.includes("FILL_BLANK");
+                    
+                    typeQuota.IMAGE = allowImg ? 3 : 0;
+                    typeQuota.TRUE_FALSE = allowTf ? 5 : 0;
+                    typeQuota.FILL_BLANK = allowFb ? 5 : 0;
+                    typeQuota.MCQ = totalRequired - typeQuota.IMAGE - typeQuota.TRUE_FALSE - typeQuota.FILL_BLANK;
+                }
+                axisQuota = {
+                    HEALTH_SAFETY: 2,
+                    OCCUPATIONAL_SAFETY: 2,
+                    EMERGENCIES_FIRST_AID: 1,
+                    CORE: 25
+                };
+            }
+
+            const CORE_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
+            
+            const OLD_ENUM_MAP: Record<string, string> = {
+                "HEALTH_SAFETY": "الصحة والسلامة",
+                "PROFESSION_KNOWLEDGE": "المعرفة المهنية",
+                "GENERAL_SKILLS": "المهارات العامة",
+                "OCCUPATIONAL_SAFETY": "السلامة المهنية",
+                "CORRECT_METHODS": "الأساليب القياسية",
+                "PROFESSIONAL_BEHAVIOR": "السلوك الوظيفي",
+                "TOOLS_AND_EQUIPMENT": "استخدام الأدوات",
+                "EMERGENCIES_FIRST_AID": "الطوارئ والإسعافات"
+            };
+
             const shuffleArray = (array: any[]) => {
-                // Weighted shuffle: prioritize newer questions but add up to ~30 days of random noise 
-                // so it's not strictly deterministic.
                 const randomNoiseMax = 1000 * 60 * 60 * 24 * 30; // 30 days in ms
                 return [...array]
                     .map(item => {
@@ -175,143 +205,140 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                         const randomizedWeight = timeWeight + (Math.random() * randomNoiseMax);
                         return { item, weight: randomizedWeight };
                     })
-                    .sort((a, b) => b.weight - a.weight) // Descending (higher weight = newer/luckier)
+                    .sort((a, b) => b.weight - a.weight) 
                     .map(a => a.item);
             };
 
-            // 3. Setup Dynamic Quotas
-            let typeQuota: Record<string, number> = { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
-            if (enableNewQuestions) {
-                const allowImg = enabledTypes.includes("IMAGE");
-                const allowTf = enabledTypes.includes("TRUE_FALSE");
-                const allowFb = enabledTypes.includes("FILL_BLANK");
-                
-                typeQuota.IMAGE = allowImg ? 3 : 0;
-                typeQuota.TRUE_FALSE = allowTf ? 5 : 0;
-                typeQuota.FILL_BLANK = allowFb ? 5 : 0;
-                typeQuota.MCQ = totalRequired - typeQuota.IMAGE - typeQuota.TRUE_FALSE - typeQuota.FILL_BLANK;
-            }
-
-            // Define Axis Quotas
-            const axisQuota: Record<string, number> = {
-                HEALTH_SAFETY: 2,
-                OCCUPATIONAL_SAFETY: 2,
-                EMERGENCIES_FIRST_AID: 1,
-                CORE: 25
-            };
-            
-            const CORE_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
-
             // Helper to determine the effective bucket of a question
             const getEffectiveType = (q: any) => {
-                if (q.imageUrl && enableNewQuestions && enabledTypes.includes("IMAGE")) return "IMAGE";
-                return q.type;
+                if (isCustomAlgorithm) {
+                     if (q.imageUrl && (typeQuota["IMAGE"] || 0) > 0 && q.type === "MCQ") return "IMAGE";
+                     return q.type;
+                } else {
+                     if (q.imageUrl && enableNewQuestions && enabledTypes.includes("IMAGE")) return "IMAGE";
+                     return q.type;
+                }
             };
 
             const getEffectiveAxis = (q: any) => {
-                if (CORE_AXES.includes(q.axis)) return "CORE";
-                if (["HEALTH_SAFETY", "OCCUPATIONAL_SAFETY", "EMERGENCIES_FIRST_AID"].includes(q.axis)) return q.axis;
-                return "CORE"; // fallback any unrecognized to CORE
+                if (isCustomAlgorithm) {
+                    let qAxisName = q.axis;
+                    if (OLD_ENUM_MAP[q.axis]) {
+                        const mapped = OLD_ENUM_MAP[q.axis];
+                        const matchedCustom = Object.keys(axisQuota).find(c => c.includes(mapped) || mapped.includes(c));
+                        if (matchedCustom) return matchedCustom;
+                    }
+                    const directMatch = Object.keys(axisQuota).find(c => c.trim() === qAxisName.trim());
+                    if (directMatch) return directMatch;
+                    
+                    return qAxisName;
+                } else {
+                    if (CORE_AXES.includes(q.axis)) return "CORE";
+                    if (["HEALTH_SAFETY", "OCCUPATIONAL_SAFETY", "EMERGENCIES_FIRST_AID"].includes(q.axis)) return q.axis;
+                    return "CORE"; 
+                }
             };
 
             const getEffectiveCognitive = (q: any) => {
                 return (q.cognitiveLevel === "K3" || q.difficulty === "EXPERT") ? "K3" : "K2";
             };
 
-            // 4. Separate and Filter Valid Questions
+            // 4. Filter Valid Questions (Remove completely disabled types)
             let validQuestions = questionBankMeta.filter(q => {
                 const eType = getEffectiveType(q);
-                if (eType !== "MCQ" && eType !== "IMAGE" && !enabledTypes.includes(eType)) return false;
-                if (eType === "IMAGE" && !enabledTypes.includes("IMAGE")) return false;
-                return true;
+                if (isCustomAlgorithm) {
+                    if (eType !== "MCQ" && eType !== "IMAGE" && eType !== "TRUE_FALSE" && eType !== "FILL_BLANK") return false;
+                    return true;
+                } else {
+                    if (eType !== "MCQ" && eType !== "IMAGE" && !enabledTypes.includes(eType)) return false;
+                    if (eType === "IMAGE" && !enabledTypes.includes("IMAGE")) return false;
+                    return true;
+                }
             });
 
-            // Calculate Dynamic K-Quota based on actual bank availability
-            const totalK3Available = validQuestions.filter(q => getEffectiveCognitive(q) === "K3").length;
-            const targetK3 = Math.min(20, totalK3Available);
+            // Set 50% K3 and 50% K2 Quota
+            const targetK3 = Math.ceil(totalRequired * 0.5);
             let kQuota: Record<string, number> = {
                 K3: targetK3,
                 K2: totalRequired - targetK3
             };
 
-            // Separate unseen and seen
-            let unseenBank = shuffleArray(validQuestions.filter(q => !seenQuestionIds.has(q.id)));
-            let seenBank = shuffleArray(validQuestions.filter(q => seenQuestionIds.has(q.id)));
-
+            // 5. The Smart Bucket-Based Iterative Picker
+            const shuffledBank = shuffleArray(validQuestions);
             const selectedIds = new Set<string>();
 
-            // Picker Helper
-            const pickQuestions = (pool: any[], enforceType: boolean, enforceAxis: boolean, enforceCognitive: boolean) => {
-                for (const q of pool) {
-                    if (selectedIds.has(q.id) || selectedIds.size >= totalRequired) continue;
+            const pickOne = (allowSeen: boolean, matchAxis: boolean, matchType: boolean, matchK: boolean) => {
+                for (const q of shuffledBank) {
+                    if (selectedIds.has(q.id)) continue;
+                    if (!allowSeen && seenQuestionIds.has(q.id)) continue;
 
                     const eType = getEffectiveType(q);
                     const eAxis = getEffectiveAxis(q);
                     const eK = getEffectiveCognitive(q);
 
-                    const typeNeeded = typeQuota[eType] > 0;
-                    const axisNeeded = axisQuota[eAxis] > 0;
-                    const kNeeded = kQuota[eK] > 0;
+                    if (matchAxis && (axisQuota[eAxis] || 0) <= 0) continue;
+                    if (matchType && (typeQuota[eType] || 0) <= 0) continue;
+                    if (matchK && (kQuota[eK] || 0) <= 0) continue;
 
-                    const passType = enforceType ? typeNeeded : true;
-                    const passAxis = enforceAxis ? axisNeeded : true;
-                    const passCognitive = enforceCognitive ? kNeeded : true;
-
-                    if (passType && passAxis && passCognitive) {
-                        selectedIds.add(q.id);
-                        if (typeNeeded) typeQuota[eType]--;
-                        if (axisNeeded) axisQuota[eAxis]--;
-                        if (kNeeded) kQuota[eK]--;
-                    }
+                    selectedIds.add(q.id);
+                    if (axisQuota[eAxis] !== undefined) axisQuota[eAxis]--;
+                    if (typeQuota[eType] !== undefined) typeQuota[eType]--;
+                    if (kQuota[eK] !== undefined) kQuota[eK]--;
+                    return true;
                 }
+                return false;
             };
 
-            // The selection phases as planned:
-            
-            // Phase 1: Unseen, strict (Type + Axis + Cognitive)
-            pickQuestions(unseenBank, true, true, true);
+            // Iterative greedy resolution to fill totalRequired exactly
+            while (selectedIds.size < totalRequired) {
+                // Tier 1: Perfect Match (Unseen, Exact Axis, Exact Type, Exact K)
+                if (pickOne(false, true, true, true)) continue;
+                
+                // Tier 2: Sacrifice Cognitive K (Unseen, Exact Axis, Exact Type) -> Absorbs K3 deficit into K2
+                if (pickOne(false, true, true, false)) continue;
+                
+                // Tier 3: Sacrifice Unseen (Allow Seen, Exact Axis, Exact Type, Exact K) -> Repetition is better than wrong Axis
+                if (pickOne(true, true, true, true)) continue;
+                
+                // Tier 4: Sacrifice Unseen + K (Allow Seen, Exact Axis, Exact Type)
+                if (pickOne(true, true, true, false)) continue;
+                
+                // Tier 5: Sacrifice Type (Unseen, Exact Axis, Exact K) -> Wrong Type is better than wrong Axis
+                if (pickOne(false, true, false, true)) continue;
+                
+                // Tier 6: Sacrifice Type + K (Unseen, Exact Axis)
+                if (pickOne(false, true, false, false)) continue;
+                
+                // Tier 7: Sacrifice Type + Unseen (Allow Seen, Exact Axis, Exact K)
+                if (pickOne(true, true, false, true)) continue;
+                
+                // Tier 8: Sacrifice Type + Unseen + K (Allow Seen, Exact Axis)
+                if (pickOne(true, true, false, false)) continue;
+                
+                // Tier 9: Sacrifice Axis (Emergency! Unseen, Any Axis, Exact Type, Exact K)
+                if (pickOne(false, false, true, true)) continue;
+                
+                // Tier 10: Sacrifice Axis + K
+                if (pickOne(false, false, true, false)) continue;
+                
+                // Tier 11: Sacrifice Axis + Unseen
+                if (pickOne(true, false, true, true)) continue;
+                
+                // Tier 12: Sacrifice Axis + Unseen + K
+                if (pickOne(true, false, true, false)) continue;
+                
+                // Tier 13: Desperation (Unseen Anything)
+                if (pickOne(false, false, false, false)) continue;
+                
+                // Tier 14: Total Desperation (Seen Anything)
+                if (pickOne(true, false, false, false)) continue;
 
-            // Phase 2: Unseen, fallback missing special types to MCQ quota, enforce Axis & Cognitive
-            if (selectedIds.size < totalRequired) {
-                const missingSpecials = typeQuota.IMAGE + typeQuota.TRUE_FALSE + typeQuota.FILL_BLANK;
-                typeQuota.MCQ += missingSpecials;
-                typeQuota.IMAGE = 0; typeQuota.TRUE_FALSE = 0; typeQuota.FILL_BLANK = 0;
-                pickQuestions(unseenBank, true, true, true); 
-            }
-
-            // Phase 3: Unseen, relax Axis, enforce Type & Cognitive
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(unseenBank, true, false, true);
-            }
-
-            // Phase 4: Unseen, relax Cognitive, enforce Type only
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(unseenBank, true, false, false);
-            }
-
-            // Phase 5: Seen (Fallback), strict (Type + Axis + Cognitive)
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(seenBank, true, true, true);
-            }
-
-            // Phase 6: Seen, relax Axis, enforce Type & Cognitive
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(seenBank, true, false, true);
-            }
-            
-            // Phase 7: Seen, relax Cognitive, enforce Type only
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(seenBank, true, false, false);
-            }
-
-            // Phase 8: Emergency grab any unseen then seen
-            if (selectedIds.size < totalRequired) {
-                pickQuestions(unseenBank, false, false, false);
-                pickQuestions(seenBank, false, false, false);
+                // If we reach here, the question bank is literally completely exhausted
+                break;
             }
 
             if (selectedIds.size === 0) {
-                return NextResponse.json({ error: "Not enough questions in bank to generate exam" }, { status: 500 });
+                return NextResponse.json({ error: "لا يوجد عدد كافي من الأسئلة في بنك الأسئلة لتوليد الاختبار" }, { status: 500 });
             }
 
             // 5. Fetch full data for the selected 30 IDs

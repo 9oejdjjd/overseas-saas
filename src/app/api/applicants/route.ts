@@ -156,12 +156,25 @@ export async function POST(request: NextRequest) {
                 else applicantCode = generatePNR();
             }
 
+            // 1.5 Handle Visitor Conversion (Mock Exam Purchase Link)
+            let mockPurchaseUpdate = undefined;
+            if (body.visitorPurchaseId) {
+                const existingPurchase = await tx.mockExamPurchase.findUnique({
+                    where: { id: body.visitorPurchaseId }
+                });
+                if (existingPurchase) {
+                    mockPurchaseUpdate = {
+                        connect: { id: body.visitorPurchaseId }
+                    };
+                }
+            }
+
             // 2. Create Applicant with Linked Location & Financials
             const applicant = await tx.applicant.create({
                 data: {
                     fullName: body.fullName,
                     applicantCode,
-
+                    mockPurchase: mockPurchaseUpdate,
                     firstName: body.firstName,
                     lastName: body.lastName,
                     passportNumber: body.passportNumber,
@@ -242,7 +255,7 @@ export async function POST(request: NextRequest) {
             await tx.activityLog.create({
                 data: {
                     action: "NEW_REGISTRATION",
-                    details: `تم تسجيل متقدم جديد: ${applicant.fullName} (${applicantCode}) - الوجهة: ${body.locationId ? 'محدد' : 'غير محدد'} ${voucherNotes ? '- كود خصم' : ''}`,
+                    details: `تم تسجيل متقدم جديد: ${applicant.fullName} (${applicantCode}) - الوجهة: ${body.locationId ? 'محدد' : 'غير محدد'} ${voucherNotes ? '- كود خصم' : ''} ${body.visitorPurchaseId ? '(تم التحويل من زائر)' : ''}`,
                     applicantId: applicant.id,
                 },
             });
@@ -276,12 +289,10 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
 
-        // Pagination Params
         const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
         const limit = Math.max(1, parseInt(searchParams.get("limit") || "50"));
         const skip = (page - 1) * limit;
 
-        // Search & Filter Params
         const search = searchParams.get("search");
         const status = searchParams.get("status");
         const locationId = searchParams.get("locationId");
@@ -289,15 +300,10 @@ export async function GET(request: NextRequest) {
         const examDateTo = searchParams.get("examDateTo");
         const regDateFrom = searchParams.get("regDateFrom");
         const regDateTo = searchParams.get("regDateTo");
-        const ticketStatus = searchParams.get("ticketStatus"); // HAS_TICKET, NO_TICKET
+        const viewType = searchParams.get("viewType"); // ALL, APPLICANTS, VISITORS
 
-        // Build Where Clause
-        const whereClause: any = {
-            // Exclude dummy visitors created for mock exam result tracking
-            fullName: {
-                not: "زائر (اختبار تجريبي)"
-            }
-        };
+        // Build Where Clause for applicants
+        const whereClause: any = { fullName: { not: "زائر (اختبار تجريبي)" } };
 
         if (search) {
             whereClause.OR = [
@@ -309,99 +315,153 @@ export async function GET(request: NextRequest) {
                 { passportNumber: { contains: search, mode: 'insensitive' } },
             ];
         }
-
-        if (status && status !== 'ALL') {
-            // Support comma separated statuses if needed, for now exact match
-            whereClause.status = status;
-        }
-
-        if (locationId && locationId !== 'ALL') {
-            whereClause.locationId = locationId;
-        }
-
-        // Date Range Filters
+        if (status && status !== 'ALL' && status !== 'VISITOR') whereClause.status = status;
+        if (locationId && locationId !== 'ALL') whereClause.locationId = locationId;
         if (examDateFrom || examDateTo) {
             whereClause.examDate = {};
             if (examDateFrom) whereClause.examDate.gte = new Date(examDateFrom);
             if (examDateTo) whereClause.examDate.lte = new Date(examDateTo);
         }
-
         if (regDateFrom || regDateTo) {
             whereClause.createdAt = {};
             if (regDateFrom) whereClause.createdAt.gte = new Date(regDateFrom);
             if (regDateTo) whereClause.createdAt.lte = new Date(regDateTo);
         }
 
-        // Ticket Logic Filter (Custom Requirement)
-        // This is complex as ticket status is not directly on applicant, but we can query 'tickets' relation if it exists or define custom logic.
-        // Assuming we rely on applicant-level flags or simple relation check if schema allows.
-        // For now, skipping complex relational filter in WHERE unless 'tickets' relation is exposed to findMany properly.
-        // We will focus on main fields.
-
-        // Sorting Logic
         const sort = searchParams.get("sort") || "createdAt";
         const order = searchParams.get("order") === "asc" ? "asc" : "desc";
+        const orderBy: any = sort === 'examDate' ? { examDate: order } : { [sort]: order };
 
-        const orderBy: any = {};
-        if (sort === 'examDate') {
-            // Put nulls last logic is hard in standard Prisma sort without raw query, so we stick to basic sort
-            orderBy.examDate = order;
-        } else {
-            orderBy[sort] = order;
+        // ── Fetch Applicants (skip if VISITORS only) ──
+        let applicantRows: any[] = [];
+        let applicantTotal = 0;
+
+        if (viewType !== 'VISITORS') {
+            const [cnt, apps] = await prisma.$transaction([
+                prisma.applicant.count({ where: whereClause }),
+                prisma.applicant.findMany({
+                    where: whereClause,
+                    take: limit,
+                    skip,
+                    orderBy,
+                    select: {
+                        id: true, applicantCode: true, fullName: true, phone: true,
+                        whatsappNumber: true, examDate: true, examTime: true, profession: true,
+                        location: { select: { name: true, address: true, locationUrl: true } },
+                        examCenter: { select: { name: true, address: true, locationUrl: true } },
+                        status: true, remainingBalance: true, hasTransportation: true,
+                        ticket: { select: { id: true, status: true, ticketNumber: true, departureDate: true } },
+                    },
+                })
+            ]);
+            applicantTotal = cnt;
+
+            // Attach mock purchase data to applicants
+            const phones = apps.map((a: any) => a.phone).filter(Boolean);
+            const phonesPlus = phones.map((p: string) => p.startsWith('+') ? p : `+${p}`);
+            const allPhoneVariants = [...new Set([...phones, ...phonesPlus])];
+
+            const mockPurchases = allPhoneVariants.length > 0 ? await prisma.mockExamPurchase.findMany({
+                where: { phone: { in: allPhoneVariants } },
+                include: { package: { select: { name: true } } },
+                orderBy: { createdAt: 'desc' }
+            }) : [];
+
+            applicantRows = apps.map((a: any) => {
+                const purchase = mockPurchases.find((p: any) =>
+                    p.phone === a.phone || p.phone === `+${a.phone}` || `+${p.phone}` === a.phone
+                );
+                return {
+                    ...a,
+                    isVisitor: false,
+                    mockPurchase: purchase ? {
+                        id: purchase.id,
+                        packageId: purchase.packageId,
+                        packageName: purchase.package?.name || null,
+                        totalCredits: purchase.totalCredits,
+                        usedCredits: purchase.usedCredits,
+                        status: purchase.status,
+                        expiresAt: purchase.expiresAt?.toISOString() || null,
+                    } : null,
+                };
+            });
         }
 
-        // Execute Query with Transaction for clean count + data
-        const [total, applicants] = await prisma.$transaction([
-            prisma.applicant.count({ where: whereClause }),
-            prisma.applicant.findMany({
-                where: whereClause,
-                take: limit,
-                skip: skip,
-                orderBy: orderBy,
-                select: {
-                    id: true,
-                    applicantCode: true,
-                    fullName: true,
-                    phone: true,
-                    whatsappNumber: true,
-                    examDate: true,
-                    examTime: true,
-                    location: {
-                        select: { name: true, address: true, locationUrl: true }
-                    },
-                    examCenter: {
-                        select: { name: true, address: true, locationUrl: true }
-                    },
-                    status: true,
-                    remainingBalance: true,
-                    hasTransportation: true,
-                    ticket: {
-                        select: {
-                            id: true,
-                            status: true,
-                            ticketNumber: true,
-                            departureDate: true
-                        }
-                    },
-                },
-            })
-        ]);
+        // ── Fetch Visitors (from MockExamPurchase) ──
+        let visitorRows: any[] = [];
+        if (viewType !== 'APPLICANTS' && status !== 'PASSED' && status !== 'FAILED' && status !== 'ABSENT' && status !== 'EXAM_SCHEDULED' && status !== 'NEW_REGISTRATION') {
+            const visitorWhere: any = {};
+            if (search) {
+                visitorWhere.OR = [
+                    { buyerName: { contains: search, mode: 'insensitive' } },
+                    { phone: { contains: search } },
+                ];
+            }
+
+            const purchases = await prisma.mockExamPurchase.findMany({
+                where: visitorWhere,
+                include: { package: { select: { name: true } } },
+                orderBy: { createdAt: 'desc' },
+                take: viewType === 'VISITORS' ? limit : 50,
+            });
+
+            // Get all registered phone numbers to exclude
+            const regApplicants = await prisma.applicant.findMany({
+                select: { phone: true },
+                where: { fullName: { not: "زائر (اختبار تجريبي)" } }
+            });
+            const regPhones = new Set<string>();
+            regApplicants.forEach((a: any) => {
+                regPhones.add(a.phone);
+                regPhones.add(a.phone.startsWith('+') ? a.phone.slice(1) : `+${a.phone}`);
+            });
+
+            visitorRows = purchases
+                .filter((p: any) => !regPhones.has(p.phone) && !regPhones.has(p.phone.replace('+', '')))
+                .map((p: any) => ({
+                    id: `visitor_${p.id}`,
+                    fullName: p.buyerName || "زائر",
+                    phone: p.phone,
+                    whatsappNumber: p.phone,
+                    applicantCode: null,
+                    profession: null,
+                    examDate: null, examTime: null,
+                    location: null, examCenter: null, examLocation: "",
+                    status: "VISITOR",
+                    remainingBalance: 0,
+                    hasTransportation: false,
+                    ticket: null,
+                    totalAmount: 0, discount: 0, amountPaid: Number(p.amount),
+                    createdAt: p.createdAt?.toISOString() || new Date().toISOString(),
+                    isVisitor: true,
+                    visitorPurchaseId: p.id,
+                    mockPurchase: {
+                        id: p.id,
+                        packageId: p.packageId,
+                        packageName: p.package?.name || "اختبارات مفردة",
+                        totalCredits: p.totalCredits,
+                        usedCredits: p.usedCredits,
+                        status: p.status,
+                        expiresAt: p.expiresAt?.toISOString() || null,
+                    }
+                }));
+        }
+
+        const mergedData = [...applicantRows, ...visitorRows];
+        const totalCount = applicantTotal + visitorRows.length;
 
         return NextResponse.json({
-            data: applicants,
+            data: mergedData,
             pagination: {
-                total,
+                total: totalCount,
                 page,
                 limit,
-                totalPages: Math.ceil(total / limit)
+                totalPages: Math.ceil(totalCount / limit)
             }
         });
 
     } catch (error) {
         console.error("Fetch Error:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch applicants" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to fetch applicants" }, { status: 500 });
     }
 }

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ProfessionAlgorithmModal } from "./ProfessionAlgorithmModal";
+import { Settings2 } from "lucide-react";
 
 export function ProfessionsManager() {
     const [professions, setProfessions] = useState<any[]>([]);
@@ -13,12 +15,12 @@ export function ProfessionsManager() {
     const [showAdd, setShowAdd] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [formData, setFormData] = useState({
-        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ"
+        name: "", slug: "", passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ", isActive: true
     });
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [aiLoading, setAiLoading] = useState<string | null>(null);
-    const [purging, setPurging] = useState(false);
+    const [algorithmModalProf, setAlgorithmModalProf] = useState<any>(null);
     
 
 
@@ -65,7 +67,7 @@ export function ProfessionsManager() {
 
     const openAddModal = () => {
         setEditingId(null);
-        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ" });
+        setFormData({ name: "", slug: `job-${Math.random().toString(36).substring(2, 8)}`, passingScore: 60, examDuration: 60, questionCount: 30, description: "", enabledQuestionTypes: "MCQ", isActive: true });
         setShowAdd(true);
     };
 
@@ -78,7 +80,8 @@ export function ProfessionsManager() {
             examDuration: prof.examDuration,
             questionCount: prof.questionCount,
             description: prof.description || "",
-            enabledQuestionTypes: prof.enabledQuestionTypes || "MCQ"
+            enabledQuestionTypes: prof.enabledQuestionTypes || "MCQ",
+            isActive: prof.isActive !== false
         });
         setShowAdd(true);
     };
@@ -113,24 +116,20 @@ export function ProfessionsManager() {
 
 
 
-    const purgeAllQuestions = async () => {
-        if (!confirm("⚠️ تحذير: سيتم حذف جميع الأسئلة والخيارات والجلسات المرتبطة نهائياً.\nهل أنت متأكد تماماً؟")) return;
-        if (!confirm("تأكيد نهائي: هذا الإجراء لا يمكن التراجع عنه. اضغط OK للمتابعة.")) return;
-        setPurging(true);
+    const deleteProfession = async (id: string, name: string) => {
+        if (!confirm(`⚠️ تحذير: هل أنت متأكد من حذف مهنة "${name}" بالكامل؟\nسيتم حذف جميع أسئلتها وجلساتها الاختبارية نهائياً. هذا الإجراء لا يمكن التراجع عنه!`)) return;
+        
         try {
-            const res = await fetch("/api/mock/admin/questions", { method: "DELETE" });
+            const res = await fetch(`/api/mock/admin/professions/${id}`, { method: "DELETE" });
             const data = await res.json();
             if (res.ok) {
-                alert(`تم الحذف بنجاح:\n- ${data.deleted.questions} سؤال\n- ${data.deleted.options} خيار\n- ${data.deleted.sessionQuestions} ارتباط جلسة\n- ${data.deleted.aiJobs} وظيفة توليد`);
                 fetchProfessions();
             } else {
-                alert(data.error || "حدث خطأ");
+                alert(data.error || "حدث خطأ أثناء الحذف");
             }
         } catch (e) {
             console.error(e);
             alert("فشل في الاتصال بالخادم");
-        } finally {
-            setPurging(false);
         }
     };
 
@@ -154,10 +153,6 @@ export function ProfessionsManager() {
                 </div>
                 <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0 flex-wrap">
                     <Button variant="outline" onClick={() => fetchProfessions()}><RefreshCw className="h-4 w-4 ml-1" /> تحديث</Button>
-                    <Button variant="destructive" onClick={purgeAllQuestions} disabled={purging} className="gap-1">
-                        {purging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        حذف جميع الأسئلة
-                    </Button>
                     <Button onClick={openAddModal} className="bg-blue-600 hover:bg-blue-700">
                         <Plus className="h-4 w-4 ml-1" /> إضافة مهنة
                     </Button>
@@ -181,6 +176,19 @@ export function ProfessionsManager() {
                             <label className="text-sm font-semibold block text-gray-700">الرابط الإنجليزي (Slug) <span className="text-gray-400 font-normal text-xs">(يتم توليده تلقائياً)</span></label>
                             <Input value={formData.slug} onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase() })} placeholder="يتم توليده تلقائياً..." className="dir-ltr text-left font-mono bg-gray-50 focus:bg-white transition-colors" />
                             <p className="text-xs text-gray-400">يمكنك تغييره إذا أردت، أو تركه كما هو.</p>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-xl border bg-gray-50">
+                            <div>
+                                <label className="text-sm font-semibold block text-gray-900">حالة المهنة</label>
+                                <p className="text-xs text-gray-500">تفعيل أو تعطيل هذه المهنة للمستخدمين</p>
+                            </div>
+                            <button 
+                                type="button"
+                                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.isActive ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.isActive ? '-translate-x-6' : 'translate-x-1'}`} />
+                            </button>
                         </div>
                         <div className="space-y-2 pt-2 border-t">
                             <label className="text-sm font-semibold block text-gray-700">درجة النجاح (%)</label>
@@ -268,6 +276,13 @@ export function ProfessionsManager() {
                 </SheetContent>
             </Sheet>
 
+            <ProfessionAlgorithmModal 
+                profession={algorithmModalProf} 
+                isOpen={!!algorithmModalProf} 
+                onClose={() => setAlgorithmModalProf(null)} 
+                onSaved={fetchProfessions} 
+            />
+
             {/* Generator Modal Removed */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -279,7 +294,13 @@ export function ProfessionsManager() {
                                 <h3 className="font-bold text-lg text-gray-900">{prof.name}</h3>
                                 <p className="text-xs text-gray-500 font-mono mt-0.5">{prof.slug}</p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteProfession(prof.id, prof.name)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50" onClick={() => setAlgorithmModalProf(prof)} title="إعدادات الخوارزمية">
+                                    <Settings2 className="h-4 w-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEditModal(prof)}>
                                     <Edit2 className="h-4 w-4" />
                                 </Button>

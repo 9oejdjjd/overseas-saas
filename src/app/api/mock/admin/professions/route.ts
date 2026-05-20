@@ -88,3 +88,40 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Failed to create profession" }, { status: 500 });
     }
 }
+
+export async function PUT(request: Request) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
+        const body = await request.json();
+        const { id, name, slug, description, examDuration, questionCount, passingScore, isActive, enabledQuestionTypes, algorithmConfig } = body;
+
+        if (!id) {
+            return NextResponse.json({ error: "Profession ID is required" }, { status: 400 });
+        }
+
+        const dataToUpdate: any = {};
+        if (name !== undefined) dataToUpdate.name = name;
+        if (slug !== undefined) dataToUpdate.slug = slug;
+        if (description !== undefined) dataToUpdate.description = description;
+        if (examDuration !== undefined) dataToUpdate.examDuration = Number(examDuration);
+        if (questionCount !== undefined) dataToUpdate.questionCount = Number(questionCount);
+        if (passingScore !== undefined) dataToUpdate.passingScore = Number(passingScore);
+        if (isActive !== undefined) dataToUpdate.isActive = isActive;
+        if (enabledQuestionTypes !== undefined) dataToUpdate.enabledQuestionTypes = enabledQuestionTypes;
+        if (algorithmConfig !== undefined) dataToUpdate.algorithmConfig = algorithmConfig;
+
+        const updated = await prisma.profession.update({
+            where: { id },
+            data: dataToUpdate
+        });
+
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error("PUT Profession Error:", error);
+        return NextResponse.json({ error: "Failed to update profession" }, { status: 500 });
+    }
+}

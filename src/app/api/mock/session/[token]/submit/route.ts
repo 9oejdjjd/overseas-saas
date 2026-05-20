@@ -65,16 +65,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             return { id: sessionQuestion.id, selectedOptionId, isCorrect };
         });
 
-        // Execute updates
-        const updatePromises = updates.map(update => 
-            prisma.examSessionQuestion.update({
-                where: { id: update.id },
-                data: { selectedOptionId: update.selectedOptionId, isCorrect: update.isCorrect }
-            })
-        );
-
-        await Promise.all(updatePromises);
-
         // Calculate final score
         let scorePercentage = 0;
         if (totalQuestions > 0) {
@@ -85,22 +75,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         const roundedScore = Math.round(scorePercentage * 100) / 100;
         const passed = roundedScore >= session.passingScore;
 
-        const updatedSession = await prisma.examSession.update({
-            where: { id: session.id },
-            data: {
-                status: "SUBMITTED",
-                completedAt: new Date(),
-                score: roundedScore,
-                isPassed: passed
-            }
-        });
+        // Execute ALL updates atomically in a single transaction
+        await prisma.$transaction([
+            // Update all question answers
+            ...updates.map(update => 
+                prisma.examSessionQuestion.update({
+                    where: { id: update.id },
+                    data: { selectedOptionId: update.selectedOptionId, isCorrect: update.isCorrect }
+                })
+            ),
+            // Finalize session
+            prisma.examSession.update({
+                where: { id: session.id },
+                data: {
+                    status: "SUBMITTED",
+                    completedAt: new Date(),
+                    score: roundedScore,
+                    isPassed: passed
+                }
+            })
+        ]);
 
-        // Send result via WhatsApp before returning response to prevent serverless function freeze
-        try {
-            await sendMockResultNotification(session, session.profession, passed);
-        } catch (e) {
+        // Send result via WhatsApp in the background (fire-and-forget) to prevent UI hanging
+        sendMockResultNotification(session, session.profession, passed).catch(e => {
             console.error("Mock result notification error:", e);
-        }
+        });
 
         return NextResponse.json({
             success: true,

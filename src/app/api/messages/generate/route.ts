@@ -22,10 +22,10 @@ const formatArabicTime = (timeStr: string | null | undefined) => {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { applicantId, trigger, ticketId, customVars = {} } = body;
+        const { applicantId, phone, trigger, ticketId, purchaseId, customVars = {} } = body;
 
-        if (!applicantId || !trigger) {
-            return NextResponse.json({ error: "Missing applicantId or trigger" }, { status: 400 });
+        if ((!applicantId && !phone && !purchaseId) || !trigger) {
+            return NextResponse.json({ error: "Missing applicantId/phone/purchaseId or trigger" }, { status: 400 });
         }
 
         // 1. Fetch Template
@@ -39,28 +39,78 @@ export async function POST(request: Request) {
 
         let text = template.body;
 
-        // 2. Fetch Applicant Data
-        const applicant = await prisma.applicant.findUnique({
-            where: { id: applicantId },
-            include: {
-                location: true,
-                examCenter: true,
-                transportFrom: true,
-            }
-        });
+        // 2. Fetch Applicant or Visitor Data
+        let applicantData: any = null;
+        let mockPurchase: any = null;
 
-        if (!applicant) {
-            return NextResponse.json({ error: "المتقدم غير موجود" }, { status: 404 });
+        if (applicantId) {
+            applicantData = await prisma.applicant.findUnique({
+                where: { id: applicantId },
+                include: {
+                    location: true,
+                    examCenter: true,
+                    transportFrom: true,
+                }
+            });
+            if (!applicantData) {
+                return NextResponse.json({ error: "المتقدم غير موجود" }, { status: 404 });
+            }
+        } else if (purchaseId) {
+            // Find Visitor directly by Purchase ID
+            mockPurchase = await prisma.mockExamPurchase.findUnique({
+                where: { id: purchaseId },
+                include: { package: true }
+            });
+            if (!mockPurchase) {
+                return NextResponse.json({ error: "الزائر غير موجود" }, { status: 404 });
+            }
+            applicantData = {
+                id: null, // signifies visitor
+                fullName: mockPurchase.buyerName || "زائر",
+                phone: mockPurchase.phone,
+                whatsappNumber: mockPurchase.phone,
+                profession: mockPurchase.profession || null,
+            };
+        } else if (phone) {
+            // Visitor Case with robust phone variants matching
+            const phoneVariants = [
+                phone,
+                phone.startsWith('+') ? phone.slice(1) : `+${phone}`,
+                phone.replace(/^\+?967/, ''),
+                phone.startsWith('0') ? phone.slice(1) : `0${phone}`
+            ];
+            const uniquePhones = [...new Set(phoneVariants)];
+
+            mockPurchase = await prisma.mockExamPurchase.findFirst({
+                where: {
+                    OR: [
+                        { phone: { in: uniquePhones } },
+                        { phone: { endsWith: phone.replace(/^\+?967/, '') } }
+                    ]
+                },
+                orderBy: { createdAt: 'desc' },
+                include: { package: true }
+            });
+            if (!mockPurchase) {
+                return NextResponse.json({ error: "الزائر غير موجود" }, { status: 404 });
+            }
+            applicantData = {
+                id: null, // signifies visitor
+                fullName: mockPurchase.buyerName || "زائر",
+                phone: mockPurchase.phone,
+                whatsappNumber: mockPurchase.phone,
+                profession: mockPurchase.profession || null,
+            };
         }
 
         // 3. Fetch Ticket Data if requested
         let ticket = null;
-        if (ticketId) {
+        if (ticketId && applicantId) {
             ticket = await prisma.ticket.findUnique({
                 where: { id: ticketId },
                 include: { trip: true, returnTrip: true }
             });
-        } else {
+        } else if (applicantId) {
             // Fallback to active ticket if any
             ticket = await prisma.ticket.findFirst({
                 where: { applicantId: applicantId, status: { in: ['ISSUED', 'ACTIVE'] } },
@@ -72,35 +122,53 @@ export async function POST(request: Request) {
         // --- Replacements ---
 
         // Basic Info
-        text = text.replace(/{name}/g, applicant.fullName || "");
-        text = text.replace(/{applicantCode}|{applicant_code}/g, applicant.applicantCode || "");
-        text = text.replace(/{phone}/g, applicant.phone || "");
-        text = text.replace(/{profession}/g, applicant.profession || "");
-        text = text.replace(/{email}/g, applicant.platformEmail || "");
-        text = text.replace(/{password}/g, applicant.platformPassword || "");
+        text = text.replace(/{name}/g, applicantData.fullName || "");
+        text = text.replace(/{applicantCode}|{applicant_code}/g, applicantData.applicantCode || "");
+        text = text.replace(/{phone}/g, applicantData.phone || "");
+        text = text.replace(/{profession}/g, applicantData.profession || "");
+        text = text.replace(/{email}/g, applicantData.platformEmail || "");
+        text = text.replace(/{password}/g, applicantData.platformPassword || "");
 
         // --- Exam Link Injection (search for active sessions or auto-create) ---
         if (text.includes("{examLink}") || text.includes("{mockLink}")) {
-            let activeSession = await prisma.examSession.findFirst({
-                where: { applicantId: applicantId, status: { in: ["NEW", "STARTED"] } },
-                orderBy: { createdAt: "desc" }
-            });
+            let activeSession = null;
+            
+            if (applicantId) {
+                activeSession = await prisma.examSession.findFirst({
+                    where: { applicantId: applicantId, status: { in: ["NEW", "STARTED"] } },
+                    orderBy: { createdAt: "desc" }
+                });
+            } else if (mockPurchase) {
+                activeSession = await prisma.examSession.findFirst({
+                    where: { purchaseId: mockPurchase.id, status: { in: ["NEW", "STARTED"] } },
+                    orderBy: { createdAt: "desc" }
+                });
+            }
 
-            // Auto-create session if none exists, based on applicant's profession
-            if (!activeSession && applicant.profession) {
+            // Auto-create session if none exists, based on applicantData's profession
+            if (!activeSession && applicantData.profession) {
                 try {
                     const profession = await prisma.profession.findFirst({
-                        where: { name: applicant.profession, isActive: true }
+                        where: { name: applicantData.profession, isActive: true }
                     });
                     if (profession) {
+                        const sessionData: any = {
+                            type: applicantId ? "PRIVATE" : "PUBLIC",
+                            status: "NEW",
+                            professionId: profession.id,
+                            passingScore: profession.passingScore,
+                        };
+                        
+                        if (applicantId) {
+                            sessionData.applicantId = applicantId;
+                        } else if (mockPurchase) {
+                            sessionData.purchaseId = mockPurchase.id;
+                            sessionData.visitorPhone = mockPurchase.phone;
+                            sessionData.visitorName = mockPurchase.buyerName;
+                        }
+
                         activeSession = await prisma.examSession.create({
-                            data: {
-                                type: "PRIVATE",
-                                status: "NEW",
-                                professionId: profession.id,
-                                applicantId: applicantId,
-                                passingScore: profession.passingScore,
-                            }
+                            data: sessionData
                         });
                     }
                 } catch (err) {
@@ -119,10 +187,10 @@ export async function POST(request: Request) {
 
 
         // Location & Map (Safe from undefined)
-        const cityName = applicant.location?.name || applicant.examLocation || "";
-        const centerName = applicant.examCenter?.name || "";
-        const address = applicant.examCenter?.address || applicant.location?.address || "";
-        const mapUrl = applicant.examCenter?.locationUrl || applicant.location?.locationUrl || "";
+        const cityName = applicantData.location?.name || applicantData.examLocation || "";
+        const centerName = applicantData.examCenter?.name || "";
+        const address = applicantData.examCenter?.address || applicantData.location?.address || "";
+        const mapUrl = applicantData.examCenter?.locationUrl || applicantData.location?.locationUrl || "";
 
         text = text.replace(/{location}|{city}|{examLocation}/g, cityName);
         text = text.replace(/{centerName}|{center_name}/g, centerName);
@@ -130,14 +198,14 @@ export async function POST(request: Request) {
         text = text.replace(/{locationUrl}|{location_url}/g, mapUrl);
 
         // Dates & Times
-        if (applicant.examDate) {
-            text = text.replace(/{examDate}|{exam_date}/g, formatDate(applicant.examDate));
+        if (applicantData.examDate) {
+            text = text.replace(/{examDate}|{exam_date}/g, formatDate(applicantData.examDate));
         } else {
             text = text.replace(/{examDate}|{exam_date}/g, "غير محدد");
         }
 
-        if (applicant.examTime) {
-            text = text.replace(/{examTime}|{exam_time}/g, formatArabicTime(applicant.examTime));
+        if (applicantData.examTime) {
+            text = text.replace(/{examTime}|{exam_time}/g, formatArabicTime(applicantData.examTime));
         } else {
             text = text.replace(/{examTime}|{exam_time}/g, "غير محدد");
         }
@@ -178,7 +246,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
             templateName: template.name,
             message: text,
-            phone: applicant.whatsappNumber || applicant.phone
+            phone: applicantData.whatsappNumber || applicantData.phone
         });
 
     } catch (error) {
