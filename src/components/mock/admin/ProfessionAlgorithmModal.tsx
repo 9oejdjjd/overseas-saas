@@ -17,9 +17,16 @@ export interface TypeQuota {
     IMAGE: number;
 }
 
+export interface CognitiveQuota {
+    K1: number;
+    K2: number;
+    K3: number;
+}
+
 export interface AlgorithmConfig {
     axes: AxisConfig[];
     typeQuota: TypeQuota;
+    cognitiveQuota?: CognitiveQuota;
 }
 
 export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved }: { profession: any, isOpen: boolean, onClose: () => void, onSaved: () => void }) {
@@ -27,6 +34,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
     
     const [axes, setAxes] = useState<AxisConfig[]>([]);
     const [typeQuota, setTypeQuota] = useState<TypeQuota>({ MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 });
+    const [cognitiveQuota, setCognitiveQuota] = useState<CognitiveQuota>({ K1: 0, K2: 0, K3: 0 });
 
     const totalQuestions = profession?.questionCount || 0;
     
@@ -41,6 +49,16 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                 const config = profession.algorithmConfig as AlgorithmConfig;
                 setAxes(config.axes || []);
                 setTypeQuota(config.typeQuota || { MCQ: totalQuestions, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 });
+                if (config.cognitiveQuota) {
+                    setCognitiveQuota(config.cognitiveQuota);
+                } else {
+                    const k3Default = Math.ceil(totalQuestions * 0.5);
+                    setCognitiveQuota({
+                        K1: 0,
+                        K2: totalQuestions - k3Default,
+                        K3: k3Default
+                    });
+                }
             } else {
                 // Initialize with defaults if no config, matching original algorithm distributed across 8 axes
                 const qHealth = Math.round(totalQuestions * (2 / 30));
@@ -69,6 +87,13 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                 const mcqQuota = totalQuestions - imgQuota - tfQuota - fbQuota;
 
                 setTypeQuota({ MCQ: mcqQuota, TRUE_FALSE: tfQuota, FILL_BLANK: fbQuota, IMAGE: imgQuota });
+
+                const k3Default = Math.ceil(totalQuestions * 0.5);
+                setCognitiveQuota({
+                    K1: 0,
+                    K2: totalQuestions - k3Default,
+                    K3: k3Default
+                });
             }
         }
     }, [profession, isOpen, totalQuestions, allowImg, allowTf, allowFb]);
@@ -89,6 +114,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
         // Validation
         const axesSum = axes.reduce((sum, a) => sum + (Number(a.quota) || 0), 0);
         const typesSum = (Number(typeQuota.MCQ) || 0) + (Number(typeQuota.TRUE_FALSE) || 0) + (Number(typeQuota.FILL_BLANK) || 0) + (Number(typeQuota.IMAGE) || 0);
+        const cognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0);
 
         if (axesSum !== totalQuestions) {
             alert(`إجمالي حصص المحاور (${axesSum}) لا يساوي عدد أسئلة الاختبار (${totalQuestions})!`);
@@ -100,6 +126,11 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
             return;
         }
 
+        if (cognitiveSum !== totalQuestions) {
+            alert(`إجمالي حصص مستويات المعرفة (${cognitiveSum}) لا يساوي عدد أسئلة الاختبار (${totalQuestions})!`);
+            return;
+        }
+
         if (axes.some(a => !a.name.trim())) {
             alert("لا يمكن ترك اسم محور فارغاً!");
             return;
@@ -107,7 +138,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
 
         setLoading(true);
         try {
-            const config: AlgorithmConfig = { axes, typeQuota };
+            const config: AlgorithmConfig = { axes, typeQuota, cognitiveQuota };
             const res = await fetch(`/api/mock/admin/professions`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -127,6 +158,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
 
     const currentAxesSum = axes.reduce((sum, a) => sum + (Number(a.quota) || 0), 0);
     const currentTypesSum = (Number(typeQuota.MCQ) || 0) + (Number(typeQuota.TRUE_FALSE) || 0) + (Number(typeQuota.FILL_BLANK) || 0) + (Number(typeQuota.IMAGE) || 0);
+    const currentCognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -167,6 +199,30 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                             <div>
                                 <label className={`text-xs mb-1 block ${allowImg ? 'text-gray-500' : 'text-gray-300'}`}>أسئلة صور</label>
                                 <Input type="number" min="0" value={typeQuota.IMAGE} onChange={e => setTypeQuota({...typeQuota, IMAGE: parseInt(e.target.value) || 0})} className="text-center" disabled={!allowImg} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Cognitive Quota */}
+                    <div className="bg-slate-50 p-4 rounded-xl border">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-800">توزيع مستويات المعرفة (Cognitive Levels)</h3>
+                            <span className={`text-sm font-bold px-2 py-1 rounded ${currentCognitiveSum === totalQuestions ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                المجموع: {currentCognitiveSum} / {totalQuestions}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-xs text-gray-500 mb-1 block">مستوى K1 (معرفة وتذكر - افتراضي: 0)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K1} onChange={e => setCognitiveQuota({...cognitiveQuota, K1: parseInt(e.target.value) || 0})} className="text-center bg-white" />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 mb-1 block">مستوى K2 (فهم وتطبيق - افتراضي: 15)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K2} onChange={e => setCognitiveQuota({...cognitiveQuota, K2: parseInt(e.target.value) || 0})} className="text-center bg-white" />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 mb-1 block">مستوى K3 (تحليل وتقييم - افتراضي: 15)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K3} onChange={e => setCognitiveQuota({...cognitiveQuota, K3: parseInt(e.target.value) || 0})} className="text-center bg-white" />
                             </div>
                         </div>
                     </div>

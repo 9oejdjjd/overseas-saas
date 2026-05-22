@@ -1,31 +1,12 @@
-
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from "./src/lib/prisma";
 
 async function main() {
-    try {
-        console.log("--- Checking Locations ---");
-        const locations = await prisma.location.findMany();
-        locations.forEach(l => console.log(`Location: '${l.name}' (ID: ${l.id})`));
-
-        console.log("\n--- Checking Transport Routes (Defaults) ---");
-        const routes = await prisma.transportRouteDefault.findMany({
-            include: { fromDestination: true, toDestination: true },
-        });
-
-        if (routes.length === 0) {
-            console.log("No active routes found!");
-        } else {
-            routes.forEach(r => {
-                console.log(`Route: '${r.fromDestination.name}' -> '${r.toDestination.name}' | Price: ${r.price}`);
-            });
-        }
-
-    } catch (e) {
-        console.error(e);
-    } finally {
-        await prisma.$disconnect();
-    }
+    const applicant = await prisma.applicant.findUnique({
+        where: { id: "0f0ef95b-7e9b-4bcd-afd1-c51f1ce34cb5" }
+    });
+    console.log("Applicant:", applicant);
 }
 
-main();
+main().catch(err => {
+    console.error("Error:", err);
+});

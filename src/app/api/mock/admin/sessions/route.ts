@@ -22,7 +22,13 @@ function calculateSuspicion(group: {
     totalAttempts: number;
     isBanned: boolean;
     sessions: any[];
+    type?: string;
 }): SuspicionResult {
+    // If the candidate is PRIVATE (officially registered), completely bypass all suspicion checking rules
+    if (group.type === "PRIVATE") {
+        return { score: 0, level: "CLEAN", reasons: [] };
+    }
+
     let score = 0;
     const reasons: string[] = [];
 
@@ -82,12 +88,66 @@ function extractBaseFingerprint(fp: string | null): string | null {
     return fp.includes("-") ? fp.split("-")[0] : fp;
 }
 
+async function autoResolveExpiredSessions() {
+    const now = new Date();
+    try {
+        // Query all active sessions to see if any have timed out
+        const inProgressSessions = await prisma.examSession.findMany({
+            where: {
+                status: { in: ["NEW", "STARTED", "RESUMED"] }
+            },
+            include: {
+                profession: {
+                    select: {
+                        examDuration: true
+                    }
+                },
+                questions: {
+                    select: {
+                        selectedOptionId: true
+                    }
+                }
+            }
+        });
+
+        const updates = inProgressSessions.map(async (sess: any) => {
+            const duration = sess.profession?.examDuration || 60;
+            const refTime = sess.startedAt || sess.createdAt;
+            
+            // Expiry threshold: start or creation time + duration + 5 minutes grace buffer
+            const expiryTime = new Date(new Date(refTime).getTime() + duration * 60 * 1000 + 5 * 60 * 1000);
+            
+            if (now > expiryTime) {
+                // Count how many questions were answered in this session
+                const answeredCount = sess.questions.filter((q: any) => q.selectedOptionId !== null).length;
+                
+                // If they answered >=1 question, transition to TIMEOUT ("لم يكمل الاختبار")
+                // Otherwise, transition to EXPIRED ("لم يدخل الاختبار")
+                const newStatus = answeredCount > 0 ? "TIMEOUT" : "EXPIRED";
+                
+                return prisma.examSession.update({
+                    where: { id: sess.id },
+                    data: { status: newStatus }
+                });
+            }
+            return null;
+        });
+
+        await Promise.all(updates.filter(Boolean));
+    } catch (err) {
+        console.error("Error running autoResolveExpiredSessions:", err);
+    }
+}
+
 export async function GET(request: Request) {
     try {
         const session = await getServerSession(authOptions);
         if (!session || !hasPermission(session.user.role, "MANAGE_SYSTEM")) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
+
+        // Run self-healing auto-resolution on-the-fly
+        await autoResolveExpiredSessions();
 
         const url = new URL(request.url);
         const professionId = url.searchParams.get("professionId");

@@ -13,7 +13,7 @@ interface OptionInput {
 interface QuestionInput {
     text: string;
     explanation?: string;
-    difficulty?: QuestionDifficulty;
+    difficulty?: any;
     cognitiveLevel?: string;
     imageUrl?: string;
     options: OptionInput[];
@@ -248,12 +248,16 @@ export async function POST(request: Request) {
                 }
             }
 
+            // Map VERY_HARD or K1 difficulty to HARD for database schema compatibility
+            const finalDifficulty = (q.difficulty === "VERY_HARD" || q.difficulty === "K1" || (q.difficulty as string) === "VERY_HARD" || (q.difficulty as string) === "K1") ? "HARD" : (q.difficulty || "HARD");
+            const finalCognitiveLevel = (q.cognitiveLevel === "K1" || q.difficulty === "VERY_HARD" || q.difficulty === "K1" || (q.difficulty as string) === "VERY_HARD" || (q.difficulty as string) === "K1") ? "K1" : (q.cognitiveLevel || "K2");
+
             // Valid payload to insert
             validQuestionsToInsert.push({
                 text: qText,
                 explanation: q.explanation || null,
-                difficulty: q.difficulty || "HARD",
-                cognitiveLevel: q.cognitiveLevel || "K2",
+                difficulty: finalDifficulty,
+                cognitiveLevel: finalCognitiveLevel,
                 imageUrl: q.imageUrl || null,
                 options: q.options.map(opt => ({
                     text: opt.text.trim(),

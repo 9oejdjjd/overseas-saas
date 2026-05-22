@@ -129,12 +129,124 @@ export function QuestionsImportModal({ professions, questions, onSuccess }: Prop
     { "text": "خيار 4", "isCorrect": false }`;
         }
 
-        const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
+        const focusString = focusTopic.trim() ? `\n🎯 ركز بشكل صارم على الموضوع التالي فقط:\n"${focusTopic.trim()}"` : "";
+
+        if (difficulty === "K1") {
+            const arabicQuestionType = questionType === "TRUE_FALSE" 
+                ? "صح وخطأ" 
+                : questionType === "FILL_BLANK" 
+                    ? "إكمال الفراغات" 
+                    : "اختيار من متعدد";
+
+            const optionsCountInstruction = questionType === "TRUE_FALSE" 
+                ? "خيارين فقط" 
+                : "4 خيارات فقط";
+
+            const difficultyValue = questionType === "MCQ" ? "VERY_HARD" : "HARD";
+
+            return `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+تمتلك خبرة تتجاوز 20 عاماً في مهنة "${profName}".
+
+مهمتك إنشاء ${questionCount} أسئلة احترافية عالية الصعوبة من نوع:
+${arabicQuestionType} 
+ويجب أن تكون الأسئلة:
+- مباشرة على المهنة
+- عملية جداً
+- تعتمد على المعرفة المهنية الدقيقة
+- بدون سيناريوهات طويلة أو قصص
+- تقيس الفهم الفني العميق والخبرة الواقعية
+
+محصورة فقط في المحور:
+[${axisLabel}]
+${focusString}
+
+❌ ممنوع الخروج إلى مواضيع أخرى داخل المحور
+❌ ممنوع التكرار
+❌ ممنوع الأسئلة العامة أو النظرية السطحية
+
+═══════════════════════════════════════════
+📊 مستوى الصعوبة المطلوب:
+🔴 VERY HARD — مستوى خبير
+
+■ تعريف المستوى المطلوب:
+- الأسئلة تستهدف مهني محترف يمتلك خبرة فعلية طويلة
+- تعتمد على معرفة تقنية دقيقة جداً داخل المهنة
+- الخيارات متقاربة وصعبة التمييز
+- الأخطاء الشائعة الواقعية يجب أن تظهر داخل الخيارات
+- لا يمكن حل السؤال بالفطرة أو التخمين
+- يتطلب فهم إجراءات العمل الفعلية والمخاطر المهنية الحقيقية
+
+🎯 المستوى المعرفي المطلوب:
+K1 — Recall (استدعاء معرفي مباشر)
+
+لكن بصعوبة عالية جداً عبر:
+- التفاصيل المهنية الدقيقة
+- المصطلحات الفنية
+- القيم التشغيلية
+- الإجراءات الصحيحة المحددة
+- ترتيب الخطوات
+- أدوات ومعدات المهنة
+- اشتراطات السلامة الدقيقة
+- الحدود التشغيلية والمخاطر الواقعية
+
+═══════════════════════════════════════════
+⚠️ القواعد الحديدية — أي مخالفة تعتبر فشل:
+═══════════════════════════════════════════
+
+🔴 القاعدة 1: ممنوع السيناريوهات الطويلة
+- السؤال يجب أن يكون مباشر ومهني
+- لا تستخدم قصة أو حوار أو وصف مطول
+- يسمح فقط بسياق مهني قصير جداً عند الحاجة
+
+🔴 القاعدة 2: حظر الأسئلة السهلة
+- ممنوع أي سؤال يعرفه الشخص العادي
+- ممنوع الأسئلة التعليمية المبتدئة
+- كل سؤال يجب أن يحتوي نقطة تقنية دقيقة
+
+🔴 القاعدة 3: الخيارات الاحترافية
+- جميع الخيارات يجب أن تبدو صحيحة لغير الخبير
+- الفرق بين الخيارات يكون بتفصيلة مهنية دقيقة
+- ممنوع وجود خيار واضح جداً أو مضحك
+
+🔴 القاعدة 4: التركيز على المهنة نفسها
+- الأسئلة يجب أن تكون مرتبطة مباشرة بممارسات مهنة "${profName}"
+- تجنب المعلومات العامة غير المرتبطة بالعمل الميداني الحقيقي
+
+🔴 القاعدة 5: الشرح المهني الإجباري
+لكل سؤال:
+- شرح لماذا الإجابة الصحيحة صحيحة
+- شرح لماذا كل خيار خاطئ غير صحيح
+- التوضيح يجب أن يكون عملي وتقني
+
+🔴 نوع السؤال:
+- ${arabicQuestionType}
+- ${optionsCountInstruction}
+- خيار واحد صحيح
+- جميع الخيارات متقاربة بالطول
+
+═══════════════════════════════════════════
+📋 تنسيق الإخراج:
+JSON فقط بدون أي نص إضافي
+
+[{
+  "text": "السؤال المهني المباشر",
+  "explanation": "الشرح الفني التفصيلي الكامل",
+  "difficulty": "${difficultyValue}",
+  "axis": "${axis}",
+  "cognitiveLevel": "K1",
+  "options": [${optionsTemplate}
+  ]
+}]`;
+        }
 
         return `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
 خبرتك تزيد عن 20 عاماً في مهنة "${profName}".
 مهمتك صياغة ${questionCount} أسئلة دقيقة (Single Best Answer) 
-محصورة في المحور: [ ${axisLabel} ]${focusString}
+محصورة في المحور: [ ${axisLabel} ]
+
+🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:
+"${focusTopic.trim()}"
+تجنب المواضيع المتكررة الأخرى في هذا المحور.
 
 ═══════════════════════════════════════════
 📊 مستوى الصعوبة المطلوب: ${difficulty === "EXPERT" ? "💀 EXPERT — صعب جداً (120%)" : "🔴 HARD — صعب"}
@@ -209,7 +321,8 @@ ${typeInstruction}
                     professionId, 
                     axis, 
                     count: questionCount,
-                    difficulty,
+                    difficulty: difficulty === "K1" ? "HARD" : difficulty,
+                    cognitiveLevel: difficulty === "K1" ? "K1" : (difficulty === "EXPERT" ? "K3" : "K2"),
                     questionType,
                     focusTopic
                 })
@@ -458,6 +571,7 @@ ${typeInstruction}
                                                     <SelectContent>
                                                         <SelectItem value="HARD">🔴 HARD — صعب وواقعي (K2)</SelectItem>
                                                         <SelectItem value="EXPERT">💀 EXPERT — معقد للخبراء (K3)</SelectItem>
+                                                        <SelectItem value="K1">📘 K1 — معرفة مباشرة (K1)</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
@@ -596,7 +710,7 @@ ${typeInstruction}
                                 <Button variant="outline" onClick={() => setStep("input")}>العودة والتعديل</Button>
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                 <div className="p-4 rounded-xl bg-slate-50 border text-center">
                                     <p className="text-sm text-gray-500 mb-1">الأسئلة الصعبة (HARD)</p>
                                     <p className="text-2xl font-black text-slate-700">{previewStats?.hard}</p>
@@ -604,6 +718,10 @@ ${typeInstruction}
                                 <div className="p-4 rounded-xl bg-purple-50 border border-purple-100 text-center">
                                     <p className="text-sm text-purple-600 mb-1">الخبراء (EXPERT)</p>
                                     <p className="text-2xl font-black text-purple-700">{previewStats?.expert}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 text-center">
+                                    <p className="text-sm text-amber-600 mb-1">تذكر (K1)</p>
+                                    <p className="text-2xl font-black text-amber-700">{previewStats?.k1}</p>
                                 </div>
                                 <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-center">
                                     <p className="text-sm text-blue-600 mb-1">تطبيقي (K2)</p>

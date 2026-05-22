@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { normalizePhone } from "@/lib/phone-utils";
 
-// Normalize phone numbers by stripping all non-digit chars except leading +
-function normalizePhone(phone: string): string {
-    if (!phone) return "";
-    let cleaned = phone.replace(/[\s\-\(\)]/g, "");
-    if (!cleaned.startsWith("+")) cleaned = "+" + cleaned;
-    return cleaned;
-}
 
 export async function POST(request: Request) {
     try {
@@ -39,7 +33,15 @@ export async function POST(request: Request) {
             }
 
             // 2. Check if already verified
-            const otpRecord = await prisma.mockVisitorOtp.findUnique({ where: { phone: visitorPhone } });
+            const otpRecord = await prisma.mockVisitorOtp.findFirst({
+                where: {
+                    OR: [
+                        { phone: visitorPhone },
+                        { phone: phoneWithoutPlus },
+                        { phone: `+${phoneWithoutPlus}` }
+                    ]
+                }
+            });
             
             if (otpRecord?.verified) {
                 return NextResponse.json({ isVerified: true });
@@ -106,7 +108,15 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "رمز التحقق مطلوب" }, { status: 400 });
             }
 
-            const otpRecord = await prisma.mockVisitorOtp.findUnique({ where: { phone: visitorPhone } });
+            const otpRecord = await prisma.mockVisitorOtp.findFirst({
+                where: {
+                    OR: [
+                        { phone: visitorPhone },
+                        { phone: phoneWithoutPlus },
+                        { phone: `+${phoneWithoutPlus}` }
+                    ]
+                }
+            });
             
             if (!otpRecord || otpRecord.code !== otp) {
                 return NextResponse.json({ error: "رمز التحقق غير صحيح" }, { status: 400 });
@@ -115,8 +125,8 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "انتهت صلاحية الرمز، يرجى طلب رمز جديد" }, { status: 400 });
             }
             
-            // Mark as verified
-            await prisma.mockVisitorOtp.update({ where: { phone: visitorPhone }, data: { verified: true } });
+            // Mark as verified using the matched record's actual phone key
+            await prisma.mockVisitorOtp.update({ where: { phone: otpRecord.phone }, data: { verified: true } });
             
             return NextResponse.json({ success: true });
         }

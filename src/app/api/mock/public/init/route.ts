@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { ExamSessionStatus } from "@prisma/client";
+import { normalizePhone } from "@/lib/phone-utils";
 
-// Normalize phone numbers by stripping all non-digit chars except leading +
-function normalizePhone(phone: string): string {
-    if (!phone) return "";
-    // Remove spaces, dashes, parentheses
-    let cleaned = phone.replace(/[\s\-\(\)]/g, "");
-    // Ensure starts with +
-    if (!cleaned.startsWith("+")) cleaned = "+" + cleaned;
-    return cleaned;
-}
 
 export async function POST(request: Request) {
     try {
@@ -218,7 +210,15 @@ export async function POST(request: Request) {
             }
         });
 
-        const otpRecord = await prisma.mockVisitorOtp.findUnique({ where: { phone: visitorPhone } });
+        const otpRecord = await prisma.mockVisitorOtp.findFirst({
+            where: {
+                OR: [
+                    { phone: visitorPhone },
+                    { phone: phoneWithoutPlus },
+                    { phone: `+${phoneWithoutPlus}` }
+                ]
+            }
+        });
         
         if (!applicant && !otpRecord?.verified) {
             return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });

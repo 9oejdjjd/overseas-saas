@@ -39,30 +39,76 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         }
 
         // === ACCESS CONTROL ===
-        // Check if the viewer is an admin (bypass restrictions)
-        const adminSession = await getServerSession(authOptions);
-        const isAdmin = adminSession && hasPermission(adminSession.user.role, "MANAGE_SYSTEM");
+        const authSession = await getServerSession(authOptions);
+        const isAdmin = authSession && hasPermission(authSession.user.role, "MANAGE_SYSTEM");
+        const isSessionOwner = authSession?.user?.id && session.applicantId === authSession.user.id;
 
-        if (!isAdmin) {
-            // For non-admins: verify they are the original exam taker
+        if (!isAdmin && !isSessionOwner) {
+            // For non-admins/non-owners: verify they are the original exam taker
             const viewerIp = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
             const viewerFingerprint = request.headers.get("x-device-fingerprint") || "";
 
-            // Extract base fingerprint for comparison
-            let sessionBaseFingerprint = session.deviceFingerprint || "";
-            if (sessionBaseFingerprint.includes("-")) {
-                sessionBaseFingerprint = sessionBaseFingerprint.split("-")[0];
-            }
-            let viewerBaseFingerprint = viewerFingerprint;
-            if (viewerBaseFingerprint.includes("-")) {
-                viewerBaseFingerprint = viewerBaseFingerprint.split("-")[0];
-            }
+            // Robust IP cleaning
+            const cleanIp = (ip: string) => {
+                if (!ip) return "";
+                let cleaned = ip.trim();
+                if (cleaned.startsWith("::ffff:")) {
+                    cleaned = cleaned.substring(7);
+                }
+                return cleaned;
+            };
 
-            // Allow access if IP matches OR fingerprint matches
-            const ipMatch = viewerIp !== "unknown" && session.ipAddress === viewerIp;
-            const fpMatch = viewerBaseFingerprint && sessionBaseFingerprint && viewerBaseFingerprint === sessionBaseFingerprint;
+            const sessionIp = cleanIp(session.ipAddress || "");
+            const viewerIps = viewerIp.split(",").map(ip => cleanIp(ip));
 
-            if (!ipMatch && !fpMatch) {
+            // Smart subnet matching to handle dynamic mobile network IPs
+            const isSubnetMatch = (ip1: string, ip2: string) => {
+                if (!ip1 || !ip2) return false;
+                const parts1 = ip1.split(".");
+                const parts2 = ip2.split(".");
+                if (parts1.length === 4 && parts2.length === 4) {
+                    return parts1[0] === parts2[0] && parts1[1] === parts2[1] && parts1[2] === parts2[2];
+                }
+                const segments1 = ip1.split(":");
+                const segments2 = ip2.split(":");
+                if (segments1.length >= 4 && segments2.length >= 4) {
+                    return segments1[0] === segments2[0] && 
+                           segments1[1] === segments2[1] && 
+                           segments1[2] === segments2[2] && 
+                           segments1[3] === segments2[3];
+                }
+                return false;
+            };
+
+            const ipExactMatch = sessionIp && viewerIps.includes(sessionIp);
+            const ipSubnetMatch = sessionIp && viewerIps.some(vip => isSubnetMatch(sessionIp, vip));
+
+            // Parse composite device fingerprint (browserFingerprint-localStorageUUID)
+            const parseFingerprint = (fp: string) => {
+                if (!fp) return { base: "", local: "" };
+                const parts = fp.split("-");
+                return {
+                    base: parts[0] || "",
+                    local: parts[1] || ""
+                };
+            };
+
+            const sessFp = parseFingerprint(session.deviceFingerprint || "");
+            const viewFp = parseFingerprint(viewerFingerprint);
+
+            const baseMatch = sessFp.base && viewFp.base && sessFp.base !== "fallback" && viewFp.base !== "fallback" && sessFp.base === viewFp.base;
+            const localMatch = sessFp.local && viewFp.local && sessFp.local === viewFp.local;
+            const fpMatch = baseMatch || localMatch;
+
+            // Relaxed authorization to prevent false positives:
+            // 1. Private sessions (registered users) can view their results on any device.
+            // 2. If fingerprinting is blocked, missing, or unknown in DB/client, we bypass locking.
+            const isPrivateSession = session.type === "PRIVATE";
+            const isFingerprintMissing = !sessFp.base || !viewFp.base || sessFp.base === "unknown" || viewFp.base === "unknown";
+
+            const isAuthorized = isPrivateSession || ipExactMatch || ipSubnetMatch || fpMatch || isFingerprintMissing;
+
+            if (!isAuthorized) {
                 // Return a limited result (score only, no answers/explanations)
                 return NextResponse.json({
                     id: session.id,

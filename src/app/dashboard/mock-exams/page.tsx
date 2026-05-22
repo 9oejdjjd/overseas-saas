@@ -131,7 +131,7 @@ export default function MockExamsAdminPage() {
     // Stats from sessions
     const total = sessions.reduce((acc, g) => acc + g.totalAttempts, 0);
     const passed = sessions.filter(g => g.isPassed).length;
-    const failed = sessions.filter(g => !g.isPassed && g.status === "SUBMITTED").length;
+    const failed = sessions.filter(g => !g.isPassed && ["SUBMITTED", "TIMEOUT", "EXPIRED"].includes(g.status)).length;
     const pending = sessions.reduce((acc, g) => acc + g.sessions.filter((s:any) => s.status === "STARTED" || s.status === "RESUMED").length, 0);
     const suspiciousCount = sessions.filter(g => g.suspicionLevel && g.suspicionLevel !== "CLEAN").length;
     const criticalCount = sessions.filter(g => g.suspicionLevel === "CRITICAL").length;
@@ -344,6 +344,10 @@ export default function MockExamsAdminPage() {
                                                             <Badge variant="destructive" className="bg-red-600">محظور</Badge>
                                                         ) : group.status === "SUBMITTED" ? (
                                                             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">مكتمل</Badge>
+                                                        ) : group.status === "TIMEOUT" ? (
+                                                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">لم يكمل الاختبار</Badge>
+                                                        ) : group.status === "EXPIRED" ? (
+                                                            <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">لم يدخل الاختبار</Badge>
                                                         ) : (
                                                             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">قيد الاختبار</Badge>
                                                         )}
@@ -376,9 +380,21 @@ export default function MockExamsAdminPage() {
                                                         {new Date(group.createdAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <Button variant="outline" size="sm" onClick={() => toggleGroup(group.id)} className="gap-2 text-xs">
-                                                            <Eye className="w-3 h-3" /> التقييمات {group.totalAttempts}
-                                                        </Button>
+                                                        <div className="flex items-center gap-2">
+                                                            <Button variant="outline" size="sm" onClick={() => toggleGroup(group.id)} className="gap-2 text-xs">
+                                                                <Eye className="w-3 h-3" /> التقييمات {group.totalAttempts}
+                                                            </Button>
+                                                            {!group.isBanned && (
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="sm" 
+                                                                    onClick={() => stopAttempts(group.sessions[0])} 
+                                                                    className="gap-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 transition-all duration-150"
+                                                                >
+                                                                    <Ban className="w-3.5 h-3.5" /> حظر المستخدم
+                                                                </Button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                                 {isExpanded && (
@@ -449,7 +465,9 @@ export default function MockExamsAdminPage() {
                                                                 {session.status === "SUBMITTED" ? (
                                                                     <span className="text-xs text-green-600 font-medium">مكتمل</span>
                                                                 ) : session.status === "TIMEOUT" ? (
-                                                                    <span className="text-xs text-red-500 font-medium">انتهى الوقت</span>
+                                                                    <span className="text-xs text-red-500 font-medium">لم يكمل الاختبار</span>
+                                                                ) : session.status === "EXPIRED" ? (
+                                                                    <span className="text-xs text-gray-500 font-medium">لم يدخل الاختبار</span>
                                                                 ) : (
                                                                     <span className="text-xs text-orange-500 font-medium">جاري</span>
                                                                 )}

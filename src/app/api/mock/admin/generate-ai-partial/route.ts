@@ -15,7 +15,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { professionId, axis, count, difficulty = "HARD", questionType = "MCQ", focusTopic = "" } = body;
+        const { professionId, axis, count, difficulty = "HARD", cognitiveLevel = "K2", questionType = "MCQ", focusTopic = "" } = body;
 
         if (!professionId || !axis || !count || count < 1 || count > 20) {
             return NextResponse.json({ error: "Invalid parameters. Required: professionId, axis, count (1-20)" }, { status: 400 });
@@ -68,7 +68,117 @@ export async function POST(request: Request) {
 
         const focusString = focusTopic.trim() ? `\n🎯 ركز جداً في الأسئلة على الموضوع الدقيق التالي حصراً:\n"${focusTopic.trim()}"\nتجنب المواضيع المتكررة الأخرى في هذا المحور.` : "";
 
-        const promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+        let promptTemplate = "";
+
+        if (cognitiveLevel === "K1" || difficulty === "K1") {
+            const arabicQuestionType = questionType === "TRUE_FALSE" 
+                ? "صح وخطأ" 
+                : questionType === "FILL_BLANK" 
+                    ? "إكمال الفراغات" 
+                    : "اختيار من متعدد";
+
+            const optionsCountInstruction = questionType === "TRUE_FALSE" 
+                ? "خيارين فقط" 
+                : "4 خيارات فقط";
+
+            const difficultyValue = questionType === "MCQ" ? "VERY_HARD" : "HARD";
+
+            promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
+تمتلك خبرة تتجاوز 20 عاماً في مهنة "${profession.name}".
+
+مهمتك إنشاء ${count} أسئلة احترافية عالية الصعوبة من نوع:
+${arabicQuestionType} 
+ويجب أن تكون الأسئلة:
+- مباشرة على المهنة
+- عملية جداً
+- تعتمد على المعرفة المهنية الدقيقة
+- بدون سيناريوهات طويلة أو قصص
+- تقيس الفهم الفني العميق والخبرة الواقعية
+
+محصورة فقط في المحور:
+[${axisLabelArabic}]
+${focusString}
+
+❌ ممنوع الخروج إلى مواضيع أخرى داخل المحور
+❌ ممنوع التكرار
+❌ ممنوع الأسئلة العامة أو النظرية السطحية
+
+═══════════════════════════════════════════
+📊 مستوى الصعوبة المطلوب:
+🔴 VERY HARD — مستوى خبير
+
+■ تعريف المستوى المطلوب:
+- الأسئلة تستهدف مهني محترف يمتلك خبرة عملية فعالة
+- تعتمد على معرفة تقنية دقيقة جداً داخل المهنة
+- الخيارات متقاربة وصعبة التمييز
+- الأخطاء الشائعة الواقعية يجب أن تظهر داخل الخيارات
+- لا يمكن حل السؤال بالفطرة أو التخمين
+- يتطلب فهم إجراءات العمل الفعلية والمخاطر المهنية الحقيقية
+
+🎯 المستوى المعرفي المطلوب:
+K1 — Recall (استدعاء معرفي مباشر)
+
+لكن بصعوبة عالية جداً عبر:
+- التفاصيل المهنية الدقيقة
+- المصطلحات الفنية
+- القيم التشغيلية
+- الإجراءات الصحيحة المحددة
+- ترتيب الخطوات
+- أدوات ومعدات المهنة
+- اشتراطات السلامة الدقيقة
+- الحدود التشغيلية والمخاطر الواقعية
+
+═══════════════════════════════════════════
+⚠️ القواعد الحديدية — أي مخالفة تعتبر فشل:
+═══════════════════════════════════════════
+
+🔴 القاعدة 1: ممنوع السيناريوهات الطويلة
+- السؤال يجب أن يكون مباشر ومهني
+- لا تستخدم قصة أو حوار أو وصف مطول
+- يسمح فقط بسياق مهني قصير جداً عند الحاجة
+
+🔴 القاعدة 2: حظر الأسئلة السهلة
+- ممنوع أي سؤال يعرفه الشخص العادي
+- ممنوع الأسئلة التعليمية المبتدئة
+- كل سؤال يجب أن يحتوي نقطة تقنية دقيقة
+
+🔴 القاعدة 3: الخيارات الاحترافية
+- جميع الخيارات يجب أن تبدو صحيحة لغير الخبير
+- الفرق بين الخيارات يكون بتفصيلة مهنية دقيقة
+- ممنوع وجود خيار واضح جداً أو مضحك
+
+🔴 القاعدة 4: التركيز على المهنة نفسها
+- الأسئلة يجب أن تكون مرتبطة مباشرة بممارسات مهنة "${profession.name}"
+- تجنب المعلومات العامة غير المرتبطة بالعمل الميداني الحقيقي
+
+🔴 القاعدة 5: الشرح المهني الإجباري
+لكل سؤال:
+- شرح لماذا الإجابة الصحيحة صحيحة
+- شرح لماذا كل خيار خاطئ غير صحيح
+- التوضيح يجب أن يكون عملي وتقني
+
+🔴 نوع السؤال:
+- ${arabicQuestionType}
+- ${optionsCountInstruction}
+- خيار واحد صحيح
+- جميع الخيارات متقاربة بالطول
+
+═══════════════════════════════════════════
+📋 تنسيق الإخراج:
+JSON فقط بدون أي نص إضافي
+
+[{
+  "text": "السؤال المهني المباشر",
+  "explanation": "الشرح الفني التفصيلي الكامل",
+  "difficulty": "${difficultyValue}",
+  "axis": "${axis}",
+  "cognitiveLevel": "K1",
+  "type": "${questionType}",
+  "options": [${optionsTemplate}
+  ]
+}]`;
+        } else {
+            promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
 خبرتك تزيد عن 20 عاماً في مهنة "${profession.name}".
 مهمتك صياغة ${count} أسئلة دقيقة (Single Best Answer) 
 محصورة في المحور: [ ${axisLabelArabic} ]
@@ -123,6 +233,7 @@ ${typeInstruction}
   "options": [${optionsTemplate}
   ]
 }]`;
+        }
 
         console.log(`[AI Gen Partial] 🔄 Generating ${count} questions for axis [${axis}] - profession: "${profession.name}"`);
 
@@ -159,19 +270,25 @@ ${typeInstruction}
 
         // Save questions sequentially
         let savedCount = 0;
+        const expectedOptionsLength = questionType === "TRUE_FALSE" ? 2 : 4;
+
         for (const q of generatedQuestions) {
-            if (q.text && q.options && q.options.length === 4) {
+            if (q.text && q.options && q.options.length === expectedOptionsLength) {
                 const correctCount = q.options.filter((o: any) => o.isCorrect).length;
                 if (correctCount === 1) {
                     try {
+                        const finalDifficulty = (q.difficulty === "VERY_HARD" || q.difficulty === "K1") ? "HARD" : (q.difficulty || difficulty || "HARD");
+                        const finalCognitiveLevel = (q.cognitiveLevel === "K1" || q.difficulty === "VERY_HARD" || q.difficulty === "K1" || cognitiveLevel === "K1") ? "K1" : (q.cognitiveLevel || cognitiveLevel || "K2");
+
                         await prisma.question.create({
                             data: {
                                 professionId,
                                 text: q.text,
                                 explanation: q.explanation,
-                                difficulty: q.difficulty || "HARD",
-                                cognitiveLevel: q.cognitiveLevel || "K2",
+                                difficulty: finalDifficulty as any,
+                                cognitiveLevel: finalCognitiveLevel,
                                 axis: axis as any,
+                                type: (q.type || questionType) as any,
                                 options: {
                                     create: q.options.map((opt: any) => ({
                                         text: opt.text,

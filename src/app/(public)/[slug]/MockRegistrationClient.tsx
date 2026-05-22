@@ -54,6 +54,7 @@ export default function MockRegistrationPage() {
     const [timeLeft, setTimeLeft] = useState(300); // 5 minutes = 300 seconds
     const [canResend, setCanResend] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const fingerprintRef = useRef<string>("unknown-device");
 
     const filteredCountries = countries.filter(c => 
         c.name.includes(searchQuery) || c.code.includes(searchQuery)
@@ -64,6 +65,16 @@ export default function MockRegistrationPage() {
         visitorPhone: "",
         termsAccepted: false,
     });
+
+    useEffect(() => {
+        getDeviceFingerprint()
+            .then(fp => {
+                fingerprintRef.current = fp;
+            })
+            .catch(err => {
+                console.warn("Failed to pre-load fingerprint:", err);
+            });
+    }, []);
 
     useEffect(() => {
         let timer: NodeJS.Timeout;
@@ -194,6 +205,7 @@ export default function MockRegistrationPage() {
     };
 
     const handleSubmit = async () => {
+        if (loading) return; // حماية من الضغط المزدوج
         if (!formData.termsAccepted) {
             setError("يرجى الموافقة على الشروط والأحكام أولاً.");
             return;
@@ -203,11 +215,28 @@ export default function MockRegistrationPage() {
         setError("");
 
         try {
-            const fingerprint = await getDeviceFingerprint();
+            // استخدام البصمة المحملة مسبقاً مع fallback
+            let fingerprint = fingerprintRef.current;
+            if (fingerprint === "unknown-device") {
+                try {
+                    fingerprint = await Promise.race([
+                        getDeviceFingerprint(),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error("timeout")), 4000)
+                        )
+                    ]);
+                } catch (e) {
+                    console.warn("Fingerprint generation failed or timed out, using fallback", e);
+                }
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
             const res = await fetch("/api/mock/public/init", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                signal: controller.signal,
                 body: JSON.stringify({
                     visitorName: formData.visitorName,
                     visitorPhone: `${countryCode}${formData.visitorPhone}`,
@@ -215,15 +244,23 @@ export default function MockRegistrationPage() {
                     deviceFingerprint: fingerprint
                 })
             });
+            clearTimeout(timeoutId);
 
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "حدث خطأ غير متوقع");
 
             if (data.token) {
                 router.push(`/session/${data.token}`);
+            } else {
+                throw new Error("لم يتم إنشاء الجلسة بشكل صحيح. يرجى المحاولة مرة أخرى.");
             }
         } catch (err: any) {
-            setError(err.message);
+            if (err.name === 'AbortError') {
+                setError("انتهت مهلة الاتصال بالخادم. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.");
+            } else {
+                setError(err.message || "حدث خطأ غير متوقع");
+            }
+        } finally {
             setLoading(false);
         }
     };

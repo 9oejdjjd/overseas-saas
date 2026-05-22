@@ -486,7 +486,17 @@ export default function ExamResultPage() {
                     </div>
 
                     <div className="space-y-6">
-                        {result.packageFeatures?.showResultQuestions === false ? (
+                        {result.restricted ? (
+                            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center">
+                                <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mb-6 border border-amber-500/20">
+                                    <Lock size={36} className="text-amber-400 animate-pulse" />
+                                </div>
+                                <h3 className="text-xl md:text-2xl font-black text-white mb-3">عرض التفاصيل مقيد أمنياً</h3>
+                                <p className="text-slate-400 text-sm md:text-base max-w-md mx-auto leading-relaxed font-bold">
+                                    لحماية خصوصية الأسئلة وبنك الاختبارات التجريبية من الكشط والتسريب، يتم عرض إجاباتك وتصحيحها بالكامل فقط على نفس الجهاز أو الهاتف والمتصفح الذي أديت منه الاختبار الفعلي.
+                                </p>
+                            </div>
+                        ) : result.packageFeatures?.showResultQuestions === false ? (
                             <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center">
                                 <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6 border border-white/5">
                                     <Lock size={36} className="text-slate-400" />

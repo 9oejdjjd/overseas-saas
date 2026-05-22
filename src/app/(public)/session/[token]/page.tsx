@@ -66,6 +66,7 @@ export default function ExamSessionPage() {
     const [countryCode, setCountryCode] = useState("+967");
     const [showCountryDropdown, setShowCountryDropdown] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [loadingLonger, setLoadingLonger] = useState(false);
 
     const filteredCountries = countries.filter(c => 
         c.name.includes(searchQuery) || c.code.includes(searchQuery)
@@ -75,9 +76,29 @@ export default function ExamSessionPage() {
         fetchInfo();
     }, [token]);
 
+    useEffect(() => {
+        let timer: any = null;
+        if (status === "LOADING") {
+            setLoadingLonger(false);
+            timer = setTimeout(() => {
+                setLoadingLonger(true);
+            }, 6000);
+        } else {
+            setLoadingLonger(false);
+        }
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [status]);
+
     const fetchInfo = async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
         try {
-            const res = await fetch(`/api/mock/session/${token}/info`);
+            const res = await fetch(`/api/mock/session/${token}/info`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
 
@@ -106,8 +127,8 @@ export default function ExamSessionPage() {
             }
 
             if (data.status === "STARTED" || data.status === "RESUMED") {
-                // Pass phone AND name directly to avoid React state race condition
-                startExam(false, parsedPhone, initialName);
+                // Pass full phone AND name directly to avoid React state race condition
+                startExam(false, parsedPhone, initialName, rawPhone);
             } else if (data.status === "SUBMITTED") {
                 setStatus("ERROR");
                 setErrorMsg("لقد قمت بتسليم هذا الاختبار مسبقاً.");
@@ -118,13 +139,18 @@ export default function ExamSessionPage() {
                 // Session is NEW — check if visitor data was already collected from registration page
                 if (data.visitorName && data.visitorPhone) {
                     // Data already collected & validated in /[slug] registration → skip WELCOME/TERMS
-                    startExam(false, parsedPhone, initialName);
+                    startExam(false, parsedPhone, initialName, rawPhone);
                 } else {
                     setStatus("WELCOME");
                 }
             }
         } catch (err: any) {
-            setErrorMsg(err.message || "فشل تحميل البيانات");
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                setErrorMsg("انتهت مهلة الاتصال بالخادم. الرجاء التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى.");
+            } else {
+                setErrorMsg(err.message || "فشل تحميل البيانات");
+            }
             setStatus("ERROR");
         }
     };
@@ -150,7 +176,7 @@ export default function ExamSessionPage() {
         return false;
     };
 
-    const startExam = async (isNew = true, directPhone?: string, directName?: string) => {
+    const startExam = async (isNew = true, directPhone?: string, directName?: string, directFullPhone?: string) => {
         const phoneToUse = directPhone || editablePhone;
         const nameToUse = directName || editableName;
         const isPrivateSession = info?.type === "PRIVATE" && info?.applicantId;
@@ -177,16 +203,24 @@ export default function ExamSessionPage() {
             }
         }
         
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
         try {
             setIsSubmitting(true);
+            const fullPhone = isNew 
+                ? (phoneToUse ? `${countryCode}${phoneToUse}` : undefined)
+                : (directFullPhone || phoneToUse);
+
             const res = await fetch(`/api/mock/session/${token}/start`, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                signal: controller.signal,
                 body: JSON.stringify({ 
-                    phone: phoneToUse ? `${countryCode}${phoneToUse}` : undefined,
+                    phone: fullPhone,
                     name: nameToUse
                 })
             });
+            clearTimeout(timeoutId);
             const data = await res.json();
             if (!res.ok) {
                 if (data.error.includes("واتساب") || data.error.includes("الهاتف")) {
@@ -228,7 +262,12 @@ export default function ExamSessionPage() {
             setTimeLeft(Math.floor(remaining / 1000));
             setStatus("STARTED");
         } catch (err: any) {
-            setErrorMsg(err.message || "فشل بدء الاختبار");
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                setErrorMsg("انتهت مهلة الاتصال بالخادم. الرجاء التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى.");
+            } else {
+                setErrorMsg(err.message || "فشل بدء الاختبار");
+            }
             setStatus("ERROR");
         } finally {
             setIsSubmitting(false);
@@ -334,9 +373,21 @@ export default function ExamSessionPage() {
                         <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
                         <h2 className="text-2xl font-black text-slate-800 mb-4">تعذر المتابعة</h2>
                         <p className="text-slate-500 mb-8 leading-relaxed">{errorMsg}</p>
-                        <Button onClick={() => router.push("/")} className="w-full bg-[#16539a] hover:bg-[#1e66b8] h-14 text-lg font-bold rounded-2xl shadow-lg shadow-blue-900/20">
-                            العودة للرئيسية
-                        </Button>
+                        <div className="space-y-3">
+                            <Button 
+                                onClick={() => { setStatus("LOADING"); setErrorMsg(""); fetchInfo(); }} 
+                                className="w-full bg-[#16539a] hover:bg-[#1e66b8] h-14 text-lg font-bold rounded-2xl shadow-lg shadow-blue-900/20 text-white"
+                            >
+                                إعادة المحاولة
+                            </Button>
+                            <Button 
+                                onClick={() => router.push("/")} 
+                                variant="outline"
+                                className="w-full border border-slate-200 hover:bg-slate-50 h-14 text-lg font-bold rounded-2xl text-slate-600"
+                            >
+                                العودة للرئيسية
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -345,8 +396,13 @@ export default function ExamSessionPage() {
 
     if (status === "LOADING" || !info) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans gap-4">
                 <div className="w-16 h-16 border-4 border-[#16539a] border-t-transparent rounded-full animate-spin"></div>
+                {loadingLonger && (
+                    <p className="text-slate-500 text-sm animate-pulse font-medium">
+                        يستغرق هذا الأمر وقتاً أطول من المعتاد، يرجى الانتظار...
+                    </p>
+                )}
             </div>
         );
     }
