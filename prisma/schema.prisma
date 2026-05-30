@@ -8,16 +8,18 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  password     String
-  name         String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  active       Boolean       @default(true)
-  createdBy    String?
-  role         UserRole      @default(REGISTRATION_STAFF)
-  activityLogs ActivityLog[]
+  id                    String        @id @default(uuid())
+  email                 String        @unique
+  password              String
+  name                  String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  active                Boolean       @default(true)
+  createdBy             String?
+  role                  UserRole      @default(REGISTRATION_STAFF)
+  permissions           Json?
+  requirePasswordChange Boolean       @default(true)
+  activityLogs          ActivityLog[]
 }
 
 model Location {

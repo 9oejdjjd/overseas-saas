@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -96,9 +96,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             })
         ]);
 
-        // Send result via WhatsApp in the background (fire-and-forget) to prevent UI hanging
-        sendMockResultNotification(session, session.profession, passed).catch(e => {
-            console.error("Mock result notification error:", e);
+        // Send result via WhatsApp in the background using Next.js after() to prevent UI hanging AND avoid serverless freeze
+        after(async () => {
+            try {
+                await sendMockResultNotification(session, session.profession, passed);
+            } catch (e) {
+                console.error("Mock result background notification error:", e);
+            }
         });
 
         return NextResponse.json({

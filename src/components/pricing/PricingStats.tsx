@@ -1,84 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Building2, Settings, FileText } from "lucide-react";
+import { usePricingStats } from "@/hooks/pricing/usePricingStats";
+import { Building2, Settings, FileText, Landmark } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 export function PricingStats() {
-    const [stats, setStats] = useState({
-        locations: 0,
-        centers: 0,
-        packages: 0,
-        policies: 0
-    });
-
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const [locs, pkgs, pols] = await Promise.all([
-                    fetch("/api/locations").then(r => r.json()),
-                    fetch("/api/pricing/packages").then(r => r.json()),
-                    fetch("/api/pricing/policies").then(r => r.json())
-                ]);
-
-                const centerCount = locs.reduce((acc: number, loc: any) => acc + (loc.examCenters?.length || 0), 0);
-
-                setStats({
-                    locations: locs.length,
-                    centers: centerCount,
-                    packages: pkgs.length,
-                    policies: pols.length
-                });
-            } catch (e) {
-                console.error("Failed to fetch stats");
-            }
-        };
-        fetchStats();
-    }, []);
+    const { stats, loading } = usePricingStats();
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 text-right no-print" dir="rtl">
             <KpiCard
-                title="المواقع والمدن"
+                title="المواقع والمدن الجغرافية"
                 value={stats.locations}
-                icon={Building2}
+                icon={Landmark}
                 color="text-blue-600"
                 bg="bg-blue-50"
+                loading={loading}
             />
             <KpiCard
-                title="مراكز الاختبار"
+                title="مراكز الاختبار المعتمدة"
                 value={stats.centers}
                 icon={Building2}
                 color="text-purple-600"
                 bg="bg-purple-50"
+                loading={loading}
             />
             <KpiCard
-                title="باقات الأسعار"
+                title="باقات الأسعار والاختبارات"
                 value={stats.packages}
                 icon={Settings}
-                color="text-green-600"
-                bg="bg-green-50"
+                color="text-emerald-600"
+                bg="bg-emerald-50"
+                loading={loading}
             />
             <KpiCard
-                title="السياسات المفعلة"
+                title="السياسات والغرامات النشطة"
                 value={stats.policies}
                 icon={FileText}
-                color="text-orange-600"
-                bg="bg-orange-50"
+                color="text-amber-600"
+                bg="bg-amber-50"
+                loading={loading}
             />
         </div>
     );
 }
 
-function KpiCard({ title, value, icon: Icon, color, bg }: any) {
+function KpiCard({ title, value, icon: Icon, color, bg, loading }: any) {
     return (
-        <div className="p-6 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all">
-            <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-lg ${bg}`}>
-                    <Icon className={`h-6 w-6 ${color}`} />
+        <Card className="border border-slate-100/80 shadow-sm rounded-2xl overflow-hidden hover:shadow-md hover:border-slate-200 transition-all duration-300 bg-white">
+            <CardContent className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-2xl ${bg} ${color} shadow-inner`}>
+                        <Icon className="h-6 w-6" />
+                    </div>
                 </div>
-            </div>
-            <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-            <p className="text-2xl font-bold mt-2 tracking-tight">{value}</p>
-        </div>
+                <h3 className="text-xs font-bold text-slate-500">{title}</h3>
+                {loading ? (
+                    <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-lg mt-2"></div>
+                ) : (
+                    <p className="text-2xl font-black mt-2 tracking-tight text-slate-800 font-mono">{value}</p>
+                )}
+            </CardContent>
+        </Card>
     );
 }

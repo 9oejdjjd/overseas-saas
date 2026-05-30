@@ -21,6 +21,8 @@ export async function GET() {
                 email: true,
                 role: true,
                 active: true,
+                permissions: true,
+                requirePasswordChange: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -79,6 +81,8 @@ export async function POST(request: Request) {
                 email,
                 password: hashedPassword,
                 role: role || "REGISTRATION_STAFF",
+                permissions: body.permissions || null,
+                requirePasswordChange: true,
                 createdBy: session.user.id,
             },
             select: {
@@ -87,6 +91,8 @@ export async function POST(request: Request) {
                 email: true,
                 role: true,
                 active: true,
+                permissions: true,
+                requirePasswordChange: true,
                 createdAt: true,
             },
         });

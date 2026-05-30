@@ -5,6 +5,7 @@ export const userCreateSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   role: z.enum(["ADMIN", "REGISTRATION_STAFF", "ACCOUNTANT", "FOLLOW_UP_STAFF"]).optional(),
+  permissions: z.any().optional(),
 });
 
 export const userUpdateSchema = z.object({
@@ -13,6 +14,7 @@ export const userUpdateSchema = z.object({
   password: z.string().min(6).optional(),
   role: z.enum(["ADMIN", "REGISTRATION_STAFF", "ACCOUNTANT", "FOLLOW_UP_STAFF"]).optional(),
   active: z.boolean().optional(),
+  permissions: z.any().optional(),
 });
 
 export const sessionStartSchema = z.object({

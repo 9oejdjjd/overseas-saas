@@ -59,6 +59,9 @@ export default function ExamSessionPage() {
         answersRef.current = answers;
     }, [answers]);
     
+    // Proactive WhatsApp Render Wakeup Sent Tracking
+    const wakeupSentRef = useRef(false);
+    
     const [editablePhone, setEditablePhone] = useState("");
     const [editableName, setEditableName] = useState("");
     const [nameError, setNameError] = useState("");
@@ -301,6 +304,20 @@ export default function ExamSessionPage() {
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
+
+    // SMART PROACTIVE WAKEUP: Dual-trigger to wake Render WhatsApp API
+    useEffect(() => {
+        if (status !== "STARTED" || wakeupSentRef.current) return;
+
+        const isTimeTrigger = timeLeft > 0 && timeLeft <= 300; // 5 minutes or less
+        const isQuestionTrigger = questions.length > 0 && currentQuestionIdx >= questions.length - 3; // Last 3 questions
+
+        if (isTimeTrigger || isQuestionTrigger) {
+            wakeupSentRef.current = true;
+            console.log("[Wakeup] Proactively waking up Render WhatsApp server...");
+            fetch("/api/automation/wake-whatsapp", { method: "POST" }).catch(() => {});
+        }
+    }, [status, timeLeft, currentQuestionIdx, questions.length]);
 
     const handleSelectOption = (questionId: string, optionId: string) => {
         setAnswers(prev => {

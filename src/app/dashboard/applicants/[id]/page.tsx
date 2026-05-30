@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, XCircle, MoreVertical, FileDown, Trash2, Edit } from "lucide-react";
+import { ArrowRight, XCircle, MoreVertical, FileDown, Trash2, Edit, Loader2, ShieldAlert } from "lucide-react";
 import { useApplicantData } from "@/hooks/useApplicantData";
 import { ApplicantAdminDashboard } from "@/components/ApplicantAdminDashboard";
 import { ApplicantProfileHero } from "@/components/applicants/ApplicantProfileHero";
@@ -15,10 +15,27 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSession } from "next-auth/react";
+import { hasAccess } from "@/lib/rbac";
+
+function AccessDenied() {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-6 text-center bg-white border border-gray-100 rounded-2xl shadow-sm w-full animate-in fade-in duration-300">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <ShieldAlert className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">عذراً، الوصول غير مصرح به</h2>
+            <p className="text-gray-500 text-sm max-w-md">
+                ليس لديك الصلاحيات الكافية للوصول إلى هذه الصفحة أو هذا القسم. يرجى مراجعة مدير النظام للحصول على الصلاحيات اللازمة.
+            </p>
+        </div>
+    );
+}
 
 export default function ApplicantDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const { data: session, status } = useSession();
 
     const {
         applicant,
@@ -31,6 +48,22 @@ export default function ApplicantDetailPage() {
         loading,
         refresh
     } = useApplicantData(params.id as string);
+
+    // NextAuth Session Check
+    if (status === "loading") {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="text-center space-y-3">
+                    <Loader2 className="animate-spin h-10 w-10 text-indigo-600 mx-auto" />
+                    <p className="text-muted-foreground text-sm font-medium mt-2">جاري التحقق من الجلسة والصلاحيات...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!session || !hasAccess(session.user, "applicants.adminView")) {
+        return <AccessDenied />;
+    }
 
     // Loading State
     if (loading && !applicant) {
@@ -102,19 +135,25 @@ export default function ApplicantDetailPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem className="cursor-pointer">
-                                    <Edit className="h-4 w-4 ml-2" />
-                                    تعديل البيانات
-                                </DropdownMenuItem>
+                                {hasAccess(session?.user, "applicants.create") && (
+                                    <DropdownMenuItem className="cursor-pointer">
+                                        <Edit className="h-4 w-4 ml-2" />
+                                        تعديل البيانات
+                                    </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem className="cursor-pointer">
                                     <FileDown className="h-4 w-4 ml-2" />
                                     تصدير PDF
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
-                                    <Trash2 className="h-4 w-4 ml-2" />
-                                    حذف الملف
-                                </DropdownMenuItem>
+                                {hasAccess(session?.user, "applicants.delete") && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+                                            <Trash2 className="h-4 w-4 ml-2" />
+                                            حذف الملف
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

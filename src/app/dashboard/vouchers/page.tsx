@@ -1,557 +1,226 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useVouchersManagement } from "@/hooks/pricing/useVouchersManagement";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { 
+    PublicVouchers 
+} from "@/components/vouchers/PublicVouchers";
+import { 
+    PersonalVouchers 
+} from "@/components/vouchers/PersonalVouchers";
+import { 
+    CompensationVouchers 
+} from "@/components/vouchers/CompensationVouchers";
 import {
     Ticket,
-    Search,
-    Plus,
     Tag,
-    History,
+    User,
     RefreshCw,
     CheckCircle2,
-    X,
-    User,
-    Calendar,
-    Copy
+    History,
+    ShieldAlert,
+    Loader2
 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { hasAccess } from "@/lib/rbac";
+import { useState } from "react";
+
+function AccessDenied() {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-6 text-center bg-white border border-slate-100 rounded-3xl shadow-sm w-full animate-in fade-in-50">
+            <div className="w-16 h-16 bg-red-50 text-red-650 rounded-full flex items-center justify-center mb-4 border border-red-100">
+                <ShieldAlert className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">عذراً، الوصول غير مصرح به</h2>
+            <p className="text-slate-500 text-xs max-w-md leading-relaxed">
+                ليس لديك الصلاحيات الكافية للوصول إلى نظام إدارة القسائم وأكواد الخصم. يرجى مراجعة مدير النظام للحصول على الصلاحيات المطلوبة.
+            </p>
+        </div>
+    );
+}
 
 export default function VouchersPage() {
-    const [stats, setStats] = useState({ active: 0, used: 0, totalAmount: 0 });
-    const [loading, setLoading] = useState(true);
-    const [vouchers, setVouchers] = useState<any[]>([]);
-    const [locations, setLocations] = useState<any[]>([]); // New: for dropdown
+    const { data: session, status } = useSession();
+    const [activeTab, setActiveTab] = useState("public");
 
-    // Create Modal State
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [newVoucher, setNewVoucher] = useState({
-        code: "",
-        discountPercent: 10,
-        maxUses: 100,
-        expiryDate: "",
-        notes: ""
-    });
+    const {
+        vouchers,
+        locations,
+        stats,
+        loading,
+        creating,
+        showCreateModal,
+        setShowCreateModal,
+        newVoucher,
+        personalSearchTerm,
+        setPersonalSearchTerm,
+        foundApplicants,
+        selectedApplicant,
+        setSelectedApplicant,
+        personalVoucherType,
+        setPersonalVoucherType,
+        personalNotes,
+        setPersonalNotes,
+        personalDiscount,
+        setPersonalDiscount,
+        personalLocationId,
+        setPersonalLocationId,
+        fetchVouchers,
+        handleCreateVoucher,
+        generateRandomCode,
+        handlePersonalSearch,
+        handleCreatePersonalVoucher,
+        updateNewVoucherField
+    } = useVouchersManagement();
 
-    // Personal Voucher State
-    const [personalSearchTerm, setPersonalSearchTerm] = useState("");
-    const [foundApplicants, setFoundApplicants] = useState<any[]>([]);
-    const [selectedApplicant, setSelectedApplicant] = useState<any>(null);
-    const [personalVoucherType, setPersonalVoucherType] = useState("EXAM_RETAKE");
-    const [personalNotes, setPersonalNotes] = useState("");
-    const [personalDiscount, setPersonalDiscount] = useState("100");
-    const [personalLocationId, setPersonalLocationId] = useState("");
+    if (status === "loading") {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+                <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+                <p className="text-slate-400 text-xs animate-pulse font-bold">جاري تحميل الجلسة والتحقق من الصلاحيات...</p>
+            </div>
+        );
+    }
 
-    const [creating, setCreating] = useState(false);
-
-    const fetchVouchers = async () => {
-        try {
-            setLoading(true);
-            const res = await fetch('/api/vouchers');
-            if (res.ok) {
-                const data = await res.json();
-                setVouchers(data);
-
-                // Calculate Stats
-                const active = data.filter((v: any) => !v.isUsed).length;
-                const used = data.filter((v: any) => v.isUsed).length;
-                const totalComp = data
-                    .filter((v: any) => v.category === "COMPENSATION")
-                    .reduce((sum: number, v: any) => sum + (v.amount || 0), 0);
-
-                setStats({ active, used, totalAmount: totalComp });
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchLocations = async () => {
-        try {
-            const res = await fetch('/api/locations');
-            if (res.ok) setLocations(await res.json());
-        } catch (e) { console.error(e); }
-    };
-
-    useEffect(() => {
-        fetchVouchers();
-        fetchLocations();
-    }, []);
-
-    const handleCreateVoucher = async () => {
-        try {
-            setCreating(true);
-            const res = await fetch('/api/vouchers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    category: "PUBLIC",
-                    type: "EXAM", // Default underlying type
-                    code: newVoucher.code,
-                    discountPercent: Number(newVoucher.discountPercent),
-                    maxUses: Number(newVoucher.maxUses),
-                    expiryDate: newVoucher.expiryDate ? new Date(newVoucher.expiryDate).toISOString() : null,
-                    notes: newVoucher.notes
-                })
-            });
-
-            if (res.ok) {
-                setShowCreateModal(false);
-                setNewVoucher({ code: "", discountPercent: 10, maxUses: 100, expiryDate: "", notes: "" });
-                fetchVouchers();
-            } else {
-                alert("Failed to create voucher");
-            }
-        } catch (err) {
-            console.error(err);
-            alert("Error creating voucher");
-        } finally {
-            setCreating(false);
-        }
-    };
-
-    const generateRandomCode = () => {
-        const code = "PROMO-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-        setNewVoucher({ ...newVoucher, code });
-    };
-
-    // Personal Voucher Logic
-    const handlePersonalSearch = async (term: string) => {
-        setPersonalSearchTerm(term);
-        if (term.length < 3) return;
-        try {
-            const res = await fetch(`/api/applicants?search=${term}`);
-            if (res.ok) {
-                const data = await res.json();
-                const list = Array.isArray(data) ? data : (data.applicants || []);
-                setFoundApplicants(list);
-            }
-        } catch (e) { console.error(e); }
-    };
-
-    const handleCreatePersonalVoucher = async () => {
-        if (!selectedApplicant) return alert("اختر متقدم");
-        try {
-            setCreating(true);
-            const res = await fetch("/api/vouchers", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    category: "PERSONAL", // Explicitly set category
-                    applicantId: selectedApplicant.id,
-                    type: personalVoucherType,
-                    notes: personalNotes,
-                    discountPercent: parseFloat(personalDiscount) || 100,
-                    locationId: personalLocationId === "ALL" ? null : (personalLocationId || null)
-                })
-            });
-            if (res.ok) {
-                alert("تم إنشاء القسيمة");
-                setSelectedApplicant(null);
-                setPersonalSearchTerm("");
-                setPersonalNotes("");
-                setPersonalDiscount("100");
-                setPersonalLocationId("");
-                fetchVouchers();
-            } else {
-                alert("خطأ في الإنشاء");
-            }
-        } catch (e) { alert("خطأ"); } finally { setCreating(false); }
-    };
+    if (!session || !hasAccess(session.user, "pricing.access")) {
+        return <AccessDenied />;
+    }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-10">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">نظام القسائم المتقدم</h1>
-                    <p className="text-gray-500 mt-1">إدارة القسائم الشخصية، الأكواد العامة، والتعويضات التلقائية.</p>
+        <div className="space-y-8 p-6 max-w-7xl mx-auto text-right animate-in fade-in-50 duration-500" dir="rtl">
+            
+            {/* Page Header */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                <div className="space-y-1">
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">نظام القسائم وأكواد الخصم المتقدم</h1>
+                    <p className="text-slate-500 text-xs">إدارة القسائم الشخصية المعتمدة، الأكواد التسويقية العامة، ومحافظ التعويضات التلقائية.</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button onClick={fetchVouchers} variant="outline" size="icon">
-                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <div className="flex gap-2">
+                    <Button 
+                        onClick={fetchVouchers} 
+                        variant="outline" 
+                        size="icon"
+                        className="rounded-xl border-slate-200 h-10 w-10 hover:bg-slate-50 transition-colors shadow-sm"
+                        disabled={loading}
+                    >
+                        <RefreshCw className={`h-4 w-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
             </div>
 
-            {/* Stats Cards */}
+            {/* Premium Stats KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">القسائم النشطة</CardTitle>
-                        <Ticket className="h-4 w-4 text-blue-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.active}</div>
-                        <p className="text-xs text-muted-foreground">قسيمة جاهزة للاستخدام</p>
+                
+                {/* Active Vouchers */}
+                <Card className="border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300 bg-white">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-blue-500/5 rounded-full -mr-4 -mt-4 transition-all duration-300 group-hover:scale-125" />
+                    <CardContent className="p-5 flex items-center justify-between">
+                        <div className="space-y-1">
+                            <span className="text-xs font-semibold text-slate-400 block">القسائم والأكواد النشطة</span>
+                            <span className="text-2xl font-black text-slate-800 tracking-tight">{stats.active}</span>
+                            <p className="text-[10px] text-slate-400 font-bold block">قسيمة جاهزة ومتاحة للاستخدام</p>
+                        </div>
+                        <span className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl shadow-inner">
+                            <Ticket className="h-6 w-6" />
+                        </span>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">تم استخدامها</CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.used}</div>
-                        <p className="text-xs text-muted-foreground">قسيمة تم صرفها</p>
+
+                {/* Used Vouchers */}
+                <Card className="border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300 bg-white">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-emerald-500/5 rounded-full -mr-4 -mt-4 transition-all duration-300 group-hover:scale-125" />
+                    <CardContent className="p-5 flex items-center justify-between">
+                        <div className="space-y-1">
+                            <span className="text-xs font-semibold text-slate-400 block">القسائم المستعملة</span>
+                            <span className="text-2xl font-black text-slate-800 tracking-tight">{stats.used}</span>
+                            <p className="text-[10px] text-slate-400 font-bold block">قسيمة تم صرفها وإدماجها بالطلبات</p>
+                        </div>
+                        <span className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl shadow-inner">
+                            <CheckCircle2 className="h-6 w-6" />
+                        </span>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">قيمة التعويضات</CardTitle>
-                        <History className="h-4 w-4 text-orange-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalAmount.toLocaleString()} ر.ي</div>
-                        <p className="text-xs text-muted-foreground">إجمالي رصيد التعويضات</p>
+
+                {/* Compensation Value */}
+                <Card className="border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all duration-300 bg-white">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-amber-500/5 rounded-full -mr-4 -mt-4 transition-all duration-300 group-hover:scale-125" />
+                    <CardContent className="p-5 flex items-center justify-between">
+                        <div className="space-y-1">
+                            <span className="text-xs font-semibold text-slate-400 block">رصيد محافظ التعويضات</span>
+                            <span className="text-2xl font-black text-amber-600 tracking-tight">{stats.totalAmount.toLocaleString()} <span className="text-xs font-bold text-amber-500">ر.ي</span></span>
+                            <p className="text-[10px] text-slate-400 font-bold block">إجمالي رصيد الإلغاءات المسترجع للعملاء</p>
+                        </div>
+                        <span className="p-3.5 bg-amber-50 text-amber-600 rounded-2xl shadow-inner">
+                            <History className="h-6 w-6" />
+                        </span>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Main Tabs */}
-            <Tabs defaultValue="public" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mb-8">
-                    <TabsTrigger value="public" className="gap-2"><Tag className="h-4 w-4" /> الأكواد العامة</TabsTrigger>
-                    <TabsTrigger value="personal" className="gap-2"><User className="h-4 w-4" /> القسائم الشخصية</TabsTrigger>
-                    <TabsTrigger value="compensation" className="gap-2"><RefreshCw className="h-4 w-4" /> التعويضات</TabsTrigger>
+            {/* Tabs for different sections */}
+            <Tabs defaultValue="public" className="w-full" onValueChange={setActiveTab}>
+                <TabsList className="flex w-full md:w-fit bg-slate-100/80 p-1 rounded-2xl mb-8 gap-1">
+                    <TabsTrigger value="public" className="gap-2 rounded-xl text-xs font-bold px-6 py-3 transition-all">
+                        <Tag className="h-4 w-4" />
+                        الأكواد الترويجية العامة
+                    </TabsTrigger>
+                    <TabsTrigger value="personal" className="gap-2 rounded-xl text-xs font-bold px-6 py-3 transition-all">
+                        <User className="h-4 w-4" />
+                        القسائم الشخصية المعتمدة
+                    </TabsTrigger>
+                    <TabsTrigger value="compensation" className="gap-2 rounded-xl text-xs font-bold px-6 py-3 transition-all">
+                        <History className="h-4 w-4" />
+                        التعويضات ومحافظ الإلغاء
+                    </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="personal" className="space-y-6">
-                    {/* Create Personal Voucher Form */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>إصدار قسيمة جديدة</CardTitle>
-                            <CardDescription>إنشاء قسيمة خدمة مجانية (إعادة اختبار أو نقل) لمتقدم محدد.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label>البحث عن متقدم (الاسم أو رقم الجواز)</Label>
-                                    <div className="relative">
-                                        <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-                                        <Input
-                                            placeholder="ابحث..."
-                                            value={personalSearchTerm}
-                                            onChange={(e) => handlePersonalSearch(e.target.value)}
-                                            className="pr-9"
-                                        />
-                                        {personalSearchTerm && !selectedApplicant && foundApplicants.length > 0 && (
-                                            <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
-                                                {foundApplicants.map((app: any) => (
-                                                    <div
-                                                        key={app.id}
-                                                        className="p-2 hover:bg-gray-100 cursor-pointer text-sm"
-                                                        onClick={() => {
-                                                            setSelectedApplicant(app);
-                                                            setPersonalSearchTerm(app.fullName);
-                                                            setFoundApplicants([]);
-                                                        }}
-                                                    >
-                                                        <div className="font-bold">{app.fullName}</div>
-                                                        <div className="text-xs text-gray-500">{app.passportNumber} - {app.applicantCode}</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {selectedApplicant && (
-                                        <div className="text-sm bg-green-50 text-green-700 p-2 rounded border border-green-200 flex justify-between items-center">
-                                            <span>تم تحديد: {selectedApplicant.fullName}</span>
-                                            <Button variant="ghost" size="sm" onClick={() => { setSelectedApplicant(null); setPersonalSearchTerm(""); }} className="h-6 w-6 p-0 text-green-700 hover:text-green-800"><X className="h-4 w-4" /></Button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>نوع القسيمة</Label>
-                                    <Select value={personalVoucherType} onValueChange={setPersonalVoucherType}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="EXAM">قسيمة اختبار (أول مرة / إعادة)</SelectItem>
-                                            <SelectItem value="TRANSPORT_ONEWAY">نقل ذهاب (فقط)</SelectItem>
-                                            <SelectItem value="TRANSPORT_ROUNDTRIP">نقل ذهاب وعودة</SelectItem>
-                                            <SelectItem value="FULL_PROGRAM">قسيمة شاملة (تسجيل + اختبار + نقل)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>نسبة الخصم (%)</Label>
-                                    <div className="relative">
-                                        <Input
-                                            type="number"
-                                            min="1" max="100"
-                                            value={personalDiscount}
-                                            onChange={(e) => setPersonalDiscount(e.target.value)}
-                                            placeholder="100"
-                                        />
-                                        <span className="absolute left-3 top-2.5 text-gray-400 text-sm">%</span>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>تحديد مركز (اختياري - للقسيمة الشاملة)</Label>
-                                    <Select value={personalLocationId} onValueChange={setPersonalLocationId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="أي مركز" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="ALL">أي مركز</SelectItem>
-                                            {locations.map((loc: any) => (
-                                                <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label>ملاحظات (اختياري)</Label>
-                                    <Textarea
-                                        className="h-20"
-                                        placeholder="سبب المنح (مثال: توجيه من الإدارة...)"
-                                        value={personalNotes}
-                                        onChange={(e) => setPersonalNotes(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                            <div className="pt-4 mt-4 border-t flex justify-end">
-                                <Button onClick={handleCreatePersonalVoucher} disabled={!selectedApplicant || creating} className="bg-blue-600 hover:bg-blue-700 text-white">
-                                    {creating ? "جاري الإنشاء..." : "إصدار القسيمة"} <Plus className="h-4 w-4 mr-2" />
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>سجل القسائم الشخصية (Linked Vouchers)</CardTitle>
-                            <CardDescription>القسائم المرتبطة بمتقدم محدد.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-right">
-                                    <thead className="bg-gray-50/50 text-gray-500">
-                                        <tr>
-                                            <th className="px-6 py-3 font-medium">المتقدم</th>
-                                            <th className="px-6 py-3 font-medium">النوع</th>
-                                            <th className="px-6 py-3 font-medium">الخصم</th>
-                                            <th className="px-6 py-3 font-medium">الحالة</th>
-                                            <th className="px-6 py-3 font-medium">التاريخ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {vouchers.filter((v: any) => v.category === "PERSONAL").length === 0 ? (
-                                            <tr><td colSpan={5} className="text-center py-8 text-gray-500">لا توجد قسائم شخصية</td></tr>
-                                        ) : (
-                                            vouchers.filter((v: any) => v.category === "PERSONAL").map((v: any) => (
-                                                <tr key={v.id} className="hover:bg-gray-50/50 transition-colors">
-                                                    <td className="px-6 py-4 font-medium">{v.applicant?.fullName || "-"}</td>
-                                                    <td className="px-6 py-4 text-blue-600">{
-                                                        v.type === "FULL_PROGRAM" ? "برنامج شامل" :
-                                                            v.type === "EXAM" ? "إعادة اختبار" : v.type
-                                                    }</td>
-                                                    <td className="px-6 py-4">{v.discountPercent}%</td>
-                                                    <td className="px-6 py-4">
-                                                        <Badge variant={v.isUsed ? "secondary" : "outline"} className={v.isUsed ? "bg-gray-100" : "text-green-600 bg-green-50 border-green-200"}>
-                                                            {v.isUsed ? "منتهي" : "نشط"}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-gray-400">{new Date(v.createdAt).toLocaleDateString('ar-EG')}</td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* Tab content 1: Public Vouchers */}
+                <TabsContent value="public" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+                    <PublicVouchers 
+                        vouchers={vouchers}
+                        showCreateModal={showCreateModal}
+                        setShowCreateModal={setShowCreateModal}
+                        newVoucher={newVoucher}
+                        updateNewVoucherField={updateNewVoucherField}
+                        handleCreateVoucher={handleCreateVoucher}
+                        generateRandomCode={generateRandomCode}
+                        creating={creating}
+                    />
                 </TabsContent>
 
-                <TabsContent value="public" className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <div className="relative w-64">
-                            <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-                            <Input placeholder="بحث عن كود..." className="pr-9 h-9 text-xs" />
-                        </div>
-                        <Button onClick={() => setShowCreateModal(true)}>
-                            <Plus className="h-4 w-4 ml-2" />
-                            إنشاء كود جديد
-                        </Button>
-                    </div>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>الأكواد العامة (Promo Codes)</CardTitle>
-                            <CardDescription>أكواد خصم للتسويق والمسجلين الجدد.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {vouchers.filter((v: any) => v.category === "PUBLIC").length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-10 space-y-4">
-                                    <div className="p-4 bg-gray-100 rounded-full">
-                                        <Tag className="h-8 w-8 text-gray-400" />
-                                    </div>
-                                    <h3 className="text-lg font-medium">لا توجد أكواد عامة</h3>
-                                    <p className="text-gray-500 text-center max-w-sm">
-                                        يمكنك إنشاء أكواد خصم (مثلاً PROMO2025) ليستخدمها المتقدمون الجدد عند التسجيل.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-right">
-                                        <thead className="bg-gray-50/50 text-gray-500">
-                                            <tr>
-                                                <th className="px-6 py-3 font-medium">الكود</th>
-                                                <th className="px-6 py-3 font-medium">الخصم</th>
-                                                <th className="px-6 py-3 font-medium">الاستخدام</th>
-                                                <th className="px-6 py-3 font-medium">الحالة</th>
-                                                <th className="px-6 py-3 font-medium">تاريخ الانتهاء</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {vouchers.filter((v: any) => v.category === "PUBLIC").map((v: any) => (
-                                                <tr key={v.id} className="hover:bg-gray-50/50 transition-colors">
-                                                    <td className="px-6 py-4 font-bold font-mono text-blue-600 flex items-center gap-2">
-                                                        {v.code}
-                                                        <Copy className="h-3 w-3 text-gray-400 cursor-pointer hover:text-blue-500" />
-                                                    </td>
-                                                    <td className="px-6 py-4">{v.discountPercent}%</td>
-                                                    <td className="px-6 py-4">{v.usageCount || 0} / {v.maxUses || '∞'}</td>
-                                                    <td className="px-6 py-4">
-                                                        <Badge variant={v.isUsed ? "secondary" : "outline"} className={v.isUsed ? "bg-gray-100" : "text-green-600 bg-green-50 border-green-200"}>
-                                                            {v.isUsed ? "منتهي" : "نشط"}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-gray-500">{v.expiryDate ? new Date(v.expiryDate).toLocaleDateString('ar-EG') : 'مدى الحياة'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                {/* Tab content 2: Personal Vouchers */}
+                <TabsContent value="personal" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+                    <PersonalVouchers 
+                        vouchers={vouchers}
+                        locations={locations}
+                        personalSearchTerm={personalSearchTerm}
+                        setPersonalSearchTerm={setPersonalSearchTerm}
+                        foundApplicants={foundApplicants}
+                        selectedApplicant={selectedApplicant}
+                        setSelectedApplicant={setSelectedApplicant}
+                        personalVoucherType={personalVoucherType}
+                        setPersonalVoucherType={setPersonalVoucherType}
+                        personalNotes={personalNotes}
+                        setPersonalNotes={setPersonalNotes}
+                        personalDiscount={personalDiscount}
+                        setPersonalDiscount={setPersonalDiscount}
+                        personalLocationId={personalLocationId}
+                        setPersonalLocationId={setPersonalLocationId}
+                        handlePersonalSearch={handlePersonalSearch}
+                        handleCreatePersonalVoucher={handleCreatePersonalVoucher}
+                        creating={creating}
+                    />
                 </TabsContent>
 
-                <TabsContent value="compensation" className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>التعويضات التلقائية (Compensation)</CardTitle>
-                            <CardDescription>قسائم تم إنشاؤها تلقائياً عند إلغاء الحجوزات أو التذاكر.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {vouchers.filter((v: any) => v.category === "COMPENSATION").length === 0 ? (
-                                <p className="text-center py-8 text-gray-500">لا توجد تعويضات حالياً</p>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-right">
-                                        <thead className="bg-gray-50/50 text-gray-500">
-                                            <tr>
-                                                <th className="px-6 py-3 font-medium">المتقدم</th>
-                                                <th className="px-6 py-3 font-medium">قيمة التعويض</th>
-                                                <th className="px-6 py-3 font-medium">الرصيد المتبقي</th>
-                                                <th className="px-6 py-3 font-medium">السبب</th>
-                                                <th className="px-6 py-3 font-medium">التاريخ</th>
-                                                <th className="px-6 py-3 font-medium">الحالة</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {vouchers.filter((v: any) => v.category === "COMPENSATION").map((v: any) => (
-                                                <tr key={v.id} className="hover:bg-gray-50/50 transition-colors">
-                                                    <td className="px-6 py-4 font-medium">{v.applicant?.fullName || "غير معروف"}</td>
-                                                    <td className="px-6 py-4 text-orange-600 font-bold">{Number(v.amount).toLocaleString()} ر.ي</td>
-                                                    <td className="px-6 py-4">{Number(v.balance || v.amount).toLocaleString()} ر.ي</td>
-                                                    <td className="px-6 py-4 text-gray-500 text-xs max-w-[200px] truncate" title={v.notes}>
-                                                        {v.notes ? v.notes.split('[META')[0] : 'إلغاء تذكرة'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-gray-400">{new Date(v.createdAt).toLocaleDateString('ar-EG')}</td>
-                                                    <td className="px-6 py-4">
-                                                        <Badge variant={v.isUsed ? "secondary" : "outline"} className={v.isUsed ? "bg-gray-100" : "text-green-600 bg-green-50 border-green-200"}>
-                                                            {v.isUsed ? "مستخدم بالكامل" : "متوفر"}
-                                                        </Badge>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                {/* Tab content 3: Compensation Vouchers */}
+                <TabsContent value="compensation" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+                    <CompensationVouchers 
+                        vouchers={vouchers}
+                    />
                 </TabsContent>
             </Tabs>
-
-            {/* Create Dialog */}
-            <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>إنشاء كود خصم جديد</DialogTitle>
-                        <DialogDescription>سيتم إنشاء كود خصم عام يمكن استخدامه من قبل المتقدمين الجدد.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label>كود الخصم</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    value={newVoucher.code}
-                                    onChange={(e) => setNewVoucher({ ...newVoucher, code: e.target.value })}
-                                    placeholder="مثلاً PROMO2025"
-                                />
-                                <Button variant="outline" onClick={generateRandomCode}>توليد</Button>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label>نسبة الخصم (%)</Label>
-                                <Input
-                                    type="number"
-                                    value={newVoucher.discountPercent}
-                                    onChange={(e) => setNewVoucher({ ...newVoucher, discountPercent: Number(e.target.value) })}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>الحد الأقصى (عدد مرات)</Label>
-                                <Input
-                                    type="number"
-                                    value={newVoucher.maxUses}
-                                    onChange={(e) => setNewVoucher({ ...newVoucher, maxUses: Number(e.target.value) })}
-                                />
-                            </div>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>تاريخ الانتهاء (اختياري)</Label>
-                            <Input
-                                type="date"
-                                value={newVoucher.expiryDate}
-                                onChange={(e) => setNewVoucher({ ...newVoucher, expiryDate: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>ملاحظات</Label>
-                            <Textarea
-                                value={newVoucher.notes}
-                                onChange={(e) => setNewVoucher({ ...newVoucher, notes: e.target.value })}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCreateModal(false)}>إلغاء</Button>
-                        <Button onClick={handleCreateVoucher} disabled={creating}>
-                            {creating ? "جاري الإنشاء..." : "إنشاء الكود"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

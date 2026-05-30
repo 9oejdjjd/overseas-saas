@@ -35,6 +35,7 @@ export async function PATCH(
                 ...(validData.email && { email: validData.email }),
                 ...(validData.role && { role: validData.role }),
                 ...(validData.active !== undefined && { active: validData.active }),
+                ...(body.permissions !== undefined && { permissions: body.permissions }),
             },
             select: {
                 id: true,
@@ -42,6 +43,8 @@ export async function PATCH(
                 email: true,
                 role: true,
                 active: true,
+                permissions: true,
+                requirePasswordChange: true,
                 createdAt: true,
                 updatedAt: true,
             },

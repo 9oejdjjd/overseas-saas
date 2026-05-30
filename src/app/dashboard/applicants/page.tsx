@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Settings, RefreshCw } from "lucide-react";
+import { Plus, Settings, RefreshCw, Loader2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { ApplicantDetailModal } from "@/components/ApplicantDetailModal";
 import { ApplicantsDataTable } from "@/components/applicants/table/ApplicantsDataTable";
@@ -10,8 +10,25 @@ import { ActionCenter } from "@/components/applicants/ActionCenter";
 import { Applicant } from "@/types/applicant";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/simple-toast";
+import { useSession } from "next-auth/react";
+import { hasAccess } from "@/lib/rbac";
+
+function AccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[400px] p-6 text-center bg-white border border-gray-100 rounded-2xl shadow-sm w-full animate-in fade-in duration-300">
+      <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4">
+        <ShieldAlert className="w-8 h-8" />
+      </div>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">عذراً، الوصول غير مصرح به</h2>
+      <p className="text-gray-500 text-sm max-w-md">
+        ليس لديك الصلاحيات الكافية للوصول إلى هذه الصفحة أو هذا القسم. يرجى مراجعة مدير النظام للحصول على الصلاحيات اللازمة.
+      </p>
+    </div>
+  );
+}
 
 export default function ApplicantsPage() {
+  const { data: session, status } = useSession();
   // --- State for Server-Side Data ---
   const [data, setData] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,8 +162,20 @@ export default function ApplicantsPage() {
     };
   }, []);
 
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  if (!session || !hasAccess(session.user, "applicants.view")) {
+    return <AccessDenied />;
+  }
+
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -177,17 +206,19 @@ export default function ApplicantsPage() {
             <RefreshCw id="sync-btn" className="h-4 w-4" />
           </button>
 
-          <Link href="/dashboard/applicants/new">
-            <Button className="bg-[#16539a] hover:bg-[#1e66b8] shadow-md hover:shadow-lg transition-all gap-2">
-              <Plus className="h-4 w-4" />
-              إضافة متقدم
-            </Button>
-          </Link>
+          {hasAccess(session.user, "applicants.create") && (
+            <Link href="/dashboard/applicants/new">
+              <Button className="bg-[#16539a] hover:bg-[#1e66b8] shadow-md hover:shadow-lg transition-all gap-2">
+                <Plus className="h-4 w-4" />
+                إضافة متقدم
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
       {/* Action Center */}
-      <ActionCenter />
+      {hasAccess(session.user, "applicants.actions") && <ActionCenter />}
 
       {/* Main Table Content */}
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-1">

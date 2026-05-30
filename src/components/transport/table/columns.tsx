@@ -118,19 +118,36 @@ export const columns: ColumnDef<Trip>[] = [
     },
     {
         id: "seats",
-        header: "المقاعد",
+        header: "المقاعد والحجز",
         cell: ({ row }) => {
             const booked = row.original._count?.tickets || 0;
             const capacity = row.original.capacity;
-            const percentage = Math.round((booked / capacity) * 100);
+            const percentage = Math.min(100, Math.max(0, Math.round((booked / capacity) * 100)));
+            
+            // Premium Dynamic visual indicator colors
+            let barColor = "from-emerald-400 to-emerald-500 shadow-emerald-100";
+            let textColor = "text-emerald-600 font-bold";
+            let containerEffect = "";
+
+            if (percentage >= 95) {
+                barColor = "from-rose-500 to-rose-600 shadow-rose-200 animate-pulse";
+                textColor = "text-rose-600 font-extrabold animate-pulse";
+            } else if (percentage >= 70) {
+                barColor = "from-amber-400 to-amber-500 shadow-amber-100";
+                textColor = "text-amber-600 font-bold";
+            }
+
             return (
-                <div className="w-[80px]">
-                    <div className="flex justify-between text-xs mb-1">
-                        <span>{booked}/{capacity}</span>
-                        <span className={percentage > 90 ? "text-red-600" : "text-gray-600"}>{percentage}%</span>
+                <div className="w-[100px] text-right space-y-1" dir="rtl">
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-slate-500 font-mono">{booked} من {capacity}</span>
+                        <span className={textColor}>{percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${percentage > 90 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percentage}%` }}></div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/40">
+                        <div 
+                            className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-500 ease-out shadow-sm`} 
+                            style={{ width: `${percentage}%` }}
+                        ></div>
                     </div>
                 </div>
             );

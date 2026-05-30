@@ -1,4 +1,3 @@
-
 import { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
@@ -6,12 +5,16 @@ declare module "next-auth" {
         user: {
             id: string;
             role: string;
+            requirePasswordChange: boolean;
+            permissions: any;
         } & DefaultSession["user"];
     }
 
     interface User {
         id: string;
         role: string;
+        requirePasswordChange: boolean;
+        permissions: any;
     }
 }
 
@@ -19,5 +22,7 @@ declare module "next-auth/jwt" {
     interface JWT {
         id: string;
         role: string;
+        requirePasswordChange: boolean;
+        permissions: any;
     }
 }

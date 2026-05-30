@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { MessageCircle, Send, Loader2, Copy, CheckCircle2, Paperclip, FileText, X, Upload, Image as ImageIcon } from "lucide-react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useContextualMessage } from "@/hooks/messaging/useContextualMessage";
 import { useToast } from "@/components/ui/simple-toast";
 
 interface ContextualMessageButtonProps {
@@ -68,273 +67,46 @@ export function ContextualMessageButton({
     onSuccess,
     className,
 }: ContextualMessageButtonProps) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState("");
-    const [templateName, setTemplateName] = useState("");
-    const [alreadySent, setAlreadySent] = useState(false);
-    const [checkingStatus, setCheckingStatus] = useState(true);
-
-    // Attachment states
-    const [customAttachment, setCustomAttachment] = useState<File | null>(null);
-    const [customAttachmentPreview, setCustomAttachmentPreview] = useState<string | null>(null);
-    const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
-    const [generatingPdf, setGeneratingPdf] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
-    // Check if this message was already sent
-    useEffect(() => {
-        const checkSentStatus = async () => {
-            try {
-                const res = await fetch(`/api/messages?applicantId=${applicant.id}&trigger=${trigger}`);
-                const data = await res.json();
-                setAlreadySent(data.messages?.some((m: any) => m.status === "SENT") || false);
-            } catch (e) {
-                console.error("Failed to check message status", e);
-            } finally {
-                setCheckingStatus(false);
-            }
-        };
-        checkSentStatus();
-    }, [applicant.id, trigger]);
-
-    const handleGenerate = async () => {
-        setLoading(true);
-        setIsOpen(true);
-        try {
-            // Use Backend Engine to Parse Template
-            const response = await fetch("/api/messages/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    applicantId: applicant.id,
-                    trigger,
-                    ticketId: ticket?.id,
-                    // Pass additional custom variables here if needed
-                    customVars: {
-                        discountAmount: "---", // To be filled optionally by parent components if needed 
-                        voucherCode: "---",
-                    }
-                })
-            });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                setMessage(errData.error || "خطأ في توليد الرسالة من الخادم.");
-                setTemplateName("");
-                return;
-            }
-
-            const data = await response.json();
-            setTemplateName(data.templateName);
-            setMessage(data.message);
-
-        } catch (error) {
-            console.error(error);
-            setMessage("حدث خطأ في توليد الرسالة.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSend = async () => {
-        // Enforce attachment requirement
-        if (requireAttachment && !customAttachment) {
-            toast("يرجى إرفاق الملف المطلوب قبل الإرسال", "error");
-            return;
-        }
-
-        setLoading(true);
-        let finalMessage = message;
-        if (attachmentUrl) {
-            finalMessage += `\n\n📎 الملف المرفق:\n${attachmentUrl}`;
-        }
-
-        // Process custom attachment if any
-        let base64Data = null;
-        let fileName = null;
-
-        if (customAttachment) {
-            try {
-                base64Data = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(customAttachment);
-                });
-                fileName = customAttachment.name;
-            } catch (err) {
-                console.error("Failed to read attachment", err);
-                toast("فشل في قراءة المرفق", "error");
-                setLoading(false);
-                return;
-            }
-        }
-
-        try {
-            const sendResponse = await fetch("/api/messages/send", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    applicantId: applicant.id,
-                    trigger,
-                    message: finalMessage,
-                    attachments: attachmentUrl ? [attachmentUrl] : null,
-                    customAttachmentBase64: base64Data,
-                    customAttachmentName: fileName
-                })
-            });
-
-            if (!sendResponse.ok) {
-                const errData = await sendResponse.json();
-                toast(errData.error || "فشل إرسال الرسالة عبر Evolution API", "error");
-                setLoading(false);
-                return;
-            }
-
-            toast("تم إرسال الرسالة بنجاح عبر Evolution API", "success");
-            setIsOpen(false);
-            setAlreadySent(true);
-            if (onSuccess) onSuccess();
-
-        } catch (e) {
-            console.error("Failed to send message", e);
-            toast("حدث خطأ في طلب الإرسال", "error");
-        } finally {
-            setLoading(false);
-        }
-    };
+    const {
+        isOpen,
+        setIsOpen,
+        loading,
+        message,
+        setMessage,
+        templateName,
+        alreadySent,
+        checkingStatus,
+        customAttachment,
+        setCustomAttachment,
+        customAttachmentPreview,
+        setCustomAttachmentPreview,
+        generatedPdfUrl,
+        handleGenerate,
+        handleSend
+    } = useContextualMessage({
+        applicant,
+        trigger,
+        ticket,
+        attachmentUrl,
+        requireAttachment,
+        onSuccess
+    });
 
     const buttonLabel = label || TRIGGER_LABELS[trigger] || "إرسال رسالة";
 
-    // Render based on variant
-    if (variant === "mini") {
-        return (
-            <>
-                <Button
-                    onClick={handleGenerate}
-                    size="icon"
-                    className={cn(
-                        "h-8 w-8 rounded-full shadow-md transition-all",
-                        alreadySent
-                            ? "bg-gray-200 hover:bg-gray-300 text-gray-500"
-                            : "bg-green-500 hover:bg-green-600 text-white",
-                        className
-                    )}
-                    title={alreadySent ? `${buttonLabel} (تم الإرسال)` : buttonLabel}
-                    disabled={checkingStatus}
-                >
-                    {checkingStatus ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : alreadySent ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                    ) : (
-                        <MessageCircle className="h-4 w-4" />
-                    )}
-                </Button>
-                {renderDialog()}
-            </>
-        );
-    }
-
-    if (variant === "inline") {
-        return (
-            <>
-                <button
-                    onClick={handleGenerate}
-                    disabled={checkingStatus}
-                    className={cn(
-                        "inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md transition-colors",
-                        alreadySent
-                            ? "bg-green-100 text-green-700 hover:bg-green-200"
-                            : "bg-emerald-500 text-white hover:bg-emerald-600",
-                        className
-                    )}
-                >
-                    {checkingStatus ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : alreadySent ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                    ) : (
-                        <MessageCircle className="h-3 w-3" />
-                    )}
-                    {alreadySent ? "تم الإرسال" : buttonLabel}
-                </button>
-                {renderDialog()}
-            </>
-        );
-    }
-
-    if (variant === "success") {
-        return (
-            <>
-                <Button
-                    onClick={handleGenerate}
-                    disabled={checkingStatus}
-                    className={cn(
-                        "gap-2 shadow-sm transition-all",
-                        alreadySent
-                            ? "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200"
-                            : "bg-green-600 hover:bg-green-700 text-white",
-                        className
-                    )}
-                    variant={alreadySent ? "outline" : "default"}
-                >
-                    {checkingStatus ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : alreadySent ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                        <MessageCircle className="h-4 w-4" />
-                    )}
-                    {alreadySent ? `${buttonLabel} ✓` : buttonLabel}
-                    {attachmentUrl && <Paperclip className="h-3 w-3 opacity-70" />}
-                </Button>
-                {renderDialog()}
-            </>
-        );
-    }
-
-    // Default variant
-    return (
-        <>
-            <Button
-                onClick={handleGenerate}
-                disabled={checkingStatus}
-                className={cn(
-                    "gap-2 shadow-sm",
-                    alreadySent
-                        ? "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200"
-                        : "bg-green-600 hover:bg-green-700 text-white",
-                    className
-                )}
-                variant={alreadySent ? "outline" : "default"}
-            >
-                {checkingStatus ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                ) : alreadySent ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                    <MessageCircle className="h-4 w-4" />
-                )}
-                {alreadySent ? `${buttonLabel} ✓` : buttonLabel}
-                {attachmentUrl && <Paperclip className="h-3 w-3 opacity-70" />}
-            </Button>
-            {renderDialog()}
-        </>
-    );
-
-    function renderDialog() {
+    const renderDialog = () => {
         return (
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 rounded-2xl">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <MessageCircle className="h-5 w-5 text-green-600" />
+                        <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-50 font-bold">
+                            <MessageCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                             {templateName || TRIGGER_LABELS[trigger] || "رسالة"}
                             {alreadySent && (
-                                <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full border border-orange-200">
+                                <span className="bg-amber-100/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 text-[10px] px-2 py-0.5 rounded-full border border-amber-200/50 dark:border-amber-900/30 mr-2 font-bold animate-pulse">
                                     تم الإرسال مسبقاً ✅
                                 </span>
                             )}
@@ -345,15 +117,15 @@ export function ContextualMessageButton({
                     </DialogHeader>
 
                     <div className="py-4">
-                        {loading ? (
+                        {loading && !message ? (
                             <div className="flex justify-center py-8">
-                                <Loader2 className="animate-spin text-green-500 h-8 w-8" />
+                                <Loader2 className="animate-spin text-emerald-500 h-8 w-8" />
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <div className="bg-green-50 p-4 rounded-xl border border-green-100 rounded-tr-none">
+                                <div className="bg-emerald-50/40 dark:bg-slate-950 p-4 rounded-2xl border border-emerald-100/50 dark:border-slate-800 rounded-tr-none shadow-inner">
                                     <textarea
-                                        className="w-full bg-transparent border-none resize-none focus:ring-0 text-gray-800 text-sm leading-relaxed min-h-[150px] outline-none"
+                                        className="w-full bg-transparent border-none resize-none focus:ring-0 text-slate-800 dark:text-slate-200 text-sm leading-relaxed min-h-[160px] outline-none"
                                         value={message}
                                         onChange={e => setMessage(e.target.value)}
                                         dir="auto"
@@ -364,28 +136,28 @@ export function ContextualMessageButton({
                                 <div className="space-y-2">
                                     {/* Pre-defined attachment */}
                                     {(attachmentUrl || generatedPdfUrl) && (
-                                        <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                                            <FileText className="h-4 w-4 text-blue-600" />
-                                            <span className="text-blue-800 flex-1">{attachmentName || "ملف PDF التذكرة"}</span>
-                                            <Paperclip className="h-4 w-4 text-blue-400" />
+                                        <div className="flex items-center gap-2 p-2 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100/70 dark:border-blue-900/40 rounded-xl text-xs">
+                                            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                            <span className="text-blue-800 dark:text-blue-300 flex-1 truncate">{attachmentName || "ملف PDF التذكرة"}</span>
+                                            <Paperclip className="h-4 w-4 text-blue-400 shrink-0" />
                                         </div>
                                     )}
 
                                     {/* Custom attachment preview */}
                                     {customAttachment && (
-                                        <div className="flex items-center gap-2 p-2 bg-purple-50 border border-purple-200 rounded-lg text-sm">
+                                        <div className="flex items-center gap-2 p-2 bg-purple-50/55 dark:bg-purple-950/20 border border-purple-100/70 dark:border-purple-900/40 rounded-xl text-xs">
                                             {customAttachment.type.startsWith('image/') ? (
-                                                <ImageIcon className="h-4 w-4 text-purple-600" />
+                                                <ImageIcon className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
                                             ) : (
-                                                <FileText className="h-4 w-4 text-purple-600" />
+                                                <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
                                             )}
-                                            <span className="text-purple-800 flex-1 truncate">{customAttachment.name}</span>
+                                            <span className="text-purple-800 dark:text-purple-300 flex-1 truncate">{customAttachment.name}</span>
                                             <button
                                                 onClick={() => {
                                                     setCustomAttachment(null);
                                                     setCustomAttachmentPreview(null);
                                                 }}
-                                                className="text-purple-400 hover:text-purple-600"
+                                                className="text-purple-400 hover:text-rose-600 p-1"
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>
@@ -394,11 +166,11 @@ export function ContextualMessageButton({
 
                                     {/* Image preview */}
                                     {customAttachmentPreview && (
-                                        <div className="relative">
+                                        <div className="relative border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm max-h-36 flex items-center justify-center p-1 bg-slate-50 dark:bg-slate-950">
                                             <img
                                                 src={customAttachmentPreview}
                                                 alt="معاينة"
-                                                className="max-h-40 rounded-lg border shadow-sm mx-auto"
+                                                className="max-h-32 object-contain rounded-lg"
                                             />
                                         </div>
                                     )}
@@ -427,18 +199,18 @@ export function ContextualMessageButton({
                                             />
                                             <button
                                                 onClick={() => fileInputRef.current?.click()}
-                                                className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 px-2 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+                                                className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-950 border border-dashed border-slate-200 dark:border-slate-800 transition-colors w-full justify-center"
                                             >
                                                 <Upload className="h-4 w-4" />
-                                                إرفاق صورة أو ملف PDF
+                                                إرفاق صورة أو ملف PDF إضافي
                                             </button>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="flex justify-between text-xs text-gray-500 px-1">
+                                <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 font-mono">
                                     <span>
-                                        سيتم الإرسال إلى: <span className="font-bold font-mono">{applicant.whatsappNumber || applicant.phone}</span>
+                                        المستلم: <span>{applicant.whatsappNumber || applicant.phone}</span>
                                     </span>
                                     <span>{message.length} حرف</span>
                                 </div>
@@ -446,28 +218,126 @@ export function ContextualMessageButton({
                         )}
                     </div>
 
-                    <DialogFooter className="gap-2 sm:justify-between">
+                    <DialogFooter className="gap-2 sm:justify-between border-t border-slate-100 dark:border-slate-800 pt-3.5">
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
                                 navigator.clipboard.writeText(message);
-                                alert('تم النسخ');
+                                toast("تم نسخ نص الرسالة للحافظة", "success");
                             }}
-                            className="text-gray-500"
+                            className="text-slate-500 dark:text-slate-400 text-xs font-bold"
                         >
                             <Copy className="h-4 w-4 mr-1" /> نسخ النص
                         </Button>
                         <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => setIsOpen(false)}>إلغاء</Button>
-                            <Button onClick={handleSend} className="bg-green-600 hover:bg-green-700 gap-2">
-                                <Send className="h-4 w-4" />
-                                إرسال عبر واتساب
+                            <Button variant="outline" size="sm" onClick={() => setIsOpen(false)} className="rounded-xl">إلغاء</Button>
+                            <Button 
+                                onClick={handleSend} 
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-sm rounded-xl text-xs"
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        جاري الإرسال...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="h-3.5 w-3.5" />
+                                        إرسال عبر واتساب
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
         );
+    };
+
+    if (variant === "mini") {
+        return (
+            <>
+                <Button
+                    onClick={handleGenerate}
+                    size="icon"
+                    className={cn(
+                        "h-8 w-8 rounded-full shadow-md transition-all shrink-0",
+                        alreadySent
+                            ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500"
+                            : "bg-emerald-500 hover:bg-emerald-600 text-white",
+                        className
+                    )}
+                    title={alreadySent ? `${buttonLabel} (تم الإرسال)` : buttonLabel}
+                    disabled={checkingStatus}
+                >
+                    {checkingStatus ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : alreadySent ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                        <MessageCircle className="h-4 w-4" />
+                    )}
+                </Button>
+                {renderDialog()}
+            </>
+        );
     }
+
+    if (variant === "inline") {
+        return (
+            <>
+                <button
+                    onClick={handleGenerate}
+                    disabled={checkingStatus}
+                    className={cn(
+                        "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0",
+                        alreadySent
+                            ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 border border-emerald-100/50 dark:border-emerald-900/30"
+                            : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm",
+                        className
+                    )}
+                >
+                    {checkingStatus ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : alreadySent ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                        <MessageCircle className="h-3.5 w-3.5" />
+                    )}
+                    {alreadySent ? "تم الإرسال" : buttonLabel}
+                </button>
+                {renderDialog()}
+            </>
+        );
+    }
+
+    return (
+        <>
+            <Button
+                onClick={handleGenerate}
+                disabled={checkingStatus}
+                className={cn(
+                    "gap-2 shadow-sm font-bold rounded-xl transition-all shrink-0",
+                    alreadySent
+                        ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 border border-emerald-100/50 dark:border-emerald-900/30"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white",
+                    className
+                )}
+                variant={alreadySent ? "outline" : "default"}
+            >
+                {checkingStatus ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                ) : alreadySent ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                    <MessageCircle className="h-4 w-4" />
+                )}
+                {alreadySent ? `${buttonLabel} ✓` : buttonLabel}
+                {attachmentUrl && <Paperclip className="h-3.5 w-3.5 opacity-80" />}
+            </Button>
+            {renderDialog()}
+        </>
+    );
 }

@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X } from "lucide-react";
+import { X, Eye, EyeOff } from "lucide-react";
 
 interface DataTableProps<TData, TValue> {
     columns: ColumnDef<TData, TValue>[];
@@ -51,9 +51,26 @@ export function TripsDataTable<TData, TValue>({
     const [searchTerm, setSearchTerm] = useState("");
     const [routeFilter, setRouteFilter] = useState("");
     const [dateFilter, setDateFilter] = useState("");
+    const [showPast, setShowPast] = useState(false);
+
+    // Smart Client-Side Filtering logic for Past Trips
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const filteredData = data.filter((item: any) => {
+        // If user explicitly chooses a specific date, show it regardless of past/future
+        if (dateFilter) return true;
+        // If user toggles to show all past trips
+        if (showPast) return true;
+        // Default: only show trips from today onwards
+        if (!item.date) return true;
+        const tripDate = new Date(item.date);
+        tripDate.setHours(0, 0, 0, 0);
+        return tripDate >= today;
+    });
 
     const table = useReactTable({
-        data,
+        data: filteredData,
         columns,
         getCoreRowModel: getCoreRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
@@ -133,8 +150,34 @@ export function TripsDataTable<TData, TValue>({
                         <SelectItem value="CANCELLED">ملغية</SelectItem>
                     </SelectContent>
                 </Select>
-                {(statusFilter !== "ALL" || searchTerm || routeFilter || dateFilter) && (
-                    <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-red-500">
+
+                {/* Show/Hide Past Trips Toggle Button */}
+                <Button 
+                    variant={showPast ? "default" : "outline"} 
+                    size="sm" 
+                    type="button"
+                    onClick={() => setShowPast(!showPast)} 
+                    className={`h-9 gap-1.5 transition-all text-xs font-bold rounded-xl ${
+                        showPast 
+                            ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600' 
+                            : 'text-slate-600 hover:text-slate-900 border-slate-200 hover:bg-slate-50'
+                    }`}
+                >
+                    {showPast ? (
+                        <>
+                            <EyeOff className="h-4 w-4 ml-1" />
+                            إخفاء الرحلات السابقة
+                        </>
+                    ) : (
+                        <>
+                            <Eye className="h-4 w-4 ml-1" />
+                            عرض الرحلات السابقة
+                        </>
+                    )}
+                </Button>
+
+                {(statusFilter !== "ALL" || searchTerm || routeFilter || dateFilter || showPast) && (
+                    <Button variant="ghost" size="sm" onClick={() => { clearFilters(); setShowPast(false); }} className="h-9 px-2 text-red-500">
                         <X className="h-4 w-4 mr-1" /> مسح الفلاتر
                     </Button>
                 )}

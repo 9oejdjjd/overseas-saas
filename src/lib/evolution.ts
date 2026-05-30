@@ -193,3 +193,24 @@ export async function onWhatsApp(phone: string): Promise<boolean> {
         return true; // Fallback to avoid blocking users if API is down
     }
 }
+
+/**
+ * Proactively wake up Render server by pinging its connection state
+ */
+export async function wakeUpEvolutionServer(): Promise<boolean> {
+    if (!EVOLUTION_API_KEY) return false;
+    try {
+        const url = `${EVOLUTION_BASE_URL}/instance/connectionState/${EVOLUTION_INSTANCE}`;
+        // Low timeout so we don't block the caller if the server is starting up,
+        // but Render ingress will still receive the request and start container!
+        await axios.get(url, {
+            headers: { 'apikey': EVOLUTION_API_KEY },
+            timeout: 5000 
+        });
+        return true;
+    } catch (error) {
+        // Any error or timeout is expected when sleeping, but Render has started booting!
+        console.log("[Evolution] Wake-up ping sent to Render.");
+        return true;
+    }
+}
