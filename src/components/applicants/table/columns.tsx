@@ -63,6 +63,7 @@ const getTicketStatus = (app: ApplicantData) => {
 function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
+    const [copying, setCopying] = useState(false);
     const [creditInfo, setCreditInfo] = useState<{ hasCredits: boolean; remaining: number } | null>(null);
     const [checked, setChecked] = useState(false);
 
@@ -128,35 +129,86 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
         }
     };
 
+    const handleCopy = async () => {
+        if (noCredits) return;
+        setCopying(true);
+        try {
+            const genRes = await fetch("/api/messages/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    applicantId: applicant.isVisitor ? undefined : applicant.id,
+                    purchaseId: applicant.visitorPurchaseId || undefined,
+                    phone: applicant.phone,
+                    trigger: "ON_MOCK_EXAM_LINK",
+                })
+            });
+            if (!genRes.ok) throw new Error("Failed to generate");
+            const { message } = await genRes.json();
+            await navigator.clipboard.writeText(message);
+            // Optional: you could show a brief toast here if you import useToast
+        } catch (e) {
+            console.error("Copy error:", e);
+        } finally {
+            setCopying(false);
+        }
+    };
+
     return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className={cn(
-                            "h-8 w-8 p-0",
-                            noCredits ? "text-gray-300 cursor-not-allowed" :
-                            sent ? "text-green-600" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                        )}
-                        onClick={handleSend}
-                        disabled={sending || sent || !!noCredits}
-                    >
-                        {sending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : sent ? (
-                            <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                            <BookOpen className="h-4 w-4" />
-                        )}
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>{noCredits ? "لا يوجد رصيد اختبارات ❌" : sent ? "تم الإرسال ✓" : `إرسال رابط اختبار (متبقي: ${remainingText})`}</p>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+        <div className="flex items-center">
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className={cn(
+                                "h-8 w-8 p-0",
+                                noCredits ? "text-gray-300 cursor-not-allowed" :
+                                sent ? "text-green-600" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                            )}
+                            onClick={handleSend}
+                            disabled={sending || sent || !!noCredits}
+                        >
+                            {sending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : sent ? (
+                                <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                                <BookOpen className="h-4 w-4" />
+                            )}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{noCredits ? "لا يوجد رصيد اختبارات ❌" : sent ? "تم الإرسال ✓" : `إرسال رابط اختبار (متبقي: ${remainingText})`}</p>
+                    </TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className={cn(
+                                "h-8 w-8 p-0 text-slate-500 hover:text-slate-700 hover:bg-slate-100",
+                                noCredits ? "text-gray-300 cursor-not-allowed" : ""
+                            )}
+                            onClick={handleCopy}
+                            disabled={copying || !!noCredits}
+                        >
+                            {copying ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                            )}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>نسخ قالب رابط الاختبار التجريبي</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
     );
 }
 
@@ -196,13 +248,13 @@ export const columns: ColumnDef<ApplicantData>[] = [
                     <span className="font-bold text-gray-900">{row.getValue("fullName")}</span>
                     {row.original.isVisitor && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 bg-orange-50 text-orange-700">
-                            <Tag className="h-2.5 w-2.5 ml-0.5" /> زائر
+                            زائر
                         </Badge>
                     )}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center gap-2 font-mono">
                     {!row.original.isVisitor && <span className="bg-gray-100 px-1 rounded">{row.original.applicantCode || "PNR"}</span>}
-                    <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {row.original.phone}</span>
+                    <span>{row.original.phone}</span>
                 </div>
             </div>
         ),
@@ -221,8 +273,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
 
             return (
                 <div className="flex flex-col gap-1">
-                    <div className="text-xs font-semibold text-purple-700 flex items-center gap-1">
-                        <Beaker className="h-3 w-3" />
+                    <div className="text-xs font-semibold text-purple-700">
                         {mp.packageName || "مفرد"}
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -303,8 +354,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
             if (!status) return <span className="text-gray-300 text-xs">-</span>;
 
             return (
-                <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium w-fit", status.color)}>
-                    <status.icon className="h-3.5 w-3.5" />
+                <div className={cn("px-2 py-1 rounded-md text-xs font-medium w-fit", status.color)}>
                     {status.label}
                 </div>
             );
@@ -322,8 +372,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
 
             return (
                 <div className={cn("text-xs font-medium flex flex-col", isToday ? "text-green-600" : "")}>
-                    <span className="flex items-center gap-1">
-                        <CalendarClock className="h-3 w-3" />
+                    <span>
                         {d.toLocaleDateString("en-GB")}
                     </span>
                     <span className="text-[10px] text-muted-foreground">{row.original.examTime || ""}</span>

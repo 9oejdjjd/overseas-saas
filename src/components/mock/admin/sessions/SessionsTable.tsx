@@ -10,7 +10,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Loader2, ShieldAlert, Ban, Eye, MoreHorizontal, PlusCircle, Globe, Fingerprint, Users as UsersIcon, Phone as PhoneIcon } from "lucide-react";
+import { Loader2, ShieldAlert, Ban, Eye, MoreHorizontal, PlusCircle, Globe, Fingerprint, Users as UsersIcon, Phone as PhoneIcon, Activity, Copy } from "lucide-react";
 
 // مكون شارة مستويات الاشتباه الداخلي
 function SuspicionBadge({ level, score }: { level: string; score: number }) {
@@ -171,7 +171,7 @@ export function SessionsTable({
                                             <div className="flex gap-2 items-center">
                                                 <Badge variant="secondary" className="text-[9px] font-bold scale-90">{group.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
                                                 <span className="text-[10px] font-extrabold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
-                                                    {group.totalAttempts} / 3
+                                                    {group.totalAttempts} / {group.maxAttempts === -1 ? '∞' : (group.maxAttempts ?? 3)}
                                                 </span>
                                             </div>
                                         </td>
@@ -312,6 +312,13 @@ export function SessionsTable({
                                                                         className="flex justify-end gap-2 text-xs font-bold cursor-pointer hover:bg-slate-50 transition-colors"
                                                                     >
                                                                         المراجعة والتفاصيل <Eye className="h-4 w-4 text-blue-600" />
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem 
+                                                                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/session/${session.token}/result`)} 
+                                                                        disabled={session.status !== "SUBMITTED"} 
+                                                                        className="flex justify-end gap-2 text-xs font-bold cursor-pointer hover:bg-slate-50 transition-colors"
+                                                                    >
+                                                                        نسخ رابط النتيجة <Copy className="h-4 w-4 text-green-600" />
                                                                     </DropdownMenuItem>
                                                                     {canManageActions && (
                                                                         <>

@@ -111,7 +111,7 @@ export async function POST(request: Request) {
             let activePurchase = await prisma.mockExamPurchase.findFirst({
                 where: {
                     OR: [{ phone: visitorPhone }, { phone: phoneWithoutPlus }],
-                    status: "ACTIVE",
+                    status: { in: ["ACTIVE", "PAID"] },
                     isPaid: true,
                 },
                 orderBy: { createdAt: "desc" }
@@ -124,7 +124,21 @@ export async function POST(request: Request) {
             }
 
             if (!activePurchase) {
-                // Try to find a FREE package and auto-assign
+                // Check if they ever had a purchase (Free or Paid) that was exhausted
+                const pastPurchase = await prisma.mockExamPurchase.findFirst({
+                    where: {
+                        OR: [{ phone: visitorPhone }, { phone: phoneWithoutPlus }],
+                        status: { in: ["ACTIVE", "PAID"] },
+                        isPaid: true,
+                    },
+                    orderBy: { createdAt: "desc" }
+                });
+
+                if (pastPurchase) {
+                    return NextResponse.json({ error: "لقد استنفذت جميع محاولات باقاتك السابقة. يرجى الاشتراك في إحدى الباقات للاستمرار." }, { status: 403 });
+                }
+
+                // Try to find a FREE package and auto-assign since they are a new user
                 const freePackage = await prisma.mockExamPackage.findFirst({
                     where: { isFree: true, isActive: true },
                     orderBy: { sortOrder: "asc" }
@@ -220,9 +234,10 @@ export async function POST(request: Request) {
             }
         });
         
-        if (!applicant && !otpRecord?.verified) {
-            return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });
-        }
+        // TEMPORARY BYPASS: Removed strict verification check
+        // if (!applicant && !otpRecord?.verified) {
+        //     return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });
+        // }
 
         // --- 5. Create New Session ---
         const session = await prisma.examSession.create({

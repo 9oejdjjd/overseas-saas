@@ -686,21 +686,21 @@ export default function ExamSessionPage() {
                         </h1>
                         
                         <p className="text-slate-300/90 text-lg mb-8 max-w-md mx-auto leading-relaxed">
-                            سيتم إرسال نتيجتك إلى رقم الواتساب الخاص بك خلال لحظات.
+                            نظراً للتحديثات الحالية على سيرفر الواتساب، يرجى عرض النتيجة مباشرة من خلال الزر أدناه.
                         </p>
                         
-                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-10">
-                            <div className="flex items-center justify-center gap-3 text-[#25D366] mb-3">
-                                <Phone size={20} />
-                                <span className="font-bold text-lg">تابع رسائل الواتساب</span>
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
+                            <div className="flex items-center justify-center gap-3 text-blue-400 mb-3">
+                                <Activity size={20} />
+                                <span className="font-bold text-lg">عرض النتيجة الفوري</span>
                             </div>
-                            <p className="text-slate-400 text-sm leading-relaxed">
-                                تأكد من أن رقم الواتساب الذي أدخلته صحيح ومفعّل لاستلام النتيجة. إذا لم تصلك الرسالة خلال دقائق، يرجى التواصل مع الدعم.
-                            </p>
+                            <Button onClick={() => router.push(`/session/${token}/result`)} className="w-full h-16 text-xl font-bold bg-gradient-to-l from-[#5c9e45] to-green-600 hover:from-green-600 hover:to-[#5c9e45] text-white rounded-2xl shadow-xl shadow-green-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4 mt-4">
+                                عرض النتيجة الآن <ArrowLeft size={24} />
+                            </Button>
                         </div>
 
-                        <Button onClick={() => router.push("/")} className="w-full h-16 text-xl font-bold bg-gradient-to-l from-[#16539a] to-blue-600 hover:from-blue-700 hover:to-[#16539a] text-white rounded-2xl shadow-xl shadow-blue-900/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-4">
-                            العودة للرئيسية <ArrowLeft size={24} />
+                        <Button onClick={() => router.push("/")} variant="outline" className="w-full h-16 text-xl font-bold bg-transparent border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white rounded-2xl flex items-center justify-center gap-4">
+                            العودة للرئيسية
                         </Button>
                     </motion.div>
                 </div>

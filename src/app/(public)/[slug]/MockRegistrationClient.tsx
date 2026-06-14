@@ -136,14 +136,8 @@ export default function MockRegistrationPage() {
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "حدث خطأ أثناء فحص الرقم");
                 
-                if (data.requiresOtp) {
-                    setStep(3); // Go to OTP
-                    setTimeLeft(300);
-                    setCanResend(false);
-                    setOtp(["", "", "", "", "", ""]);
-                } else if (data.isVerified) {
-                    setStep(4); // Skip OTP, go to Terms
-                }
+                // TEMPORARY BYPASS: Direct to Terms (Step 4) due to WhatsApp server outage
+                setStep(4);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -307,41 +301,41 @@ export default function MockRegistrationPage() {
             <main className="flex-1 flex flex-col lg:flex-row w-full">
                 
                 {/* LEFT SIDE (VISUAL / INFO) — Hidden on mobile, compact bar shown instead */}
-                <div className="hidden lg:flex lg:w-[45%] bg-[#0a0f1c] relative flex-col justify-center p-14 xl:p-20 text-white overflow-hidden">
-                    <div className="absolute top-0 right-0 w-full h-full bg-[url('/noise.svg')] opacity-10 mix-blend-overlay"></div>
-                    <div className="absolute top-[-20%] right-[-20%] w-[600px] h-[600px] bg-[#16539a]/30 rounded-full blur-[120px] pointer-events-none"></div>
-                    <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-[#5c9e45]/20 rounded-full blur-[100px] pointer-events-none"></div>
+                <div className="hidden lg:flex lg:w-[45%] bg-gradient-to-br from-[#16539a]/5 via-white to-[#5c9e45]/5 relative flex-col justify-center p-14 xl:p-20 text-slate-800 overflow-hidden border-l border-slate-200/60">
+                    <div className="absolute top-0 right-0 w-full h-full bg-[url('/noise.svg')] opacity-[0.02] mix-blend-overlay"></div>
+                    <div className="absolute top-[-20%] right-[-20%] w-[600px] h-[600px] bg-[#16539a]/5 rounded-full blur-[120px] pointer-events-none"></div>
+                    <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-[#5c9e45]/5 rounded-full blur-[100px] pointer-events-none"></div>
 
-                    <div className="relative z-10">
-                        <div className="w-16 h-16 bg-white/10 border border-white/20 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                            <BookOpen size={32} className="text-[#5c9e45]" />
+                    <div className="relative z-10 text-right">
+                        <div className="w-16 h-16 bg-white border border-slate-200 shadow-sm rounded-2xl flex items-center justify-center mb-8">
+                            <BookOpen size={32} className="text-[#16539a]" />
                         </div>
                         
-                        <h1 className="text-3xl xl:text-4xl font-bold leading-tight mb-5">
+                        <h1 className="text-3xl xl:text-4xl font-black leading-tight mb-5 text-slate-900">
                             مرحباً بك في بوابة <br/>
-                            <span className="text-[#5c9e45]">الاعتماد المهني</span>
+                            <span className="text-[#16539a]">الاعتماد المهني</span>
                         </h1>
                         
-                        <p className="text-base text-slate-300 mb-5 max-w-md leading-relaxed">
-                            هذا اختبار تجريبي يحاكي أسلوب اختبار الاعتماد المهني السعودي لمهنة <span className="text-white font-bold">{profession?.name || "التخصص"}</span>. يساعدك على معرفة مستواك والتحضير للاختبار الحقيقي.
+                        <p className="text-base text-slate-600 mb-5 max-w-md leading-relaxed font-semibold">
+                            هذا اختبار تجريبي يحاكي أسلوب اختبار الاعتماد المهني السعودي لمهنة <span className="text-slate-950 font-bold">{profession?.name || "التخصص"}</span>. يساعدك على معرفة مستواك والتحضير للاختبار الحقيقي.
                         </p>
-                        <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-5">
-                            <p className="text-sm text-orange-300/80 font-semibold">⚠️ تنبيه: هذا الاختبار تجريبي تدريبي فقط ولا يمثل الاختبار الرسمي.</p>
+                        <div className="bg-orange-50/70 border border-orange-100/80 rounded-xl p-3 mb-5">
+                            <p className="text-sm text-orange-700 font-bold">⚠️ تنبيه: هذا الاختبار تجريبي تدريبي فقط ولا يمثل الاختبار الرسمي.</p>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-4 rounded-2xl">
+                            <div className="flex items-center gap-3 bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm">
                                 <Clock size={24} className="text-[#5c9e45]" />
                                 <div>
-                                    <div className="text-xs text-slate-400">المدة الزمنية</div>
-                                    <div className="text-lg font-bold">{profession?.examDuration || 60} دقيقة</div>
+                                    <div className="text-xs text-slate-400 font-bold">المدة الزمنية</div>
+                                    <div className="text-lg font-black text-slate-800 font-latin">{profession?.examDuration || 60} دقيقة</div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-4 rounded-2xl">
-                                <Activity size={24} className="text-[#5c9e45]" />
+                            <div className="flex items-center gap-3 bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm">
+                                <Activity size={24} className="text-[#16539a]" />
                                 <div>
-                                    <div className="text-xs text-slate-400">عدد الأسئلة</div>
-                                    <div className="text-lg font-bold">{profession?.questionCount || 30} سؤال</div>
+                                    <div className="text-xs text-slate-400 font-bold">عدد الأسئلة</div>
+                                    <div className="text-lg font-black text-slate-800 font-latin">{profession?.questionCount || 30} سؤال</div>
                                 </div>
                             </div>
                         </div>
