@@ -11,9 +11,39 @@ import { RegionsChart } from "@/components/dashboard/RegionsChart";
 import { ActivityLogList } from "@/components/dashboard/ActivityLogList";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Plus, Loader2 } from "lucide-react";
+import { Calendar, Plus } from "lucide-react";
+import { ApplicantDashboardView } from "@/components/dashboard/ApplicantDashboardView";
 
 export default function DashboardPage() {
+    const { data: session, status } = useSession();
+
+    if (status === "loading") {
+        return (
+            <div className="p-6 space-y-8 animate-pulse text-right max-w-7xl mx-auto" dir="rtl">
+                <div className="flex justify-between items-center pb-4 border-b">
+                    <Skeleton className="h-10 w-64 rounded-xl" />
+                    <Skeleton className="h-10 w-36 rounded-xl" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Skeleton className="h-28 rounded-2xl" />
+                    <Skeleton className="h-28 rounded-2xl" />
+                    <Skeleton className="h-28 rounded-2xl" />
+                    <Skeleton className="h-28 rounded-2xl" />
+                </div>
+            </div>
+        );
+    }
+
+    // Role-based routing: Render Applicant view if session role is APPLICANT
+    if (session?.user?.role === "APPLICANT") {
+        return <ApplicantDashboardView />;
+    }
+
+    // Otherwise, render full ERP Administrative dashboard
+    return <AdminDashboardPageContent />;
+}
+
+function AdminDashboardPageContent() {
     const { data: session } = useSession();
     const {
         data,
@@ -160,3 +190,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

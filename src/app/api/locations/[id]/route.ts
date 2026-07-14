@@ -13,6 +13,8 @@ export async function PATCH(
             where: { id },
             data: {
                 name: body.name,
+                nameEn: body.nameEn,
+                nameAr: body.nameAr,
                 code: body.code,
                 address: body.address,
                 locationUrl: body.locationUrl,

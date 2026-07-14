@@ -12,6 +12,10 @@ export function LocationsManagement() {
         locations,
         newName,
         setNewName,
+        newNameEn,
+        setNewNameEn,
+        newNameAr,
+        setNewNameAr,
         newCode,
         setNewCode,
         loading,
@@ -39,25 +43,36 @@ export function LocationsManagement() {
             <CardContent className="p-6 space-y-6">
                 {/* Cities Add/Edit Form Panel */}
                 <div className="bg-slate-50/60 p-5 rounded-2xl border border-slate-200/50 space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
-                        <div className="space-y-1.5 flex-1">
-                            <label className="text-xs font-bold text-slate-650">اسم المدينة / المركز *</label>
-                            <Input 
-                                value={newName} 
-                                onChange={e => setNewName(e.target.value)} 
-                                placeholder="مثال: صنعاء، عدن، تعز" 
-                                className="rounded-xl border-slate-200 focus:ring-blue-500 bg-white h-10 text-xs"
-                                onKeyDown={e => e.key === "Enter" && handleAdd()}
-                            />
-                        </div>
-                        <div className="space-y-1.5 w-full sm:w-32">
-                            <label className="text-xs font-bold text-slate-650">الكود الرمزي (اختياري)</label>
-                            <Input 
-                                value={newCode} 
-                                onChange={e => setNewCode(e.target.value)} 
-                                placeholder="مثال: SAN" 
-                                className="rounded-xl border-slate-200 focus:ring-blue-500 bg-white h-10 text-xs font-bold text-center"
-                            />
+                    <div className="flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
+                            <div className="space-y-1.5 flex-1">
+                                <label className="text-xs font-bold text-slate-650">اسم المدينة / المركز *</label>
+                                <Input 
+                                    value={newName} 
+                                    onChange={e => setNewName(e.target.value)} 
+                                    placeholder="مثال: صنعاء، عدن، تعز" 
+                                    className="rounded-xl border-slate-200 focus:ring-blue-500 bg-white h-10 text-xs"
+                                    onKeyDown={e => e.key === "Enter" && handleAdd()}
+                                />
+                            </div>
+                            <div className="space-y-1.5 flex-1">
+                                <label className="text-xs font-bold text-slate-650">الاسم (إنجليزي)</label>
+                                <Input 
+                                    value={newNameEn} 
+                                    onChange={e => setNewNameEn(e.target.value)} 
+                                    placeholder="e.g. Sana'a" 
+                                    className="rounded-xl border-slate-200 focus:ring-blue-500 bg-white h-10 text-xs"
+                                />
+                            </div>
+                            <div className="space-y-1.5 w-full sm:w-32">
+                                <label className="text-xs font-bold text-slate-650">الكود (اختياري)</label>
+                                <Input 
+                                    value={newCode} 
+                                    onChange={e => setNewCode(e.target.value)} 
+                                    placeholder="مثال: SAN" 
+                                    className="rounded-xl border-slate-200 focus:ring-blue-500 bg-white h-10 text-xs font-bold text-center"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -99,7 +114,15 @@ export function LocationsManagement() {
                             <tbody className="divide-y divide-slate-100">
                                 {locations.map(loc => (
                                     <tr key={loc.id} className="hover:bg-blue-50/10 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-slate-800 text-sm">{loc.name}</td>
+                                        <td className="px-6 py-4 font-bold text-slate-800 text-sm">
+                                            {loc.name}
+                                            {(loc.nameAr || loc.nameEn) && (
+                                                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                                    {loc.nameAr && <span className="ml-2">عربي: {loc.nameAr}</span>}
+                                                    {loc.nameEn && <span>EN: {loc.nameEn}</span>}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 font-mono font-bold text-slate-400 text-sm">{loc.code || "-"}</td>
                                         <td className="px-6 py-4 text-center">
                                             <ManageCentersDialog location={loc} onUpdate={fetchLocations} />

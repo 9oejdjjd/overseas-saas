@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage, wakeUpEvolutionServer } from "@/lib/evolution";
+import { sendWhatsAppMessage, onWhatsApp, sleepRandom, simulateHumanTyping } from "@/lib/openwa";
 
 /**
  * GET /api/cron/retry-messages
  * 
  * Auto-retry cron job: Processes pending messages in batches.
- * Also serves to wake up/keep awake the Render WhatsApp server.
  */
 export async function GET() {
     try {
@@ -27,22 +26,15 @@ export async function GET() {
         });
 
         if (pendingMessages.length === 0) {
-            // Even if no messages are pending, we can ping the Render server occasionally to keep it awake!
-            await wakeUpEvolutionServer().catch(() => {});
-            return NextResponse.json({ success: true, count: 0, message: "No pending messages to retry. Render server pinged." });
+            return NextResponse.json({ success: true, count: 0, message: "No pending messages to retry." });
         }
 
         console.log(`[CRON-Retry] Found ${pendingMessages.length} pending messages to retry.`);
 
-        // 2. Proactively trigger wakeup ping before processing batch
-        await wakeUpEvolutionServer().catch(() => {});
-        // Give Render 2 seconds head start to initialize container if it was cold sleeping
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
         let successCount = 0;
         let failCount = 0;
 
-        // 3. Process messages sequentially
+        // 2. Process messages sequentially
         for (const msg of pendingMessages) {
             const phone = msg.applicant?.whatsappNumber || msg.applicant?.phone;
             
@@ -56,7 +48,30 @@ export async function GET() {
                 continue;
             }
 
+            // Verify if number exists on WhatsApp first
+            const isRegistered = await onWhatsApp(phone);
+            if (!isRegistered) {
+                await prisma.messageLog.update({
+                    where: { id: msg.id },
+                    data: { status: "FAILED_INVALID_NUMBER" }
+                });
+
+                await prisma.activityLog.create({
+                    data: {
+                        action: "AUTO_MESSAGE_RETRY_INVALID_NUMBER",
+                        details: `تخطي الإرسال: الرقم غير مسجل على واتساب للرسالة (${msg.trigger || ''})`,
+                        applicantId: msg.applicantId,
+                    }
+                }).catch(console.error);
+
+                failCount++;
+                continue;
+            }
+
             try {
+                // Simulate human presence and typing state
+                await simulateHumanTyping(phone, msg.message.length);
+
                 const sendResult = await sendWhatsAppMessage(phone, msg.message);
                 
                 if (sendResult.success) {
@@ -87,8 +102,8 @@ export async function GET() {
                 failCount++;
             }
 
-            // Small delay between sends to respect rate-limiting
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Anti-Ban Delay: sleepRandom(6, 12) between messages
+            await sleepRandom(6, 12);
         }
 
         return NextResponse.json({

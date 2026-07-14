@@ -51,7 +51,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid type" }, { status: 400 });
         }
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -78,8 +78,14 @@ export async function POST(request: Request) {
         });
 
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(`Gemini API error: ${errorData.error?.message || res.statusText}`);
+            const errorText = await res.text();
+            console.error("Gemini API Error Response:", errorText);
+            let errorMsg = res.statusText;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMsg = errorData.error?.message || res.statusText;
+            } catch {}
+            throw new Error(`Gemini API error (${res.status}): ${errorMsg}`);
         }
 
         const data = await res.json();

@@ -7,8 +7,18 @@ import { useToast } from "@/components/ui/simple-toast";
 type Location = {
     id: string;
     name: string;
+    nameEn: string | null;
+    nameAr: string | null;
     code: string | null;
     isActive: boolean;
+};
+
+type TransportDestination = {
+    id: string;
+    name: string;
+    nameEn: string | null;
+    nameAr: string | null;
+    code: string | null;
 };
 
 type TransportRoute = {
@@ -18,8 +28,8 @@ type TransportRoute = {
     oneWayPrice: number;
     roundTripPrice: number;
     isActive: boolean;
-    fromDestination?: { id: string; name: string };
-    toDestination?: { id: string; name: string };
+    fromDestination?: { id: string; name: string; nameEn?: string | null; nameAr?: string | null };
+    toDestination?: { id: string; name: string; nameEn?: string | null; nameAr?: string | null };
 };
 
 type ServiceConfig = {
@@ -41,6 +51,7 @@ export function useFullRegistration() {
 
     // Dynamic Data State
     const [locations, setLocations] = useState<Location[]>([]);
+    const [transportDestinations, setTransportDestinations] = useState<TransportDestination[]>([]);
     const [config, setConfig] = useState<ServiceConfig>({ registrationPrice: 0 });
     const [routes, setRoutes] = useState<TransportRoute[]>([]);
     const [professions, setProfessions] = useState<any[]>([]);
@@ -48,6 +59,8 @@ export function useFullRegistration() {
     
     // Mock Exam Packages Selected
     const [wantsMockExam, setWantsMockExam] = useState(false);
+    const [mockExamType, setMockExamType] = useState<"package" | "individual">("package");
+    const [mockExamCount, setMockExamCount] = useState(1);
     const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
 
     // Form State
@@ -59,6 +72,7 @@ export function useFullRegistration() {
         dob: undefined as Date | undefined,
         phone: prefillPhone,
         whatsappNumber: prefillPhone,
+        platformEmail: "",
         passportNumber: "",
         passportExpiry: undefined as Date | undefined,
         nationalId: "",
@@ -79,6 +93,7 @@ export function useFullRegistration() {
     const [calculated, setCalculated] = useState({
         basePrice: 0,
         transportPrice: 0,
+        mockExamPrice: 0,
         total: 0,
         remaining: 0
     });
@@ -93,8 +108,9 @@ export function useFullRegistration() {
     useEffect(() => {
         const fetchAll = async () => {
             try {
-                const [locRes, configRes, routesRes, profRes, pkgRes] = await Promise.all([
+                const [locRes, destRes, configRes, routesRes, profRes, pkgRes] = await Promise.all([
                     fetch("/api/locations"),
+                    fetch("/api/transport/destinations"),
                     fetch("/api/pricing/config"),
                     fetch("/api/pricing/routes"),
                     fetch("/api/mock/admin/professions"),
@@ -102,6 +118,7 @@ export function useFullRegistration() {
                 ]);
 
                 if (locRes.ok) setLocations(await locRes.json());
+                if (destRes.ok) setTransportDestinations(await destRes.json());
                 if (configRes.ok) setConfig(await configRes.json());
                 if (routesRes.ok) setRoutes(await routesRes.json());
                 if (profRes.ok) setProfessions(await profRes.json());
@@ -117,37 +134,94 @@ export function useFullRegistration() {
 
     // Calculate Totals Logic
     useEffect(() => {
-        const base = Number(config.registrationPrice);
+        let base = Number(config.registrationPrice);
         let transport = 0;
 
         if (formData.hasTransportation && formData.locationId && formData.transportFromId) {
-            const selectedLocation = locations.find(l => l.id === formData.locationId);
-            const selectedFrom = locations.find(l => l.id === formData.transportFromId);
+            const examCenter = locations.find(l => l.id === formData.locationId);
+            let route = undefined;
+            
+            if (examCenter) {
+                const centerName = examCenter.name?.trim().toUpperCase();
+                const centerNameEn = examCenter.nameEn?.trim().toUpperCase();
+                
+                route = routes.find(r => {
+                    if (r.fromId !== formData.transportFromId) return false;
+                    const dest = r.toDestination;
+                    if (!dest) return false;
+                    
+                    const destName = dest.name?.trim().toUpperCase();
+                    const destNameEn = dest.nameEn?.trim().toUpperCase();
+                    
+                    // Match Location.name (English) with TransportDestination.nameEn
+                    if (centerName && destNameEn && centerName === destNameEn) return true;
+                    // Match Location.nameEn with TransportDestination.nameEn
+                    if (centerNameEn && destNameEn && centerNameEn === destNameEn) return true;
+                    // Direct name match
+                    if (centerName && destName && centerName === destName) return true;
+                    
+                    return false;
+                });
+            }
 
-            if (selectedLocation && selectedFrom) {
-                const route = routes.find(r =>
-                    r.toDestination?.name === selectedLocation.name &&
-                    r.fromDestination?.name === selectedFrom.name
-                );
-
-                if (route) {
-                    transport = formData.transportType === "ROUND_TRIP"
-                        ? Number(route.roundTripPrice)
-                        : Number(route.oneWayPrice);
-                }
+            if (route) {
+                transport = formData.transportType === "ROUND_TRIP"
+                    ? Number(route.roundTripPrice)
+                    : Number(route.oneWayPrice);
             }
         }
 
-        const total = base + transport - Number(formData.discount);
+        let mockExamPrice = 0;
+        if (wantsMockExam) {
+            if (mockExamType === "package" && selectedPackageId) {
+                const selectedPkg = mockPackages.find(p => p.id === selectedPackageId);
+                if (selectedPkg) {
+                    mockExamPrice = Number(selectedPkg.price || 0);
+                    if (selectedPkg.includesRegistration) {
+                        base = base - Number(selectedPkg.registrationDiscount || 0);
+                        if (base < 0) base = 0;
+                    }
+                    if (selectedPkg.includesTransport && transport > 0) {
+                        transport = transport - Number(selectedPkg.transportDiscount || 0);
+                        if (transport < 0) transport = 0;
+                    }
+                }
+            } else if (mockExamType === "individual") {
+                mockExamPrice = (Number(config.mockExamSinglePrice) || 0) * mockExamCount;
+            }
+        }
+
+        const total = base + transport + mockExamPrice - Number(formData.discount);
         const remaining = total - Number(formData.amountPaid);
 
         setCalculated({
             basePrice: base,
             transportPrice: transport,
+            mockExamPrice,
             total,
             remaining
         });
-    }, [formData, config, routes, locations]);
+    }, [formData, config, routes, locations, wantsMockExam, mockExamType, mockExamCount, selectedPackageId, mockPackages]);
+
+    // Clear selected package if it's no longer valid based on the current filters
+    useEffect(() => {
+        if (selectedPackageId) {
+            const validPackages = mockPackages.filter(pkg => {
+                if (!pkg.includesRegistration) return false;
+                if (pkg.includesRegistration && !formData.locationId) return false;
+                if (formData.hasTransportation) {
+                    return pkg.includesTransport === true;
+                } else {
+                    return pkg.includesTransport === false;
+                }
+            });
+            
+            const isValid = validPackages.some(p => p.id === selectedPackageId);
+            if (!isValid) {
+                setSelectedPackageId(null);
+            }
+        }
+    }, [formData.hasTransportation, formData.locationId, selectedPackageId, mockPackages]);
 
     const handleCheckPromo = async () => {
         if (!promoCode) return;
@@ -178,13 +252,9 @@ export function useFullRegistration() {
                         const currentBase = Number(config.registrationPrice);
                         let transport = 0;
                         if (formData.hasTransportation && formData.locationId && formData.transportFromId) {
-                            const selectedLoc = locations.find(l => l.id === formData.locationId);
-                            const selectedFromLoc = locations.find(l => l.id === formData.transportFromId);
-                            if (selectedLoc && selectedFromLoc) {
-                                const route = routes.find(r => r.toDestination?.name === selectedLoc.name && r.fromDestination?.name === selectedFromLoc.name);
-                                if (route) {
-                                    transport = formData.transportType === "ROUND_TRIP" ? Number(route.roundTripPrice) : Number(route.oneWayPrice);
-                                }
+                            const route = routes.find(r => r.toId === formData.locationId && r.fromId === formData.transportFromId);
+                            if (route) {
+                                transport = formData.transportType === "ROUND_TRIP" ? Number(route.roundTripPrice) : Number(route.oneWayPrice);
                             }
                         }
                         const gross = currentBase + transport;
@@ -221,7 +291,11 @@ export function useFullRegistration() {
                 totalAmount: calculated.total,
                 remainingBalance: calculated.remaining,
                 promoCode: promoCode || undefined,
-                visitorPurchaseId: visitorPurchaseId || undefined
+                visitorPurchaseId: visitorPurchaseId || undefined,
+                wantsMockExam,
+                mockExamType,
+                mockExamCount,
+                selectedPackageId
             };
 
             const res = await fetch("/api/applicants", {
@@ -246,9 +320,20 @@ export function useFullRegistration() {
 
     const getFilteredPackages = () => {
         return mockPackages.filter(pkg => {
-            if (pkg.includesTransport && !formData.hasTransportation) return false;
+            // 1. Exclude packages that are "Mock Exams Only" (Type 1)
+            if (!pkg.includesRegistration) return false;
+
+            // 2. Hide registration-bundled packages if no location is selected yet
             if (pkg.includesRegistration && !formData.locationId) return false;
-            return true;
+
+            // 3. Filter by transportation choice
+            if (formData.hasTransportation) {
+                // If they want transportation, show only packages that include transportation
+                return pkg.includesTransport === true;
+            } else {
+                // If they don't want transportation, show only packages that DO NOT include transportation
+                return pkg.includesTransport === false;
+            }
         });
     };
 
@@ -256,6 +341,7 @@ export function useFullRegistration() {
         loading,
         initialLoading,
         locations,
+        transportDestinations,
         config,
         professions,
         formData,
@@ -268,6 +354,10 @@ export function useFullRegistration() {
         promoError,
         wantsMockExam,
         setWantsMockExam,
+        mockExamType,
+        setMockExamType,
+        mockExamCount,
+        setMockExamCount,
         selectedPackageId,
         setSelectedPackageId,
         handleCheckPromo,

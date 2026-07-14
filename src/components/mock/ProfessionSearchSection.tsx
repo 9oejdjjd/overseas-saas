@@ -47,18 +47,18 @@ export function ProfessionSearchSection() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.7 }}
-                    className="bg-gradient-to-br from-[#0a0f1c] to-[#16539a] rounded-[2rem] p-8 md:p-14 shadow-2xl relative overflow-hidden"
+                    className="bg-gradient-to-br from-[#16539a]/5 via-white to-[#5c9e45]/5 rounded-[2.5rem] p-8 md:p-16 border border-slate-200/60 shadow-xl shadow-slate-100/50 relative overflow-hidden"
                 >
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#5c9e45] rounded-full blur-[120px] opacity-15 transform translate-x-1/2 -translate-y-1/2"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-500 rounded-full blur-[100px] opacity-15 transform -translate-x-1/2 translate-y-1/2"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#16539a] rounded-full blur-[120px] opacity-[0.03] transform translate-x-1/2 -translate-y-1/2"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#5c9e45] rounded-full blur-[100px] opacity-[0.03] transform -translate-x-1/2 translate-y-1/2"></div>
 
                     <div className="relative z-10 grid lg:grid-cols-2 gap-10 items-center">
-                        <div className="text-white text-right">
-                            <h2 className="text-3xl md:text-4xl font-bold mb-5 leading-tight">
+                        <div className="text-right">
+                            <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-5 leading-tight">
                                 ابحث عن تصنيفك المهني <br />
-                                <span className="text-[#5c9e45]">وبادر بتجربة التقييم الآن</span>
+                                <span className="text-[#16539a]">وبادر بتجربة التقييم الآن</span>
                             </h2>
-                            <p className="text-base md:text-lg text-slate-300 mb-6 max-w-lg leading-relaxed">
+                            <p className="text-base md:text-lg text-slate-650 mb-6 max-w-lg leading-relaxed font-semibold">
                                 نوفر بيئة اختبار تحاكي المعايير الرسمية للاعتماد المهني في مختلف التخصصات. ابحث عن مهنتك، وقيّم جاهزيتك مجاناً وبكل موثوقية.
                             </p>
                         </div>
@@ -67,7 +67,7 @@ export function ProfessionSearchSection() {
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <div className="relative w-full">
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                        <Briefcase size={18} />
+                                        <Briefcase size={18} className="text-brand-blue" />
                                     </div>
                                     <input 
                                         type="text"
@@ -80,7 +80,7 @@ export function ProfessionSearchSection() {
                                         onFocus={() => setShowResults(true)}
                                         onBlur={() => setShowResults(false)}
                                         placeholder="ابحث عن مهنتك..."
-                                        className="w-full h-14 bg-white border-2 border-transparent focus:border-[#5c9e45] rounded-xl pl-4 pr-11 text-base text-slate-800 placeholder-slate-400 shadow-xl transition-all focus:outline-none"
+                                        className="w-full h-14 bg-white border border-slate-200 focus:border-[#16539a] focus:ring-4 focus:ring-brand-blue/5 rounded-xl pl-4 pr-11 text-base text-slate-800 placeholder-slate-450 shadow-sm transition-all focus:outline-none"
                                     />
                                     
                                     <AnimatePresence>
@@ -90,7 +90,7 @@ export function ProfessionSearchSection() {
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: 8 }}
                                                 transition={{ duration: 0.2 }}
-                                                className="absolute top-full right-0 left-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-50 p-2 max-h-60 overflow-y-auto"
+                                                className="absolute top-full right-0 left-0 mt-2 bg-white rounded-xl shadow-[0_15px_40px_rgba(15,23,42,0.08)] border border-slate-100 overflow-hidden z-50 p-2 max-h-60 overflow-y-auto"
                                             >
                                                 {filtered.length > 0 ? (
                                                     filtered.map((prof) => (
@@ -103,7 +103,7 @@ export function ProfessionSearchSection() {
                                                             className="w-full text-right flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors group"
                                                         >
                                                             <div className="font-bold text-slate-700 group-hover:text-[#16539a]">{prof.name}</div>
-                                                            <ChevronLeft size={16} className="text-slate-300 group-hover:text-[#5c9e45] transform transition-transform group-hover:-translate-x-1" />
+                                                            <ChevronLeft size={16} className="text-slate-350 group-hover:text-[#5c9e45] transform transition-transform group-hover:-translate-x-1" />
                                                         </button>
                                                     ))
                                                 ) : (
@@ -119,7 +119,7 @@ export function ProfessionSearchSection() {
                                 <button 
                                     onClick={handleStart}
                                     disabled={!selectedSlug && filtered.length === 0}
-                                    className="h-14 px-7 bg-[#5c9e45] hover:bg-[#4d853a] disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-green-900/30 transition-all flex items-center justify-center gap-2 shrink-0"
+                                    className="h-14 px-7 bg-[#5c9e45] hover:bg-[#6bae52] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-md shadow-green-900/10 hover:shadow-lg transition-all flex items-center justify-center gap-2 shrink-0 active:scale-98"
                                 >
                                     <PlayCircle size={18} />
                                     ابدأ الآن

@@ -160,7 +160,7 @@ export function RoutesManagement() {
                                         <SelectValue placeholder="اختر الانطلاق" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name} {d.nameEn ? `(${d.nameEn})` : ''}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -172,7 +172,7 @@ export function RoutesManagement() {
                                         <SelectValue placeholder="اختر الوجهة" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name} {d.nameEn ? `(${d.nameEn})` : ''}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -246,7 +246,7 @@ export function RoutesManagement() {
                                                     <Select value={stop.destinationId} onValueChange={v => handleUpdateStop(idx, 'destinationId', v)}>
                                                         <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder="اختر المدينة" /></SelectTrigger>
                                                         <SelectContent>
-                                                            {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                                            {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name} {d.nameEn ? `(${d.nameEn})` : ''}</SelectItem>)}
                                                         </SelectContent>
                                                     </Select>
                                                 </div>

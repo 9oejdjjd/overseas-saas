@@ -128,6 +128,7 @@ export function ApplicantAdminDashboard({
                     <TabsContent value="mockExam" className="mt-0 focus-visible:outline-none">
                         <MockExamRenewalCard
                             phone={applicant.phone}
+                            buyerName={applicant.fullName}
                             applicantId={applicant.id}
                             currentPurchase={mockPurchase}
                             onUpdate={() => {

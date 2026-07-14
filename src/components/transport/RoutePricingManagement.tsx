@@ -86,21 +86,21 @@ export function RoutePricingManagement() {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 text-xs hover:bg-emerald-50 transition-colors">
                                         <span className="font-extrabold text-emerald-800">سعر تذكرة (ذهاب)</span>
-                                        <span className="font-black text-emerald-700 text-sm">{route.price} ريال</span>
+                                        <span className="font-black text-emerald-700 text-sm">{route.price} {route.currency === "SAR" ? "ر.س" : "ر.ي"}</span>
                                     </div>
                                     <div className="flex justify-between items-center bg-blue-50/50 p-3 rounded-xl border border-blue-100 text-xs hover:bg-blue-50 transition-colors">
                                         <span className="font-extrabold text-blue-800">سعر تذكرة (عودة)</span>
-                                        <span className="font-black text-blue-700 text-sm">{route.priceRoundTrip || "-"} ريال</span>
+                                        <span className="font-black text-blue-700 text-sm">{route.priceRoundTrip || "-"} {route.priceRoundTrip ? (route.currency === "SAR" ? "ر.س" : "ر.ي") : ""}</span>
                                     </div>
                                 </div>
                             </div>
                             
                             <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 border-dashed text-[11px] text-slate-500 font-medium">
                                 <div>
-                                    تكلفتنا (ذهاب): <span className="font-extrabold text-slate-700">{route.cost} ريال</span>
+                                    تكلفتنا (ذهاب): <span className="font-extrabold text-slate-700">{route.cost} {route.currency === "SAR" ? "ر.س" : "ر.ي"}</span>
                                 </div>
                                 <div className="border-r pr-2">
-                                    تكلفتنا (عودة): <span className="font-extrabold text-slate-700">{route.costRoundTrip} ريال</span>
+                                    تكلفتنا (عودة): <span className="font-extrabold text-slate-700">{route.costRoundTrip} {route.currency === "SAR" ? "ر.س" : "ر.ي"}</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -125,7 +125,7 @@ export function RoutePricingManagement() {
                                 >
                                     <SelectTrigger className="rounded-lg h-9"><SelectValue placeholder="اختر" /></SelectTrigger>
                                     <SelectContent>
-                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name} {d.nameEn ? `(${d.nameEn})` : ''}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -137,7 +137,23 @@ export function RoutePricingManagement() {
                                 >
                                     <SelectTrigger className="rounded-lg h-9"><SelectValue placeholder="اختر" /></SelectTrigger>
                                     <SelectContent>
-                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                        {destinations.map(d => <SelectItem key={d.id} value={d.id}>{d.name} {d.nameEn ? `(${d.nameEn})` : ''}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600">عملة التسعير</label>
+                                <Select 
+                                    value={formData.currency} 
+                                    onValueChange={v => setFormData({ ...formData, currency: v })}
+                                >
+                                    <SelectTrigger className="rounded-lg h-9"><SelectValue placeholder="اختر العملة" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="YER">🇾🇪 ريال يمني (YER)</SelectItem>
+                                        <SelectItem value="SAR">🇸🇦 ريال سعودي (SAR)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

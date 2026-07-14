@@ -131,11 +131,38 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         let showResultScore = true;
         let showResultQuestions = true;
         let showResultCorrectAnswers = true;
+        let isFirstAttemptTrial = false;
 
         if (session.purchase?.package) {
-            showResultScore = session.purchase.package.showResultScore;
-            showResultQuestions = session.purchase.package.showResultQuestions;
-            showResultCorrectAnswers = session.purchase.package.showResultCorrectAnswers;
+            const pkg = session.purchase.package;
+            const isFirstAttemptFull = pkg.firstAttemptFullFeatures && session.attemptNumber === 1;
+
+            if (isFirstAttemptFull) {
+                isFirstAttemptTrial = true;
+                showResultScore = true;
+                showResultQuestions = true;
+                showResultCorrectAnswers = true;
+            } else {
+                let attemptConfig: any = null;
+                if (pkg.attemptsConfig) {
+                    try {
+                        const parsedConfig = typeof pkg.attemptsConfig === 'string' ? JSON.parse(pkg.attemptsConfig) : pkg.attemptsConfig;
+                        if (Array.isArray(parsedConfig)) {
+                            attemptConfig = parsedConfig.find((c: any) => Number(c.attempt) === session.attemptNumber);
+                        }
+                    } catch (e) {}
+                }
+
+                if (attemptConfig) {
+                    showResultScore = attemptConfig.showResultScore ?? pkg.showResultScore;
+                    showResultQuestions = attemptConfig.showResultQuestions ?? pkg.showResultQuestions;
+                    showResultCorrectAnswers = attemptConfig.showResultCorrectAnswers ?? pkg.showResultCorrectAnswers;
+                } else {
+                    showResultScore = pkg.showResultScore;
+                    showResultQuestions = pkg.showResultQuestions;
+                    showResultCorrectAnswers = pkg.showResultCorrectAnswers;
+                }
+            }
         }
 
         // Format full result data (authorized viewer)
@@ -151,6 +178,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
             professionName: session.profession.name,
             isRegistered: !!session.applicantId,
             restricted: false,
+            isFirstAttemptTrial,
             packageFeatures: { showResultScore, showResultQuestions, showResultCorrectAnswers },
             questions: session.questions.map((sq: any) => {
                 const baseQ: any = {

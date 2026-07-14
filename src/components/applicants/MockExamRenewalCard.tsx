@@ -15,6 +15,7 @@ const PKG_ICONS: Record<string, any> = { crown: Crown, star: Star, diamond: Gem,
 
 interface MockExamRenewalCardProps {
     phone: string;
+    buyerName?: string;
     applicantId?: string;
     currentPurchase?: {
         id: string;
@@ -28,7 +29,7 @@ interface MockExamRenewalCardProps {
     onUpdate: () => void;
 }
 
-export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpdate }: MockExamRenewalCardProps) {
+export function MockExamRenewalCard({ phone, buyerName, applicantId, currentPurchase, onUpdate }: MockExamRenewalCardProps) {
     const { toast } = useToast();
     const [packages, setPackages] = useState<any[]>([]);
     const [config, setConfig] = useState<any>({ mockExamSinglePrice: 0 });
@@ -73,7 +74,7 @@ export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpd
         setSaving(true);
         try {
             const payload = {
-                buyerName: "تجديد",
+                buyerName: buyerName || "مشترك",
                 phone,
                 packageId: saleType === "package" ? selectedPkgId : "",
                 saleType,
@@ -82,7 +83,8 @@ export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpd
                 paymentMethod,
                 discount,
                 amountPaid,
-                paymentNote: `تجديد${applicantId ? ' - متقدم' : ' - زائر'}`
+                paymentNote: `تجديد${applicantId ? ' - متقدم' : ' - زائر'}`,
+                applicantId
             };
             const res = await fetch("/api/pricing/mock-packages/sell", {
                 method: "POST",
@@ -96,6 +98,38 @@ export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpd
         } catch (e: any) {
             toast("فشل: " + e.message, "error");
         } finally { setSaving(false); }
+    };
+
+    const handleCancelPackage = async () => {
+        if (!mp) return;
+        if (!window.confirm("هل أنت متأكد من تعطيل هذه الباقة؟ سيتم إرجاع بقية قيمة محاولات الباقة وحسابها برمجياً مع مراجعة التسجيل والمواصلات في حال كانت مدرجة.")) return;
+        
+        setSaving(true);
+        try {
+            const res = await fetch("/api/pricing/mock-packages/cancel", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ purchaseId: mp.id })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast("فشل تعطيل الباقة: " + (data.error || "خطأ غير معروف"), "error");
+                return;
+            }
+            let successMsg = `تم تعطيل الباقة بنجاح ✓ | مسترجع: ${data.totalRefund?.toLocaleString() || 0} ر.ي`;
+            if (data.cashRefund > 0) {
+                successMsg += ` | نقداً: ${data.cashRefund.toLocaleString()} ر.ي`;
+            }
+            if (data.debtWaiver > 0) {
+                successMsg += ` | إعفاء: ${data.debtWaiver.toLocaleString()} ر.ي`;
+            }
+            toast(successMsg, "success");
+            onUpdate();
+        } catch (e: any) {
+            toast("فشل الاتصال: " + e.message, "error");
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (loading) return <div className="text-center py-4 text-sm text-gray-500">جاري التحميل...</div>;
@@ -131,6 +165,17 @@ export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpd
                         )}
                         {isExpired && <Badge variant="destructive" className="mt-2 text-xs">منتهية الصلاحية</Badge>}
                         {mp.expiresAt && !isExpired && <p className="text-[10px] text-gray-400 mt-1">تنتهي: {new Date(mp.expiresAt).toLocaleDateString('en-GB')}</p>}
+                        {mp.status !== "CANCELLED" && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-3 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-semibold"
+                                onClick={handleCancelPackage}
+                                disabled={saving}
+                            >
+                                تعطيل الباقة واسترجاع الرسوم
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
             )}
@@ -150,12 +195,22 @@ export function MockExamRenewalCard({ phone, applicantId, currentPurchase, onUpd
                         packages.length === 0 ? <p className="text-sm text-gray-500 text-center py-2">لا توجد باقات</p> : (
                             <div className="grid grid-cols-2 gap-2">
                                 {packages.map(pkg => {
-                                    const Icon = PKG_ICONS[pkg.icon] || Star;
                                     return (
-                                        <div key={pkg.id} onClick={() => setSelectedPkgId(pkg.id)} className={`cursor-pointer rounded-lg border-2 p-3 transition-all text-sm ${selectedPkgId === pkg.id ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
-                                            <div className="flex items-center gap-1.5 mb-1"><div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: pkg.color || '#3B82F6' }}><Icon className="h-3 w-3" /></div><span className="font-bold text-xs">{pkg.name}</span></div>
+                                        <div 
+                                            key={pkg.id} 
+                                            onClick={() => setSelectedPkgId(pkg.id)} 
+                                            className={`cursor-pointer rounded-lg border p-3 transition-all text-sm hover:bg-gray-50/50 ${selectedPkgId === pkg.id ? 'border-gray-900 bg-gray-50/80 shadow-sm' : 'border-gray-200 bg-white'}`}
+                                        >
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="font-bold text-xs text-gray-900">{pkg.name}</span>
+                                                {selectedPkgId === pkg.id ? (
+                                                    <span className="text-[10px] bg-gray-900 text-white px-1.5 py-0.2 rounded font-medium">✓ محدد</span>
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-400 font-medium">تحديد</span>
+                                                )}
+                                            </div>
                                             <div className="text-xs text-gray-500">{pkg.examCredits === -1 ? '∞' : pkg.examCredits} اختبار</div>
-                                            <div className="font-black text-green-700 mt-1">{Number(pkg.examPrice)} ر.ي</div>
+                                            <div className="font-black text-gray-900 mt-1">{Number(pkg.examPrice).toLocaleString()} ر.ي</div>
                                         </div>
                                     );
                                 })}

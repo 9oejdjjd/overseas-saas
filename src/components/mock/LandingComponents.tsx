@@ -22,6 +22,7 @@ import {
     Mail,
     Phone,
 } from "lucide-react";
+import { SITE_CONFIG } from "@/config/site";
 
 // --- Brand Colors ---
 export const brand = {
@@ -448,7 +449,7 @@ export function CTASection() {
                     <motion.a 
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        href="https://wa.me/967777263111" 
+                        href={SITE_CONFIG.supportWhatsappUrl}
                         target="_blank" 
                         rel="noopener noreferrer" 
                         className="w-full sm:w-auto px-10 py-4 bg-[#25D366] hover:bg-[#1ebd5b] text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-green-900/30"
@@ -514,7 +515,7 @@ export function Footer() {
                     <ul className="space-y-3 text-sm">
                         <li className="flex items-center gap-2">
                             <MessageCircle size={16} className="text-[#25D366]" />
-                            <a href="https://wa.me/967777263111" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors" dir="ltr">+967 777 263 111</a>
+                            <a href={SITE_CONFIG.supportWhatsappUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors" dir="ltr">+967 715 454 154</a>
                         </li>
                         <li className="flex items-center gap-2">
                             <Mail size={16} className="text-slate-500" />

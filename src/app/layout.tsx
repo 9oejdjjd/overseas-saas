@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
-import { Tajawal } from "next/font/google";
+import { Almarai, Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/simple-toast";
 import { GlobalSchema } from "@/components/seo/GlobalSchema";
 
-const tajawal = Tajawal({
+const almarai = Almarai({
   subsets: ["arabic"],
-  weight: ["200", "300", "400", "500", "700", "800", "900"],
-  variable: "--font-tajawal",
+  weight: ["300", "400", "700", "800"],
+  variable: "--font-almarai",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -17,6 +23,10 @@ export const metadata: Metadata = {
   description: "اختبر مستواك قبل اختبار الاعتماد المهني السعودي. اختبارات تجريبية مجانية لمهن: عامل تحميل وتنزيل، سائق شاحنة، خياط، عامل مزرعة والمزيد. نجهزك للنجاح من أول محاولة.",
   keywords: "اعتماد مهني, اختبار تجريبي, عمالة يمنية, السعودية, اختبار مهني, عامل تحميل, سائق شاحنة, خياط, بوابة الاعتماد المهني",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icons/icon-192x192.png",
+  },
   alternates: {
     canonical: "/",
   },
@@ -55,7 +65,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${tajawal.className} ${tajawal.variable} antialiased bg-gray-50 text-gray-900`}>
+      <body className={`${almarai.className} ${almarai.variable} ${inter.variable} antialiased bg-background text-foreground`}>
         <GlobalSchema />
         <ToastProvider>
           {children}

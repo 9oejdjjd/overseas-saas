@@ -40,6 +40,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             include: { 
                 profession: true, 
                 applicant: true,
+                purchase: {
+                    include: { package: true }
+                },
                 questions: {
                     include: {
                         question: {
@@ -243,9 +246,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 return (q.cognitiveLevel === "K3" || q.difficulty === "EXPERT") ? "K3" : "K2";
             };
 
-            // 4. Filter Valid Questions (Remove completely disabled types)
+            // Determine allowed question types based on the purchase package and attempt number
+            let allowedTypesFromPackage = ["MCQ", "TRUE_FALSE", "FILL_BLANK", "IMAGE"];
+            if (session.purchase?.package) {
+                const pkg = session.purchase.package;
+                let attemptConfig: any = null;
+                if (pkg.attemptsConfig) {
+                    try {
+                        const parsedConfig = typeof pkg.attemptsConfig === 'string' ? JSON.parse(pkg.attemptsConfig) : pkg.attemptsConfig;
+                        if (Array.isArray(parsedConfig)) {
+                            attemptConfig = parsedConfig.find((c: any) => Number(c.attempt) === session.attemptNumber);
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse attemptsConfig", e);
+                    }
+                }
+
+                if (attemptConfig && attemptConfig.allowedQuestionTypes) {
+                    allowedTypesFromPackage = attemptConfig.allowedQuestionTypes
+                        .split(",")
+                        .map((t: string) => t.trim())
+                        .filter(Boolean);
+                } else if (pkg.firstAttemptFullFeatures && session.attemptNumber === 1) {
+                    // Keep defaults (all)
+                } else if (pkg.allowedQuestionTypes) {
+                    allowedTypesFromPackage = pkg.allowedQuestionTypes
+                        .split(",")
+                        .map((t: string) => t.trim())
+                        .filter(Boolean);
+                }
+            }
+
+            // 4. Filter Valid Questions (Remove completely disabled types and package-restricted types)
             let validQuestions = questionBankMeta.filter(q => {
                 const eType = getEffectiveType(q);
+                
+                // Exclude question types not allowed by the package/attempt
+                if (!allowedTypesFromPackage.includes(eType)) return false;
+
                 if (isCustomAlgorithm) {
                     if (eType !== "MCQ" && eType !== "IMAGE" && eType !== "TRUE_FALSE" && eType !== "FILL_BLANK") return false;
                     return true;

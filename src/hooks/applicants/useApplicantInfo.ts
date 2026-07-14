@@ -27,7 +27,9 @@ export function useApplicantInfo({ applicant, onUpdate }: UseApplicantInfoProps)
         nationalId: applicant.nationalId || "",
         profession: applicant.profession || "",
         phone: applicant.phone || "",
-        whatsappNumber: applicant.whatsappNumber || ""
+        whatsappNumber: applicant.whatsappNumber || "",
+        platformEmail: applicant.platformEmail || "",
+        notificationEmail: applicant.notificationEmail || ""
     });
     const [loading, setLoading] = useState(false);
     const [isEditingBasic, setIsEditingBasic] = useState(false);
@@ -57,7 +59,9 @@ export function useApplicantInfo({ applicant, onUpdate }: UseApplicantInfoProps)
             nationalId: applicant.nationalId || "",
             profession: applicant.profession || "",
             phone: applicant.phone || "",
-            whatsappNumber: applicant.whatsappNumber || ""
+            whatsappNumber: applicant.whatsappNumber || "",
+            platformEmail: applicant.platformEmail || "",
+            notificationEmail: applicant.notificationEmail || ""
         });
         setIsEditingBasic(false);
     }, [applicant.id, applicant]);
@@ -84,7 +88,9 @@ export function useApplicantInfo({ applicant, onUpdate }: UseApplicantInfoProps)
                     nationalId: basicInfo.nationalId,
                     profession: basicInfo.profession,
                     phone: basicInfo.phone,
-                    whatsappNumber: basicInfo.whatsappNumber
+                    whatsappNumber: basicInfo.whatsappNumber,
+                    platformEmail: basicInfo.platformEmail,
+                    notificationEmail: basicInfo.notificationEmail
                 }),
             });
 

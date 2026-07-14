@@ -31,6 +31,7 @@ export function Header() {
             case "REGISTRATION_STAFF": return "مسجل بيانات";
             case "ACCOUNTANT": return "محاسب";
             case "FOLLOW_UP_STAFF": return "متابعة";
+            case "APPLICANT": return "متقدم / مرشح";
             default: return role || "مستخدم";
         }
     };
@@ -75,21 +76,23 @@ export function Header() {
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm z-10">
             {/* Left: Search */}
             <div className="flex items-center gap-4 w-1/3">
-                <div className="relative w-full max-w-md hidden md:block">
-                    <Search
-                        className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isSearching ? "text-blue-500 animate-pulse" : "text-gray-400"
-                            }`}
-                    />
-                    <input
-                        type="text"
-                        placeholder="بحث سريع برقم الملف (PNR) أو الاسم..."
-                        className="w-full h-9 pr-10 pl-4 rounded-md border border-gray-300 bg-gray-50 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 hover:bg-white transition-colors"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={handleSearch}
-                        disabled={isSearching}
-                    />
-                </div>
+                {session?.user?.role !== "APPLICANT" && (
+                    <div className="relative w-full max-w-md hidden md:block">
+                        <Search
+                            className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isSearching ? "text-blue-500 animate-pulse" : "text-gray-400"
+                                }`}
+                        />
+                        <input
+                            type="text"
+                            placeholder="بحث سريع برقم الملف (PNR) أو الاسم..."
+                            className="w-full h-9 pr-10 pl-4 rounded-md border border-gray-300 bg-gray-50 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 hover:bg-white transition-colors"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={handleSearch}
+                            disabled={isSearching}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Right: Actions */}

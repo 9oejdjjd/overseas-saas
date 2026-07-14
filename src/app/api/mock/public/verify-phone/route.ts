@@ -6,7 +6,7 @@ import { normalizePhone } from "@/lib/phone-utils";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { action, visitorName, otp } = body;
+        const { action, visitorName, otp, deliveryMethod = "WHATSAPP", email, professionName } = body;
         const visitorPhone = normalizePhone(body.visitorPhone || "");
 
         if (!visitorPhone) {
@@ -16,6 +16,8 @@ export async function POST(request: Request) {
         const phoneWithoutPlus = visitorPhone.replace(/^\+/, "");
 
         if (action === "REQUEST") {
+            console.log("[OTP] REQUEST received:", { visitorPhone, email, visitorName, deliveryMethod });
+            
             // 1. Check if the phone belongs to a Registered Applicant
             const applicant = await prisma.applicant.findFirst({
                 where: {
@@ -27,12 +29,9 @@ export async function POST(request: Request) {
                     ]
                 }
             });
+            console.log("[OTP] Applicant found:", !!applicant);
 
-            if (applicant) {
-                return NextResponse.json({ isVerified: true });
-            }
-
-            // 2. Check if already verified
+            // 2. Check previous OTP requests
             const otpRecord = await prisma.mockVisitorOtp.findFirst({
                 where: {
                     OR: [
@@ -42,31 +41,40 @@ export async function POST(request: Request) {
                     ]
                 }
             });
+            console.log("[OTP] Existing OTP record:", otpRecord ? { phone: otpRecord.phone, expiresAt: otpRecord.expiresAt, verified: otpRecord.verified } : null);
             
-            if (otpRecord?.verified) {
-                return NextResponse.json({ isVerified: true });
-            }
-
             // 3. Rate Limiting Checks
             if (otpRecord) {
-                // Check 5-minute cooldown: if the previous code hasn't expired yet, block
-                if (otpRecord.expiresAt > new Date()) {
-                    const remainingSeconds = Math.ceil((otpRecord.expiresAt.getTime() - Date.now()) / 1000);
-                    return NextResponse.json({ 
-                        error: `يرجى الانتظار ${Math.ceil(remainingSeconds / 60)} دقيقة قبل طلب رمز جديد`,
-                        cooldown: remainingSeconds
-                    }, { status: 429 });
-                }
-
-                // Check daily limit: reset counter if last attempt was on a different day
+                // Progressive cooldown logic based on daily attempts
+                const now = new Date();
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const lastAttemptDate = new Date(otpRecord.lastAttemptAt);
                 lastAttemptDate.setHours(0, 0, 0, 0);
                 
-                const dailyCount = today.getTime() === lastAttemptDate.getTime() ? otpRecord.dailyAttempts : 0;
+                const isSameDay = today.getTime() === lastAttemptDate.getTime();
+                const dailyCount = isSameDay ? otpRecord.dailyAttempts : 0;
+
+                if (isSameDay) {
+                    let cooldownSeconds = 0;
+                    if (dailyCount === 1) cooldownSeconds = 30;
+                    else if (dailyCount === 2) cooldownSeconds = 60;
+                    else if (dailyCount >= 3) cooldownSeconds = 600;
+
+                    const nextAllowedTime = new Date(otpRecord.lastAttemptAt.getTime() + cooldownSeconds * 1000);
+                    
+                    if (now < nextAllowedTime) {
+                        const remainingSeconds = Math.ceil((nextAllowedTime.getTime() - now.getTime()) / 1000);
+                        console.log("[OTP] BLOCKED by cooldown. Remaining:", remainingSeconds, "seconds");
+                        return NextResponse.json({ 
+                            error: `يرجى الانتظار ${Math.ceil(remainingSeconds / 60)} دقيقة قبل طلب رمز جديد`,
+                            cooldown: remainingSeconds
+                        }, { status: 429 });
+                    }
+                }
                 
                 if (dailyCount >= 5) {
+                    console.log("[OTP] BLOCKED by daily limit:", dailyCount);
                     return NextResponse.json({ 
                         error: "لقد تجاوزت الحد المسموح لطلب رمز التحقق اليوم (5 محاولات). يرجى المحاولة غداً." 
                     }, { status: 429 });
@@ -80,11 +88,16 @@ export async function POST(request: Request) {
             const currentDailyAttempts = otpRecord ? 
                 (new Date(otpRecord.lastAttemptAt).toDateString() === now.toDateString() ? otpRecord.dailyAttempts : 0) : 0;
             
+            console.log("[OTP] Generated code:", code, "for phone:", visitorPhone);
+            
+            // Set OTP validity to 15 minutes (so it doesn't expire while they are waiting for the cooldown)
+            const expiryTime = new Date(Date.now() + 15 * 60000);
+
             await prisma.mockVisitorOtp.upsert({
                 where: { phone: visitorPhone },
                 update: { 
                     code, 
-                    expiresAt: new Date(Date.now() + 5 * 60000), 
+                    expiresAt: expiryTime, 
                     verified: false,
                     dailyAttempts: currentDailyAttempts + 1,
                     lastAttemptAt: now
@@ -92,15 +105,42 @@ export async function POST(request: Request) {
                 create: { 
                     phone: visitorPhone, 
                     code, 
-                    expiresAt: new Date(Date.now() + 5 * 60000), 
+                    expiresAt: expiryTime, 
                     verified: false,
                     dailyAttempts: 1,
                     lastAttemptAt: now
                 }
             });
+            console.log("[OTP] Saved to DB");
             
-            await autoSendDirectMessage(visitorPhone, "MOCK_EXAM_OTP", { name: visitorName || "عزيزي المستخدم", otp: code });
+            // 5. Send OTP to both Email and WhatsApp concurrently
+            console.log("[OTP] Sending to Email:", email, "and WhatsApp:", visitorPhone);
             
+            const emailPromise = email ? (async () => {
+                try {
+                    const { sendOTPByEmail } = await import("@/lib/sendEmail");
+                    const result = await sendOTPByEmail(email, visitorName || "عزيزي المستخدم", code, professionName);
+                    console.log("[OTP] Email result:", result);
+                    return result;
+                } catch (e) {
+                    console.error("[OTP] Email error:", e);
+                    return { success: false, error: String(e) };
+                }
+            })() : Promise.resolve({ success: false });
+
+            const waPromise = autoSendDirectMessage(visitorPhone, "MOCK_EXAM_OTP", { name: visitorName || "عزيزي المستخدم", otp: code })
+                .catch((e) => { console.error("[OTP] WhatsApp error:", e); return false; });
+
+            const [emailResult] = await Promise.allSettled([emailPromise, waPromise]);
+            console.log("[OTP] Email settled:", emailResult);
+            
+            // If email was provided but failed
+            if (email && emailResult.status === "fulfilled" && !emailResult.value.success) {
+                 console.error("[OTP] Email sending failed, returning error");
+                 return NextResponse.json({ error: "فشل في إرسال البريد الإلكتروني، يرجى التأكد من الإيميل والمحاولة لاحقاً" }, { status: 500 });
+            }
+            
+            console.log("[OTP] SUCCESS - OTP sent");
             return NextResponse.json({ requiresOtp: true });
             
         } else if (action === "VERIFY") {

@@ -52,7 +52,9 @@ export function ApplicantInfoTab({
                                             nationalId: applicant.nationalId || "",
                                             profession: applicant.profession || "",
                                             phone: applicant.phone || "",
-                                            whatsappNumber: applicant.whatsappNumber || ""
+                                            whatsappNumber: applicant.whatsappNumber || "",
+                                            platformEmail: applicant.platformEmail || "",
+                                            notificationEmail: applicant.notificationEmail || ""
                                         });
                                     } else {
                                         // When entering edit mode, populate with latest applicant data
@@ -66,7 +68,9 @@ export function ApplicantInfoTab({
                                             nationalId: applicant.nationalId || "",
                                             profession: applicant.profession || "",
                                             phone: applicant.phone || "",
-                                            whatsappNumber: applicant.whatsappNumber || ""
+                                            whatsappNumber: applicant.whatsappNumber || "",
+                                            platformEmail: applicant.platformEmail || "",
+                                            notificationEmail: applicant.notificationEmail || ""
                                         });
                                     }
                                     setIsEditingBasic(!isEditingBasic);

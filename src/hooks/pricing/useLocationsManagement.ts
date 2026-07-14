@@ -6,6 +6,8 @@ import { useToast } from "@/components/ui/simple-toast";
 export type Location = {
     id: string;
     name: string;
+    nameEn: string | null;
+    nameAr: string | null;
     code: string | null;
     address: string | null;
     locationUrl: string | null;
@@ -17,6 +19,8 @@ export function useLocationsManagement() {
     const { toast } = useToast();
     const [locations, setLocations] = useState<Location[]>([]);
     const [newName, setNewName] = useState("");
+    const [newNameEn, setNewNameEn] = useState("");
+    const [newNameAr, setNewNameAr] = useState("");
     const [newCode, setNewCode] = useState("");
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,20 +59,22 @@ export function useLocationsManagement() {
                 res = await fetch(`/api/locations/${editingId}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: newName, code: newCode }),
+                    body: JSON.stringify({ name: newName, nameEn: newNameEn, nameAr: newNameAr, code: newCode }),
                 });
             } else {
                 // Create new
                 res = await fetch("/api/locations", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: newName, code: newCode }),
+                    body: JSON.stringify({ name: newName, nameEn: newNameEn, nameAr: newNameAr, code: newCode }),
                 });
             }
 
             if (res.ok) {
                 toast(editingId ? "تم تحديث المدينة بنجاح" : "تم إضافة المدينة بنجاح", "success");
                 setNewName("");
+                setNewNameEn("");
+                setNewNameAr("");
                 setNewCode("");
                 setEditingId(null);
                 fetchLocations();
@@ -79,17 +85,21 @@ export function useLocationsManagement() {
             console.error(e);
             toast("حدث خطأ في الاتصال", "error");
         }
-    }, [newName, newCode, editingId, fetchLocations, toast]);
+    }, [newName, newNameEn, newNameAr, newCode, editingId, fetchLocations, toast]);
 
     const handleEdit = useCallback((loc: Location) => {
         setEditingId(loc.id);
         setNewName(loc.name);
+        setNewNameEn(loc.nameEn || "");
+        setNewNameAr(loc.nameAr || "");
         setNewCode(loc.code || "");
     }, []);
 
     const handleCancelEdit = useCallback(() => {
         setEditingId(null);
         setNewName("");
+        setNewNameEn("");
+        setNewNameAr("");
         setNewCode("");
     }, []);
 
@@ -116,6 +126,10 @@ export function useLocationsManagement() {
         locations,
         newName,
         setNewName,
+        newNameEn,
+        setNewNameEn,
+        newNameAr,
+        setNewNameAr,
         newCode,
         setNewCode,
         loading,

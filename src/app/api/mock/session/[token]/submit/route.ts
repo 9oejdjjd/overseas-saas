@@ -121,28 +121,63 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
 }
 
-// Fire-and-forget: send mock exam result via WhatsApp
+// Fire-and-forget: send mock exam result via WhatsApp and Email
 async function sendMockResultNotification(session: any, profession: any, passed: boolean) {
     try {
         const { autoSendMessage, autoSendDirectMessage } = await import("@/lib/autoSendMessage");
+        const { sendMockResultByEmail } = await import("@/lib/sendEmail");
+
+        // Reload session to get the latest fields (score, isPassed, visitorEmail, applicant details)
+        const updatedSession = await prisma.examSession.findUnique({
+            where: { id: session.id },
+            include: { applicant: true }
+        });
+
+        if (!updatedSession) return;
 
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXTAUTH_URL || "http://localhost:3000")));
-        const resultPageUrl = `${baseUrl}/session/${session.token}/result`;
+        const resultPageUrl = `${baseUrl}/session/${updatedSession.token}/result`;
 
-        if (session.applicantId) {
+        // Determine destination email and recipient name
+        let emailTo: string | null = null;
+        let recipientName = updatedSession.visitorName || "عزيزي المستخدم";
+
+        if (updatedSession.applicantId && updatedSession.applicant) {
+            emailTo = updatedSession.applicant.notificationEmail || updatedSession.applicant.platformEmail;
+            recipientName = updatedSession.applicant.fullName;
+        } else if (updatedSession.visitorEmail) {
+            emailTo = updatedSession.visitorEmail;
+        }
+
+        // 1. Send Email Notification if email is available
+        if (emailTo) {
+            console.log(`[Notification] Sending exam result email to ${emailTo}...`);
+            await sendMockResultByEmail(
+                emailTo,
+                recipientName,
+                profession.name,
+                passed,
+                resultPageUrl,
+                updatedSession.score ? Number(updatedSession.score) : undefined,
+                updatedSession.passingScore
+            );
+        }
+
+        // 2. Existing WhatsApp Notification flow (remains untouched)
+        if (updatedSession.applicantId) {
             // Registered applicant → ON_MOCK_PASS or ON_MOCK_FAIL
             const trigger = passed ? "ON_MOCK_PASS" : "ON_MOCK_FAIL";
-            await autoSendMessage(session.applicantId, trigger, {
+            await autoSendMessage(updatedSession.applicantId, trigger, {
                 customVars: { 
                     profession: profession.name,
                     resultPageUrl: resultPageUrl
                 }
             });
-        } else if (session.visitorPhone) {
+        } else if (updatedSession.visitorPhone) {
             // Public visitor (not registered) → ON_MOCK_PASS_VISITOR or ON_MOCK_FAIL_VISITOR
             const trigger = passed ? "ON_MOCK_PASS_VISITOR" : "ON_MOCK_FAIL_VISITOR";
-            await autoSendDirectMessage(session.visitorPhone, trigger, {
-                name: session.visitorName || "عزيزي/عزيزتي",
+            await autoSendDirectMessage(updatedSession.visitorPhone, trigger, {
+                name: updatedSession.visitorName || "عزيزي/عزيزتي",
                 profession: profession.name,
                 resultPageUrl: resultPageUrl
             });

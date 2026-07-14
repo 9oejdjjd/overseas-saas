@@ -20,17 +20,20 @@ model User {
   permissions           Json?
   requirePasswordChange Boolean       @default(true)
   activityLogs          ActivityLog[]
+  reviewedPurchases     MockExamPurchase[] @relation("PurchaseReviewer")
+  author                Author?
 }
 
 model Location {
   id                     String        @id @default(uuid())
   name                   String        @unique
+  nameEn                 String?
+  nameAr                 String?
   code                   String?
   isActive               Boolean       @default(true)
   address                String?
   locationUrl            String?
   applicants             Applicant[]
-  transportingApplicants Applicant[]   @relation("TransportFrom")
   examCenters            ExamCenter[]
   transactions           Transaction[]
   vouchers               Voucher[]
@@ -81,34 +84,48 @@ model MockExamPackage {
   showResultCorrectAnswers Boolean            @default(true)
   showResultQuestions      Boolean            @default(true)
   showResultScore          Boolean            @default(true)
+  firstAttemptFullFeatures Boolean            @default(false)
+  allowedQuestionTypes     String             @default("MCQ,TRUE_FALSE,FILL_BLANK,IMAGE")
+  attemptsConfig           Json?              @default("[]")
   purchases                MockExamPurchase[]
 }
 
 model MockExamPurchase {
-  id            String           @id @default(uuid())
-  phone         String
-  buyerName     String?
-  applicantId   String?
-  packageId     String?
-  totalCredits  Int
-  usedCredits   Int              @default(0)
-  amount        Decimal          @db.Decimal(10, 2)
-  isPaid        Boolean          @default(false)
-  paymentMethod String?
-  paymentNote   String?
-  status        String           @default("PENDING")
-  activatedAt   DateTime?
-  expiresAt     DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  profession    String?
-  sessions      ExamSession[]
-  package       MockExamPackage? @relation(fields: [packageId], references: [id])
+  id              String           @id @default(uuid())
+  phone           String
+  buyerName       String?
+  email           String?
+  applicantId     String?
+  packageId       String?
+  totalCredits    Int
+  usedCredits     Int              @default(0)
+  amount          Decimal          @db.Decimal(10, 2)
+  currency        String           @default("YER")
+  isPaid          Boolean          @default(false)
+  paymentMethod   String?
+  paymentNote     String?
+  status          String           @default("PENDING")
+  transactionRef  String?          @unique
+  proofAttachment String?
+  rejectedReason  String?
+  reviewedById    String?
+  reviewedBy      User?            @relation("PurchaseReviewer", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  activatedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  profession      String?
+  sessions        ExamSession[]
+  package         MockExamPackage? @relation(fields: [packageId], references: [id])
+  smsTransactions SmsTransaction[]
 }
 
 model TransportDestination {
   id                 String                  @id @default(uuid())
   name               String                  @unique
+  nameEn             String?
+  nameAr             String?
   code               String?
   isActive           Boolean                 @default(true)
   createdAt          DateTime                @default(now())
@@ -119,6 +136,7 @@ model TransportDestination {
   routeDefaultsFrom  TransportRouteDefault[] @relation("RouteDefaultFrom")
   routeDefaultsTo    TransportRouteDefault[] @relation("RouteDefaultTo")
   TransportRouteStop TransportRouteStop[]
+  applicants         Applicant[]             @relation("TransportFrom")
 }
 
 model ScheduledTrip {
@@ -219,6 +237,7 @@ model Applicant {
   examTime          String?
   platformEmail     String?         @unique
   platformPassword  String?
+  notificationEmail String?
   examTicketImage   String?
   certificateImage  String?
   status            ApplicantStatus @default(NEW_REGISTRATION)
@@ -231,6 +250,7 @@ model Applicant {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   discount          Decimal         @default(0) @db.Decimal(10, 2)
+  isArchived        Boolean         @default(false)
   applicantType     String?         @default("RESIDENT")
   dob               DateTime?
   firstName         String?
@@ -248,7 +268,7 @@ model Applicant {
   activityLogs      ActivityLog[]
   examCenter        ExamCenter?     @relation(fields: [examCenterId], references: [id])
   location          Location?       @relation(fields: [locationId], references: [id])
-  transportFrom     Location?       @relation("TransportFrom", fields: [transportFromId], references: [id])
+  transportFrom     TransportDestination? @relation("TransportFrom", fields: [transportFromId], references: [id])
   documents         Document[]
   examSessions      ExamSession[]
   messageLogs       MessageLog[]
@@ -326,6 +346,7 @@ model MessagingTemplate {
   type      String
   subject   String?
   body      String
+  variants  Json?      // Array of alternative bodies
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -393,6 +414,7 @@ model TransportRouteDefault {
   costRoundTrip     Decimal?             @default(0) @db.Decimal(10, 2)
   fromDestination   TransportDestination @relation("RouteDefaultFrom", fields: [fromDestinationId], references: [id])
   toDestination     TransportDestination @relation("RouteDefaultTo", fields: [toDestinationId], references: [id])
+  currency          String               @default("YER")
 
   @@unique([fromDestinationId, toDestinationId])
 }
@@ -553,6 +575,7 @@ model ExamSession {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   visitorPhone      String?
+  visitorEmail      String?
   attemptNumber     Int                   @default(1)
   deviceFingerprint String?
   ipAddress         String?
@@ -735,4 +758,131 @@ enum AIJobStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+model WalletAccount {
+  id            String   @id @default(uuid())
+  name          String
+  nameEn        String?
+  accountNumber String?
+  accountName   String?
+  isActive      Boolean  @default(true)
+  icon          String?
+  instructions  String?  @db.Text
+  accounts      Json?    @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SmsTransaction {
+  id                    String            @id @default(uuid())
+  textbeeMessageId      String?           @unique
+  sender                String
+  body                  String            @db.Text
+  amount                Decimal?          @db.Decimal(10, 2)
+  transactionNumber     String?           @unique
+  walletName            String?
+  deviceFingerprint     String?
+  isMatched             Boolean           @default(false)
+  matchedPurchaseId     String?
+  matchedPurchase       MockExamPurchase? @relation(fields: [matchedPurchaseId], references: [id])
+  rawPayload            Json?
+  receivedAt            DateTime          @default(now())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([transactionNumber])
+  @@index([sender])
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+}
+
+model Article {
+  id               String        @id @default(uuid())
+  title            String
+  slug             String        @unique
+  content          String        @db.Text
+  summary          String?       @db.Text
+  featuredImage    String?
+  status           ArticleStatus @default(DRAFT)
+  readTime         Int           @default(5)
+  views            Int           @default(0)
+  isFeatured       Boolean       @default(false)
+  actionButtonText String?
+  actionButtonUrl  String?
+  publishedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  authorId         String?
+  author           Author?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  categoryId       String
+  category         Category      @relation(fields: [categoryId], references: [id])
+  tags             Tag[]
+
+  metaTitle        String?
+  metaDescription  String?       @db.Text
+  metaKeywords     String?
+  ogTitle          String?
+  ogDescription    String?       @db.Text
+  ogImage          String?
+  canonicalUrl     String?
+
+  @@index([slug])
+  @@index([status])
+  @@index([categoryId])
+  @@index([authorId])
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  nameEn      String?
+  slug        String    @unique
+  description String?   @db.Text
+  articles    Article[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Tag {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  slug      String    @unique
+  articles  Article[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Author {
+  id        String    @id @default(uuid())
+  name      String
+  title     String?
+  avatar    String?
+  bio       String?   @db.Text
+  userId    String?   @unique
+  user      User?     @relation(fields: [userId], references: [id])
+  articles  Article[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model SystemCurrency {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  name       String
+  buyRate    Decimal  @db.Decimal(10, 2)
+  sellRate   Decimal  @db.Decimal(10, 2)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

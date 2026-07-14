@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
             roundTripPrice: Number(r.priceRoundTrip || r.price),
             isActive: true,
             fromDestination: r.fromDestination,
-            toDestination: r.toDestination
+            toDestination: r.toDestination,
+            currency: r.currency || "YER"
         }));
 
         return NextResponse.json(mappedRoutes);

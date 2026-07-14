@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Settings, FileText, Beaker, ShieldAlert, Loader2 } from "lucide-react";
+import { MapPin, Settings, FileText, Beaker, ShieldAlert, Loader2, Wallet } from "lucide-react";
 import { LocationsManagement } from "@/components/pricing/LocationsManagement";
 import { ServicesList } from "@/components/pricing/ServicesList";
 import { PoliciesList } from "@/components/pricing/PoliciesList";
 import { MockExamPackages } from "@/components/pricing/MockExamPackages";
+import { WalletsManagement } from "@/components/pricing/WalletsManagement";
 import { PricingStats } from "@/components/pricing/PricingStats";
 import { useSession } from "next-auth/react";
 import { hasAccess } from "@/lib/rbac";
@@ -45,6 +46,7 @@ export default function PricingPage() {
     const canAccessServices = hasAccess(session.user, "pricing.services");
     const canAccessPolicies = hasAccess(session.user, "pricing.policies");
     const canAccessMockPackages = hasAccess(session.user, "pricing.mockPackages");
+    const canAccessWallets = session.user.role === "ADMIN";
 
     const defaultTab = canAccessLocations
         ? "locations"
@@ -54,6 +56,8 @@ export default function PricingPage() {
         ? "policies"
         : canAccessMockPackages
         ? "mock-packages"
+        : canAccessWallets
+        ? "wallets"
         : "";
 
     if (!defaultTab) {
@@ -86,6 +90,9 @@ export default function PricingPage() {
                     {canAccessMockPackages && (
                         <TabsTrigger value="mock-packages" className="gap-2 rounded-xl text-xs font-bold px-5 py-2.5 transition-all"><Beaker className="h-4 w-4" /> باقات الاختبارات التجريبية</TabsTrigger>
                     )}
+                    {canAccessWallets && (
+                        <TabsTrigger value="wallets" className="gap-2 rounded-xl text-xs font-bold px-5 py-2.5 transition-all"><Wallet className="h-4 w-4" /> إعداد محافظ الاستقبال</TabsTrigger>
+                    )}
                 </TabsList>
 
                 {canAccessLocations && (
@@ -109,6 +116,12 @@ export default function PricingPage() {
                 {canAccessMockPackages && (
                     <TabsContent value="mock-packages" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
                         <MockExamPackages />
+                    </TabsContent>
+                )}
+
+                {canAccessWallets && (
+                    <TabsContent value="wallets" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+                        <WalletsManagement />
                     </TabsContent>
                 )}
             </Tabs>

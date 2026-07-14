@@ -52,7 +52,7 @@ export async function POST(request: Request) {
             });
 
             // 2. If valid Applicant & Payment/Refund, update Applicant Balance
-            if (applicantId && (type === "PAYMENT" || type === "REFUND")) {
+            if (applicantId && (type === "PAYMENT" || type === "WITHDRAWAL")) {
                 const applicant = await tx.applicant.findUnique({ where: { id: applicantId } });
 
                 if (applicant) {
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
                     if (type === "PAYMENT") {
                         newAmountPaid += Number(amount);
-                    } else if (type === "REFUND") {
+                    } else if (type === "WITHDRAWAL") {
                         newAmountPaid -= Number(amount);
                     }
 

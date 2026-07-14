@@ -47,6 +47,18 @@ export function PersonalDetailsView({ applicant, hook }: PersonalDetailsViewProp
             </div>
 
             <div className="flex justify-between items-center border-b pb-2">
+                <span className="text-sm text-gray-500">بريد الإشعارات</span>
+                <div className="flex items-center gap-2">
+                    <span className="font-mono font-medium direction-ltr">{applicant.notificationEmail || "-"}</span>
+                    {applicant.notificationEmail && (
+                        <button onClick={() => copyToClipboard(applicant.notificationEmail!, 'notifEmail')} className="text-gray-400 hover:text-blue-600">
+                            {copiedField === 'notifEmail' ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex justify-between items-center border-b pb-2">
                 <span className="text-sm text-gray-500">First Name</span>
                 <div className="flex items-center gap-2">
                     <span className="font-mono font-medium">{applicant.firstName || "-"}</span>

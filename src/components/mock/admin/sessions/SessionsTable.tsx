@@ -169,7 +169,9 @@ export function SessionsTable({
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex gap-2 items-center">
-                                                <Badge variant="secondary" className="text-[9px] font-bold scale-90">{group.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
+                                                <Badge variant="secondary" className="text-[9px] font-bold scale-90">
+                                                    {group.customerType === "APPLICANT" ? "مسجل" : (group.customerType === "CUSTOMER" ? "عميل باقة" : "زائر عام")}
+                                                </Badge>
                                                 <span className="text-[10px] font-extrabold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
                                                     {group.totalAttempts} / {group.maxAttempts === -1 ? '∞' : (group.maxAttempts ?? 3)}
                                                 </span>

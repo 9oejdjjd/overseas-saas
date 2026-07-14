@@ -85,6 +85,16 @@ export function PersonalDetailsForm({ hook }: PersonalDetailsFormProps) {
                 </div>
             </div>
             
+            <div className="space-y-2">
+                <Label className="text-xs text-gray-600">بريد الإشعارات (لاستقبال الإشعارات والتنبيهات)</Label>
+                <Input
+                    value={basicInfo.notificationEmail || ""}
+                    onChange={e => setBasicInfo({ ...basicInfo, notificationEmail: e.target.value })}
+                    className="dir-ltr font-mono text-left"
+                    placeholder="example@email.com"
+                />
+            </div>
+            
             <div className="space-y-2 relative">
                 <Label className="text-xs">المهنة</Label>
                 <div className="relative">

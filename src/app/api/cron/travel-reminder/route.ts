@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { autoSendMessage } from "@/lib/autoSendMessage";
+import { sleepRandom } from "@/lib/openwa";
 
 /**
  * CRON endpoint: Sends travel reminders to applicants whose trip is exactly 48 hours away.
@@ -71,8 +72,8 @@ export async function GET() {
                 failedCount++;
             }
 
-            // Small delay between sends to avoid rate-limiting
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Strict delay between sends to avoid WhatsApp rate-limiting & bans
+            await sleepRandom(8, 20);
         }
 
         return NextResponse.json({

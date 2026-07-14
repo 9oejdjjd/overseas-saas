@@ -69,6 +69,47 @@ async function main() {
     }
 
     console.log('✅ Pricing packages seeded successfully!');
+
+    console.log('Seeding default wallet accounts...');
+    const wallets = [
+        {
+            name: 'محفظة الكريمي (أم فلوس)',
+            nameEn: 'Kuraimi Wallet (M-Floos)',
+            accountNumber: '12345678',
+            accountName: 'مؤسسة الاعتماد المهني',
+            isActive: true,
+            icon: 'kuraimi',
+            instructions: 'قم بتحويل الرسوم المطلوبة إلى رقم حساب الكريمي الموضح أعلاه. يرجى إدخال رقم العملية المكون من 7 إلى 8 أرقام بدقة لتأكيد الاشتراك وتفعيل الباقة تلقائياً فوراً.',
+        },
+        {
+            name: 'محفظة ون كاش (One Cash)',
+            nameEn: 'One Cash Wallet',
+            accountNumber: '777263111',
+            accountName: 'بوابة الاعتماد المهني',
+            isActive: true,
+            icon: 'onecash',
+            instructions: 'قم بالتحويل إلى رقم محفظة ون كاش الموضح أعلاه. بمجرد التحويل، اكتب الرقم المرجعي للعملية في الحقل المخصص أدناه للتأكيد الآلي السريع.',
+        },
+        {
+            name: 'محفظة جوال بي (Jawwal Pay)',
+            nameEn: 'Jawwal Pay Wallet',
+            accountNumber: '777263112',
+            accountName: 'بوابة الاعتماد المهني',
+            isActive: true,
+            icon: 'jawwalpay',
+            instructions: 'قم بالتحويل إلى رقم محفظة جوال بي الموضح أعلاه، ثم أدخل رقم العملية لتأكيد الحوالة والاشتراك في ثوانٍ.',
+        }
+    ];
+
+    for (const wallet of wallets) {
+        const existing = await prisma.walletAccount.findFirst({ where: { name: wallet.name } });
+        if (existing) {
+            await prisma.walletAccount.update({ where: { id: existing.id }, data: wallet });
+        } else {
+            await prisma.walletAccount.create({ data: wallet });
+        }
+    }
+    console.log('✅ Wallet accounts seeded successfully!');
 }
 
 main()

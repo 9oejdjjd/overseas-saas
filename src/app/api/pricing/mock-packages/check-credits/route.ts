@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         const purchases = await prisma.mockExamPurchase.findMany({
             where: {
                 phone: { in: uniquePhones },
-                status: { in: ["ACTIVE", "PENDING"] },
+                status: { in: ["ACTIVE", "PENDING", "PAID", "AWAITING_VERIFICATION", "UNDER_REVIEW"] },
             },
             include: { package: { select: { name: true } } },
             orderBy: { createdAt: 'desc' }

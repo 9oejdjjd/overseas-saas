@@ -10,11 +10,13 @@ import React from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SuspicionFilterType } from "@/hooks/mock-exams/useMockExamsSessions";
+import { SuspicionFilterType, CustomerTypeFilter } from "@/hooks/mock-exams/useMockExamsSessions";
 
 interface FiltersProps {
     suspicionFilter: SuspicionFilterType;
     setSuspicionFilter: (filter: SuspicionFilterType) => void;
+    customerFilter: CustomerTypeFilter;
+    setCustomerFilter: (filter: CustomerTypeFilter) => void;
     searchTerm: string;
     setSearchTerm: (term: string) => void;
     suspiciousCount: number;
@@ -24,6 +26,8 @@ interface FiltersProps {
 export function SessionsFilters({
     suspicionFilter,
     setSuspicionFilter,
+    customerFilter,
+    setCustomerFilter,
     searchTerm,
     setSearchTerm,
     suspiciousCount,
@@ -35,9 +39,16 @@ export function SessionsFilters({
         { key: "CRITICAL" as const, label: "🔴 خطير", color: "text-red-600 hover:bg-red-50/50" },
     ];
 
+    const customerOptions = [
+        { key: "ALL" as const, label: "جميع الفئات", color: "" },
+        { key: "APPLICANT" as const, label: "المسجلين", color: "text-indigo-600 hover:bg-indigo-50/50" },
+        { key: "CUSTOMER" as const, label: "عملاء الباقات", color: "text-green-600 hover:bg-green-50/50" },
+        { key: "VISITOR" as const, label: "الزوار (عام)", color: "text-blue-600 hover:bg-blue-50/50" },
+    ];
+
     return (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full" dir="rtl">
-            <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+            <div className="flex items-center gap-4 w-full md:w-auto flex-wrap">
                 {/* أزرار تصفية مستويات الاشتباه */}
                 <div className="flex items-center gap-1 bg-white border border-gray-200/80 rounded-xl p-1 shadow-sm">
                     {filterOptions.map(f => (
@@ -63,6 +74,25 @@ export function SessionsFilters({
                                     {criticalCount}
                                 </span>
                             )}
+                        </Button>
+                    ))}
+                </div>
+
+                {/* أزرار تصفية فئة العميل */}
+                <div className="flex items-center gap-1 bg-white border border-gray-200/80 rounded-xl p-1 shadow-sm">
+                    {customerOptions.map(f => (
+                        <Button 
+                            key={f.key}
+                            variant={customerFilter === f.key ? "default" : "ghost"}
+                            size="sm"
+                            onClick={() => setCustomerFilter(f.key)}
+                            className={`text-xs h-8 px-3 rounded-lg font-bold transition-all duration-200 ${
+                                customerFilter === f.key 
+                                    ? "bg-indigo-600 text-white shadow-sm hover:bg-indigo-700" 
+                                    : f.color
+                            }`}
+                        >
+                            {f.label}
                         </Button>
                     ))}
                 </div>

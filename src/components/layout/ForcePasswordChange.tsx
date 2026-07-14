@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Lock, Eye, EyeOff, ShieldAlert, CheckCircle2, AlertCircle } from "lucide-react";
-import toast from "react-hot-toast";
+import { useToast } from "@/components/ui/simple-toast";
 
 export function ForcePasswordChange() {
+    const { toast } = useToast();
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showNew, setShowNew] = useState(false);
@@ -36,7 +37,7 @@ export function ForcePasswordChange() {
             });
 
             if (res.ok) {
-                toast.success("تم تحديث كلمة المرور بنجاح! جاري تحويلك...");
+                toast("تم تحديث كلمة المرور بنجاح! جاري تحويلك...", "success");
                 // Reload to refresh NextAuth session
                 setTimeout(() => {
                     window.location.reload();

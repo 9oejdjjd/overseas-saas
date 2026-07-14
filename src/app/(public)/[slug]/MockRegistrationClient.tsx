@@ -7,34 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, User, Phone, ShieldCheck, AlertCircle, BookOpen, Clock, Activity, ChevronDown, Search } from "lucide-react";
+import { CheckCircle, User, Phone, ShieldCheck, AlertCircle, BookOpen, Clock, Activity } from "lucide-react";
 import { MockExamNavbar } from "@/components/mock/MockExamNavbar";
 import { getDeviceFingerprint } from "@/lib/fingerprint";
+import { countries } from "@/constants/countries";
+import { CountryCodeSelector } from "@/components/ui/CountryCodeSelector";
 
-const countries = [
-    { code: "+966", flag: "🇸🇦", name: "السعودية" },
-    { code: "+971", flag: "🇦🇪", name: "الإمارات" },
-    { code: "+965", flag: "🇰🇼", name: "الكويت" },
-    { code: "+974", flag: "🇶🇦", name: "قطر" },
-    { code: "+973", flag: "🇧🇭", name: "البحرين" },
-    { code: "+968", flag: "🇴🇲", name: "عُمان" },
-    { code: "+20",  flag: "🇪🇬", name: "مصر" },
-    { code: "+962", flag: "🇯🇴", name: "الأردن" },
-    { code: "+963", flag: "🇸🇾", name: "سوريا" },
-    { code: "+964", flag: "🇮🇶", name: "العراق" },
-    { code: "+961", flag: "🇱🇧", name: "لبنان" },
-    { code: "+970", flag: "🇵🇸", name: "فلسطين" },
-    { code: "+967", flag: "🇾🇪", name: "اليمن" },
-    { code: "+249", flag: "🇸🇩", name: "السودان" },
-    { code: "+218", flag: "🇱🇾", name: "ليبيا" },
-    { code: "+216", flag: "🇹🇳", name: "تونس" },
-    { code: "+213", flag: "🇩🇿", name: "الجزائر" },
-    { code: "+212", flag: "🇲🇦", name: "المغرب" },
-    { code: "+222", flag: "🇲🇷", name: "موريتانيا" },
-    { code: "+252", flag: "🇸🇴", name: "الصومال" },
-    { code: "+253", flag: "🇩🇯", name: "جيبوتي" },
-    { code: "+269", flag: "🇰🇲", name: "جزر القمر" },
-];
 
 export default function MockRegistrationPage() {
     const router = useRouter();
@@ -48,23 +26,28 @@ export default function MockRegistrationPage() {
     
     // Country code selector state
     const [countryCode, setCountryCode] = useState("+967");
-    const [showCountryDropdown, setShowCountryDropdown] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
     const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-    const [timeLeft, setTimeLeft] = useState(300); // 5 minutes = 300 seconds
+    const [timeLeft, setTimeLeft] = useState(30); // Start with 30s instead of 5m
     const [canResend, setCanResend] = useState(false);
+    const [resendCount, setResendCount] = useState(0);
+    const [showEmailFallback, setShowEmailFallback] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const emailInputRef = useRef<HTMLInputElement>(null);
     const fingerprintRef = useRef<string>("unknown-device");
-
-    const filteredCountries = countries.filter(c => 
-        c.name.includes(searchQuery) || c.code.includes(searchQuery)
-    );
 
     const [formData, setFormData] = useState({
         visitorName: "",
         visitorPhone: "",
+        email: "",
+        deliveryMethod: "WHATSAPP", // "WHATSAPP" or "EMAIL"
         termsAccepted: false,
     });
+
+    const getNextTimer = (count: number) => {
+        if (count === 0) return 30; // First request: 30 seconds
+        if (count === 1) return 60; // Second request: 1 minute
+        return 600; // Third request and beyond: 10 minutes
+    };
 
     useEffect(() => {
         getDeviceFingerprint()
@@ -77,10 +60,16 @@ export default function MockRegistrationPage() {
     }, []);
 
     useEffect(() => {
+        if (showEmailFallback && emailInputRef.current) {
+            emailInputRef.current.focus();
+        }
+    }, [showEmailFallback]);
+
+    useEffect(() => {
         let timer: NodeJS.Timeout;
         if (step === 3 && timeLeft > 0) {
             timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-        } else if (timeLeft === 0) {
+        } else if (timeLeft === 0 && step === 3) {
             setCanResend(true);
         }
         return () => clearInterval(timer);
@@ -130,14 +119,32 @@ export default function MockRegistrationPage() {
                         action: "REQUEST",
                         visitorName: formData.visitorName,
                         visitorPhone: `${countryCode}${formData.visitorPhone}`,
+                        deliveryMethod: formData.deliveryMethod,
+                        email: formData.email,
+                        professionName: profession?.name,
                     })
                 });
                 
                 const data = await res.json();
+                
+                if (res.status === 429 && data.cooldown) {
+                    setStep(3); // Already requested recently, go to OTP step
+                    setTimeLeft(data.cooldown);
+                    setCanResend(false);
+                    return;
+                }
+
                 if (!res.ok) throw new Error(data.error || "حدث خطأ أثناء فحص الرقم");
                 
-                // TEMPORARY BYPASS: Direct to Terms (Step 4) due to WhatsApp server outage
-                setStep(4);
+                if (data.requiresOtp) {
+                    setStep(3); // Go to OTP
+                    setResendCount(0);
+                    setTimeLeft(getNextTimer(0));
+                    setCanResend(false);
+                    setOtp(["", "", "", "", "", ""]);
+                } else if (data.isVerified) {
+                    setStep(4); // Skip OTP, go to Terms
+                }
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -184,13 +191,77 @@ export default function MockRegistrationPage() {
                     action: "REQUEST",
                     visitorName: formData.visitorName,
                     visitorPhone: `${countryCode}${formData.visitorPhone}`,
+                    deliveryMethod: "WHATSAPP",
+                    professionName: profession?.name,
                 })
             });
-            if (!res.ok) throw new Error("فشل إرسال الرمز");
             
-            setTimeLeft(300);
+            const data = await res.json();
+            
+            if (res.status === 429 && data.cooldown) {
+                setTimeLeft(data.cooldown);
+                setCanResend(false);
+                return;
+            }
+
+            if (!res.ok) throw new Error(data.error || "فشل إرسال الرمز");
+            
+            const nextCount = resendCount + 1;
+            setResendCount(nextCount);
+            setTimeLeft(getNextTimer(nextCount));
             setCanResend(false);
             setOtp(["", "", "", "", "", ""]);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEmailFallbackSubmit = async () => {
+        if (!formData.email || !/^\S+@\S+\.\S+$/.test(formData.email)) {
+            setError("الرجاء إدخال بريد إلكتروني صحيح.");
+            return;
+        }
+        
+        setLoading(true);
+        setError("");
+        try {
+            const res = await fetch("/api/mock/public/verify-phone", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "REQUEST",
+                    visitorName: formData.visitorName,
+                    visitorPhone: `${countryCode}${formData.visitorPhone}`,
+                    email: formData.email,
+                    deliveryMethod: "EMAIL",
+                    professionName: profession?.name,
+                })
+            });
+            const data = await res.json();
+            
+            if (res.status === 429 && data.cooldown) {
+                setFormData(prev => ({ ...prev, deliveryMethod: "EMAIL" }));
+                setShowEmailFallback(false);
+                setTimeLeft(data.cooldown);
+                setCanResend(false);
+                return;
+            }
+
+            if (!res.ok) throw new Error(data.error || "فشل إرسال الرمز للبريد");
+            
+            const nextCount = resendCount + 1;
+            setResendCount(nextCount);
+            setFormData(prev => ({ ...prev, deliveryMethod: "EMAIL" }));
+            setShowEmailFallback(false);
+            setTimeLeft(getNextTimer(nextCount));
+            setCanResend(false);
+            setOtp(["", "", "", "", "", ""]);
+            // Autofocus first OTP digit
+            setTimeout(() => {
+                inputRefs.current[0]?.focus();
+            }, 100);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -234,6 +305,7 @@ export default function MockRegistrationPage() {
                 body: JSON.stringify({
                     visitorName: formData.visitorName,
                     visitorPhone: `${countryCode}${formData.visitorPhone}`,
+                    visitorEmail: formData.email,
                     professionSlug: slug,
                     deviceFingerprint: fingerprint
                 })
@@ -443,74 +515,18 @@ export default function MockRegistrationPage() {
                                                 <Label className="text-slate-700 font-bold text-sm md:text-base">رقم التواصل الأساسي (واتساب)</Label>
                                                 
                                                 <div className="relative flex items-center bg-slate-50 border-2 border-slate-100 rounded-xl md:rounded-2xl focus-within:border-[#16539a] focus-within:bg-white focus-within:ring-4 focus-within:ring-[#16539a]/10 transition-all h-12 md:h-14 w-full group">
-                                                    
-                                                    {/* Country Code Dropdown Button */}
-                                                    <div className="h-full flex items-center relative">
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-                                                            className="h-full px-2 md:px-4 flex items-center justify-center gap-1.5 md:gap-2 border-l border-slate-200 hover:bg-slate-100 transition-colors rounded-r-xl md:rounded-r-2xl text-slate-700 bg-slate-50/50 min-w-[90px] md:min-w-[110px]"
-                                                            dir="ltr"
-                                                        >
-                                                            <span className="text-lg md:text-2xl leading-none drop-shadow-sm">{countries.find(c => c.code === countryCode)?.flag}</span>
-                                                            <span className="font-mono font-bold text-sm md:text-base text-slate-800" dir="ltr">{countryCode}</span>
-                                                            <ChevronDown size={16} className={`text-slate-400 transition-transform ml-0.5 ${showCountryDropdown ? 'rotate-180 text-[#16539a]' : ''}`} />
-                                                        </button>
-                                                        
-                                                        {/* Dropdown Menu */}
-                                                        <AnimatePresence>
-                                                            {showCountryDropdown && (
-                                                                <motion.div 
-                                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                                    className="absolute top-[calc(100%+8px)] right-0 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-slate-100 w-[280px] md:w-72 overflow-hidden z-[100] flex flex-col"
-                                                                >
-                                                                    {/* Search Input */}
-                                                                    <div className="p-3 border-b border-slate-100 bg-slate-50/50">
-                                                                        <div className="relative">
-                                                                            <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4" />
-                                                                            <Input 
-                                                                                autoFocus
-                                                                                placeholder="ابحث بالدولة أو الرمز..."
-                                                                                value={searchQuery}
-                                                                                onChange={e => setSearchQuery(e.target.value)}
-                                                                                className="h-10 pl-3 pr-9 border-slate-200 focus:border-[#16539a] text-sm bg-white rounded-xl shadow-sm"
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <div className="max-h-64 overflow-y-auto p-2 custom-scrollbar">
-                                                                        {filteredCountries.length > 0 ? filteredCountries.map(c => (
-                                                                            <button 
-                                                                                key={c.code}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    setCountryCode(c.code);
-                                                                                    setShowCountryDropdown(false);
-                                                                                    setSearchQuery("");
-                                                                                }}
-                                                                                className={`w-full p-3 rounded-xl flex items-center justify-between hover:bg-slate-50 transition-colors mb-1 ${countryCode === c.code ? 'bg-blue-50 text-[#16539a] border border-blue-100' : 'text-slate-700 border border-transparent'}`}
-                                                                                dir="ltr"
-                                                                            >
-                                                                                <span className="text-2xl leading-none">{c.flag}</span>
-                                                                                <span className="flex-1 text-right pr-4 font-bold">{c.name}</span>
-                                                                                <span className="font-mono font-medium text-slate-500 w-16 text-left">{c.code}</span>
-                                                                            </button>
-                                                                        )) : (
-                                                                            <div className="p-6 text-center text-slate-400 font-medium">لم يتم العثور على نتائج</div>
-                                                                        )}
-                                                                    </div>
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
-                                                    </div>
-
-                                                    {/* Number Input */}
+                                                    <CountryCodeSelector 
+                                                        selectedCode={countryCode} 
+                                                        onSelect={setCountryCode} 
+                                                        disabled={loading} 
+                                                    />
                                                     <Input 
                                                         className="flex-1 h-full px-3 md:px-4 text-base md:text-xl border-0 focus:ring-0 bg-transparent font-mono focus-visible:ring-0 focus-visible:ring-offset-0 text-left outline-none placeholder:text-slate-300" 
                                                         placeholder="أدخل رقم الواتس اب"
                                                         dir="ltr"
+                                                        type="tel"
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
                                                         value={formData.visitorPhone}
                                                         onChange={e => setFormData({...formData, visitorPhone: e.target.value.replace(/\D/g, '')})}
                                                     />
@@ -519,11 +535,15 @@ export default function MockRegistrationPage() {
                                         </div>
 
                                         <div className="flex gap-3 mt-6 md:mt-12">
-                                            <Button onClick={() => setStep(1)} variant="outline" className="w-[30%] h-12 md:h-14 text-sm md:text-lg font-bold rounded-xl md:rounded-2xl border-2 border-slate-200 text-slate-600 hover:bg-slate-50">
+                                            <Button onClick={() => setStep(1)} disabled={loading} variant="outline" className="w-[30%] h-12 md:h-14 text-sm md:text-lg font-bold rounded-xl md:rounded-2xl border-2 border-slate-200 text-slate-600 hover:bg-slate-50">
                                                 رجوع
                                             </Button>
-                                            <Button onClick={handleNext} className="w-[70%] h-12 md:h-14 text-sm md:text-lg font-bold bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-xl md:rounded-2xl shadow-lg shadow-blue-900/20 transform hover:-translate-y-1 transition-all">
-                                                المرحلة الأخيرة
+                                            <Button 
+                                                onClick={handleNext} 
+                                                disabled={loading}
+                                                className="w-[70%] h-12 md:h-14 text-sm md:text-lg font-bold bg-[#16539a] hover:bg-[#1e66b8] text-white rounded-xl md:rounded-2xl shadow-lg shadow-blue-900/20 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {loading ? <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></div> : "المرحلة الأخيرة"}
                                             </Button>
                                         </div>
                                     </motion.div>
@@ -546,10 +566,12 @@ export default function MockRegistrationPage() {
                                                 <ShieldCheck size={32} />
                                             </motion.div>
                                         </div>
-                                        <h2 className="text-2xl font-bold text-slate-800 mb-2 text-center">تأكيد رقم الواتساب</h2>
+                                        <h2 className="text-2xl font-bold text-slate-800 mb-2 text-center">تأكيد الاستلام</h2>
                                         <p className="text-slate-500 text-sm md:text-base text-center mb-8 leading-relaxed">
-                                            لقد أرسلنا كود تحقق (OTP) إلى رقم الواتساب <br/>
-                                            <span className="font-bold text-[#16539a]" dir="ltr">{countryCode} {formData.visitorPhone}</span>
+                                            لقد أرسلنا كود تحقق (OTP) عبر {formData.deliveryMethod === "EMAIL" ? "البريد الإلكتروني" : "الواتساب"} <br/>
+                                            <span className="font-bold text-[#16539a]" dir="ltr">
+                                                {formData.deliveryMethod === "EMAIL" ? formData.email : `${countryCode}${formData.visitorPhone}`}
+                                            </span>
                                         </p>
                                         
                                         {error && <div className="p-3 mb-6 bg-red-50 text-red-600 rounded-xl text-sm text-center font-bold border border-red-100">{error}</div>}
@@ -558,7 +580,9 @@ export default function MockRegistrationPage() {
                                             {otp.map((digit, index) => (
                                                 <input
                                                     key={index}
-                                                    type="text"
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]*"
                                                     maxLength={1}
                                                     value={digit}
                                                     ref={(el) => { inputRefs.current[index] = el; }}
@@ -594,15 +618,65 @@ export default function MockRegistrationPage() {
                                                     <Clock size={16} className="text-slate-400" />
                                                     يمكنك إعادة المحاولة بعد: <span className="text-[#16539a] font-mono font-bold" dir="ltr">{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
                                                 </div>
+                                            ) : !showEmailFallback ? (
+                                                <div className="flex flex-col items-center gap-3 w-full">
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        onClick={handleResendOtp} 
+                                                        disabled={loading}
+                                                        className="text-sm font-bold text-[#16539a] hover:text-[#1e66b8] hover:bg-blue-50 px-4 py-2 rounded-full transition-colors"
+                                                    >
+                                                        لم يصلني الرمز، إعادة إرساله عبر الواتساب
+                                                    </Button>
+                                                    <Button 
+                                                        variant="outline"
+                                                        onClick={() => setShowEmailFallback(true)} 
+                                                        disabled={loading}
+                                                        className="w-full max-w-[280px] h-11 text-sm font-bold border-2 border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl"
+                                                    >
+                                                        التحقق عبر البريد الإلكتروني (طريقة بديلة)
+                                                    </Button>
+                                                </div>
                                             ) : (
-                                                <Button 
-                                                    variant="ghost" 
-                                                    onClick={handleResendOtp} 
-                                                    disabled={loading}
-                                                    className="text-sm font-bold text-[#16539a] hover:text-[#1e66b8] hover:bg-blue-50 px-4 py-2 rounded-full transition-colors"
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: -10, height: 0 }}
+                                                    animate={{ opacity: 1, y: 0, height: "auto" }}
+                                                    className="w-full flex flex-col items-center gap-3"
                                                 >
-                                                    لم يصلني الرمز، إعادة إرسال
-                                                </Button>
+                                                    <div className="w-full max-w-[320px] relative">
+                                                        <Input 
+                                                            ref={emailInputRef}
+                                                            type="email"
+                                                            className="px-4 h-12 text-base rounded-xl border-2 border-slate-200 focus:border-[#16539a] focus:ring-0 bg-slate-50 focus:bg-white text-left transition-all" 
+                                                            placeholder="أدخل بريدك الإلكتروني"
+                                                            dir="ltr"
+                                                            value={formData.email}
+                                                            onChange={e => setFormData({...formData, email: e.target.value})}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === "Enter" && formData.email) {
+                                                                    handleEmailFallbackSubmit();
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex gap-2 w-full max-w-[320px]">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            onClick={() => setShowEmailFallback(false)} 
+                                                            disabled={loading}
+                                                            className="flex-1 text-slate-500 hover:bg-slate-100"
+                                                        >
+                                                            إلغاء
+                                                        </Button>
+                                                        <Button 
+                                                            onClick={handleEmailFallbackSubmit} 
+                                                            disabled={loading || !formData.email || !/^\S+@\S+\.\S+$/.test(formData.email)}
+                                                            className="flex-1 bg-[#16539a] hover:bg-[#1e66b8] text-white"
+                                                        >
+                                                            {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : "إرسال الرمز"}
+                                                        </Button>
+                                                    </div>
+                                                </motion.div>
                                             )}
                                         </div>
 

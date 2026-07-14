@@ -8,6 +8,7 @@ export interface Template {
     name: string;
     trigger: string;
     body: string;
+    variants?: string[];
     active: boolean;
 }
 
@@ -52,6 +53,7 @@ export function useTemplatesManager() {
             name: "قالب جديد",
             trigger: "CUSTOM_TRIGGER",
             body: "مرحبا {name}...",
+            variants: [],
             active: true
         });
         setIsEditModalOpen(true);
@@ -90,6 +92,7 @@ export function useTemplatesManager() {
                     name: selectedTemplate.name,
                     trigger: selectedTemplate.trigger,
                     body: selectedTemplate.body,
+                    variants: selectedTemplate.variants,
                     type: "WHATSAPP",
                 })
             });

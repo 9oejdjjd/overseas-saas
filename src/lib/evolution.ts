@@ -55,7 +55,8 @@ export async function sendWhatsAppMessage(phone: string, message: string) {
                 headers: {
                     'apikey': EVOLUTION_API_KEY,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 8000
             }
         );
 
@@ -139,7 +140,8 @@ export async function sendWhatsAppFile(phone: string, base64: string, fileName: 
                 headers: {
                     'apikey': EVOLUTION_API_KEY,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 8000
             }
         );
 
@@ -194,9 +196,6 @@ export async function onWhatsApp(phone: string): Promise<boolean> {
     }
 }
 
-/**
- * Proactively wake up Render server by pinging its connection state
- */
 export async function wakeUpEvolutionServer(): Promise<boolean> {
     if (!EVOLUTION_API_KEY) return false;
     try {
@@ -214,3 +213,94 @@ export async function wakeUpEvolutionServer(): Promise<boolean> {
         return true;
     }
 }
+
+/**
+ * Delay execution for a random number of seconds between min and max.
+ */
+export function sleepRandom(minSeconds: number, maxSeconds: number): Promise<void> {
+    const ms = Math.floor((Math.random() * (maxSeconds - minSeconds) + minSeconds) * 1000);
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Set the profile presence state of the instance (available / unavailable).
+ */
+export async function setPresence(presence: 'available' | 'unavailable'): Promise<void> {
+    if (!EVOLUTION_API_KEY) return;
+    try {
+        const url = `${EVOLUTION_BASE_URL}/instance/setPresence/${EVOLUTION_INSTANCE}`;
+        await axios.post(
+            url,
+            { presence },
+            {
+                headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+    } catch (error) {
+        console.error("Evolution setPresence Error:", error);
+    }
+}
+
+/**
+ * Set the chat presence status (composing / recording / paused) for a specific number.
+ */
+export async function sendChatState(phone: string, presence: 'composing' | 'recording' | 'paused'): Promise<void> {
+    if (!EVOLUTION_API_KEY) return;
+    const cleanPhone = formatPhone(phone);
+    try {
+        const url = `${EVOLUTION_BASE_URL}/chat/sendPresence/${EVOLUTION_INSTANCE}`;
+        await axios.post(
+            url,
+            {
+                number: cleanPhone,
+                presence
+            },
+            {
+                headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+    } catch (error) {
+        console.error("Evolution sendChatState Error:", error);
+    }
+}
+
+/**
+ * Simulate human typing before sending a message.
+ * Sets presence to available, sends composing state, and waits a duration based on message length.
+ */
+export async function simulateHumanTyping(phone: string, messageLength: number): Promise<void> {
+    // 1. Set presence to available (online)
+    await setPresence('available');
+    
+    // 2. Send composing state
+    await sendChatState(phone, 'composing');
+    
+    // 3. Delay based on text length: 1 second per 30 characters
+    // Minimum 2 seconds, maximum 5 seconds
+    const delaySec = Math.max(2, Math.min(5, Math.floor(messageLength / 30)));
+    await sleepRandom(delaySec, delaySec + 1);
+}
+
+/**
+ * Simple parser supporting Spintax format (e.g. {word1|word2|word3})
+ */
+export function parseSpintax(text: string): string {
+    const spintaxRegexp = /\{([^{}]+?\|[^{}]+?)\}/g;
+    let matches;
+    let iterations = 0;
+    while ((matches = spintaxRegexp.exec(text)) !== null && iterations < 100) {
+        const options = matches[1].split('|');
+        const chosen = options[Math.floor(Math.random() * options.length)];
+        text = text.replace(matches[0], chosen);
+        spintaxRegexp.lastIndex = 0; // reset pointer
+        iterations++;
+    }
+    return text;
+}
+

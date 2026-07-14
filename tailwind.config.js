@@ -10,6 +10,10 @@ module.exports = {
   ],
   theme: {
   	extend: {
+  		scale: {
+  			'98': '0.98',
+  			'102': '1.02'
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -50,7 +54,14 @@ module.exports = {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
-  			}
+  			},
+        brand: {
+          blue: '#16539a',
+          green: '#5c9e45',
+          light: '#f8fafc',
+          navy: '#0b192e',
+          card: '#ffffff'
+        }
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

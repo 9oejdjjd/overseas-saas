@@ -23,6 +23,7 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
     const {
         loading,
         locations,
+        transportDestinations,
         config,
         professions,
         formData,
@@ -35,6 +36,10 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
         promoError,
         wantsMockExam,
         setWantsMockExam,
+        mockExamType,
+        setMockExamType,
+        mockExamCount,
+        setMockExamCount,
         selectedPackageId,
         setSelectedPackageId,
         handleCheckPromo,
@@ -217,8 +222,8 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="flex items-center gap-2"><Smartphone className="w-4 h-4" /> أرقام التواصل</Label>
-                            <div className="grid grid-cols-2 gap-4">
+                            <Label className="flex items-center gap-2"><Smartphone className="w-4 h-4" /> معلومات الاتصال والبريد</Label>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <Input
                                     required
                                     value={formData.phone}
@@ -232,6 +237,13 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                                     onChange={e => setFormData({ ...formData, whatsappNumber: e.target.value })}
                                     className="dir-ltr"
                                     placeholder="واتساب"
+                                />
+                                <Input
+                                    value={formData.platformEmail || ""}
+                                    onChange={e => setFormData({ ...formData, platformEmail: e.target.value })}
+                                    className="dir-ltr text-left"
+                                    placeholder="البريد الإلكتروني (اختياري)"
+                                    type="email"
                                 />
                             </div>
                         </div>
@@ -286,8 +298,10 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                                             <SelectValue placeholder="اختر مدينة الانطلاق" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {locations.filter(l => l.id !== formData.locationId && l.isActive).map(loc => (
-                                                <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                                            {transportDestinations.filter((d: any) => d.isActive !== false).map(dest => (
+                                                <SelectItem key={dest.id} value={dest.id}>
+                                                    {dest.name} {dest.nameAr ? `(${dest.nameAr})` : ''} {dest.nameEn ? `(${dest.nameEn})` : ''}
+                                                </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
@@ -350,46 +364,100 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                         <Label htmlFor="mockExam" className="font-semibold cursor-pointer">طلب اختبارات تجريبية</Label>
                     </div>
                     {wantsMockExam && (
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {getFilteredPackages().length === 0 ? (
-                                <p className="col-span-3 text-center text-gray-500 py-4">لا توجد باقات مناسبة لاختياراتك الحالية</p>
-                            ) : (
-                                getFilteredPackages().map(pkg => {
-                                    const Icon = PKG_ICONS[pkg.icon] || Star;
-                                    let pkgTotal = Number(pkg.examPrice);
-                                    if (pkg.includesRegistration) pkgTotal += Number(config.registrationPrice) - Number(pkg.registrationDiscount);
-                                    if (pkg.includesTransport && calculated.transportPrice > 0) pkgTotal += calculated.transportPrice - Number(pkg.transportDiscount);
-                                    return (
-                                        <div
-                                            key={pkg.id}
-                                            onClick={() => setSelectedPackageId(pkg.id)}
-                                            className={`relative cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${selectedPackageId === pkg.id ? 'border-purple-500 bg-purple-50 shadow-md' : 'border-gray-200'}`}
-                                        >
-                                            {pkg.isFeatured && <Badge className="absolute -top-2 right-3 bg-amber-500">مميزة</Badge>}
-                                            <div className="flex items-center gap-2 mb-2">
+                        <div className="mt-4 space-y-4">
+                            <div className="flex gap-2 p-1 bg-white/50 rounded-lg w-fit border border-purple-100">
+                                <Button
+                                    type="button"
+                                    variant={mockExamType === "package" ? "default" : "ghost"}
+                                    onClick={() => { setMockExamType("package"); setSelectedPackageId(null); }}
+                                    className="gap-2 text-xs h-8"
+                                >
+                                    📦 باقة
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={mockExamType === "individual" ? "default" : "ghost"}
+                                    onClick={() => { setMockExamType("individual"); setSelectedPackageId(null); }}
+                                    className="gap-2 text-xs h-8"
+                                >
+                                    🧪 اختبارات مفردة
+                                </Button>
+                            </div>
+
+                            {mockExamType === "package" ? (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {getFilteredPackages().length === 0 ? (
+                                        <p className="col-span-3 text-center text-gray-500 py-4">لا توجد باقات مناسبة لاختياراتك الحالية</p>
+                                    ) : (
+                                        getFilteredPackages().map(pkg => {
+                                            const Icon = PKG_ICONS[pkg.icon] || Star;
+                                            let pkgTotal = Number(pkg.price);
+                                            if (pkg.includesRegistration) pkgTotal += Number(config.registrationPrice) - Number(pkg.registrationDiscount);
+                                            if (pkg.includesTransport && calculated.transportPrice > 0) pkgTotal += calculated.transportPrice - Number(pkg.transportDiscount);
+                                            
+                                            const isSelected = selectedPackageId === pkg.id;
+                                            const isGreen = pkg.color === "#5c9e45";
+                                            const isBlue = pkg.color === "#16539a";
+                                            const isPkgGreen = isGreen || (!isBlue && pkg.isFeatured);
+                                            
+                                            const cardStyleClass = isSelected
+                                                ? isPkgGreen
+                                                    ? 'border-emerald-500 bg-emerald-50/60 shadow-md'
+                                                    : 'border-blue-600 bg-blue-50/60 shadow-md'
+                                                : 'border-gray-200 bg-white hover:border-gray-300';
+                                                
+                                            return (
                                                 <div
-                                                    className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                                                    style={{ backgroundColor: pkg.color || '#3B82F6' }}
+                                                    key={pkg.id}
+                                                    onClick={() => setSelectedPackageId(pkg.id)}
+                                                    className={`relative cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${cardStyleClass}`}
                                                 >
-                                                    <Icon className="h-4 w-4" />
+                                                    {pkg.isFeatured && <Badge className="absolute -top-2 right-3 bg-amber-500">مميزة</Badge>}
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div
+                                                            className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                                                            style={{ backgroundColor: pkg.color || '#3B82F6' }}
+                                                        >
+                                                            <Icon className="h-4 w-4" />
+                                                        </div>
+                                                        <span className="font-bold">{pkg.name}</span>
+                                                    </div>
+                                                    <div className="text-xs space-y-1 mb-3">
+                                                        <div>{pkg.examCredits === -1 ? '∞ غير محدود' : `${pkg.examCredits} اختبار`}</div>
+                                                        <div className="flex items-center gap-1">
+                                                            {pkg.includesRegistration ? <Check className="h-3 w-3 text-green-500" /> : <XIcon className="h-3 w-3 text-red-400" />}
+                                                            التسجيل {pkg.includesRegistration && <span className="text-orange-600">(خصم {Number(pkg.registrationDiscount)})</span>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            {pkg.includesTransport ? <Check className="h-3 w-3 text-green-500" /> : <XIcon className="h-3 w-3 text-red-400" />}
+                                                            المواصلات {pkg.includesTransport && <span className="text-purple-600">(خصم {Number(pkg.transportDiscount)})</span>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-xl font-black text-purple-700">{pkgTotal.toLocaleString()} ر.ي</div>
                                                 </div>
-                                                <span className="font-bold">{pkg.name}</span>
-                                            </div>
-                                            <div className="text-xs space-y-1 mb-3">
-                                                <div>{pkg.examCredits === -1 ? '∞ غير محدود' : `${pkg.examCredits} اختبار`}</div>
-                                                <div className="flex items-center gap-1">
-                                                    {pkg.includesRegistration ? <Check className="h-3 w-3 text-green-500" /> : <XIcon className="h-3 w-3 text-red-400" />}
-                                                    التسجيل {pkg.includesRegistration && <span className="text-orange-600">(خصم {Number(pkg.registrationDiscount)})</span>}
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    {pkg.includesTransport ? <Check className="h-3 w-3 text-green-500" /> : <XIcon className="h-3 w-3 text-red-400" />}
-                                                    المواصلات {pkg.includesTransport && <span className="text-purple-600">(خصم {Number(pkg.transportDiscount)})</span>}
-                                                </div>
-                                            </div>
-                                            <div className="text-xl font-black text-purple-700">{pkgTotal.toLocaleString()} ر.ي</div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="bg-white p-4 rounded-xl border border-purple-200 space-y-3 w-full md:max-w-md">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="space-y-2">
+                                            <Label>عدد الاختبارات المطلوبة</Label>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                className="w-32 bg-purple-50/30"
+                                                value={mockExamCount}
+                                                onChange={e => setMockExamCount(Math.max(1, Number(e.target.value)))}
+                                            />
                                         </div>
-                                    );
-                                })
+                                        <div className="flex flex-col items-end pt-4">
+                                            <span className="text-sm text-gray-500">{config.mockExamSinglePrice} ر.ي × {mockExamCount}</span>
+                                            <span className="text-2xl font-black text-purple-700">{(Number(config.mockExamSinglePrice) * mockExamCount).toLocaleString()} ر.ي</span>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}
@@ -425,7 +493,7 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                         <div className="space-y-2">
                             <Label>سعر التسجيل الأساسي</Label>
                             <div className="text-lg font-bold text-gray-700">{calculated.basePrice.toLocaleString()} ر.ي</div>
@@ -433,6 +501,10 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                         <div className="space-y-2">
                             <Label>سعر المواصلات</Label>
                             <div className="text-lg font-bold text-gray-700">{calculated.transportPrice.toLocaleString()} ر.ي</div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>سعر الاختبارات التجريبية</Label>
+                            <div className="text-lg font-bold text-purple-700">{(calculated.mockExamPrice || 0).toLocaleString()} ر.ي</div>
                         </div>
                         <div className="space-y-2">
                             <Label>خصم خاص</Label>

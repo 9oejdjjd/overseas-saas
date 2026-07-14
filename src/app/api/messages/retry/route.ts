@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/evolution";
+import { sendWhatsAppMessage, onWhatsApp, sleepRandom, simulateHumanTyping } from "@/lib/openwa";
 
 // POST - Retry failed (PENDING) messages
 export async function POST(request: Request) {
@@ -34,7 +34,30 @@ export async function POST(request: Request) {
                     continue;
                 }
 
+                // Verify if number exists on WhatsApp first
+                const isRegistered = await onWhatsApp(phone);
+                if (!isRegistered) {
+                    await prisma.messageLog.update({
+                        where: { id: msg.id },
+                        data: { status: "FAILED_INVALID_NUMBER" }
+                    });
+
+                    await prisma.activityLog.create({
+                        data: {
+                            action: "MANUAL_RETRY_INVALID_NUMBER",
+                            details: `تخطي الإرسال الجماعي اليدوي: الرقم غير مسجل على واتساب للرسالة (${msg.trigger || ''})`,
+                            applicantId: msg.applicantId,
+                        }
+                    }).catch(console.error);
+
+                    failCount++;
+                    continue;
+                }
+
                 try {
+                    // Simulate human presence and typing state
+                    await simulateHumanTyping(phone, msg.message.length);
+
                     const sendResult = await sendWhatsAppMessage(phone, msg.message);
                     
                     if (sendResult.success) {
@@ -54,6 +77,9 @@ export async function POST(request: Request) {
                     console.error(`Error retrying message ${msg.id}:`, err);
                     failCount++;
                 }
+
+                // Anti-Ban Delay: sleepRandom(8, 15) between messages in batch retry
+                await sleepRandom(8, 15);
             }
 
             return NextResponse.json({ 
@@ -88,16 +114,34 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Applicant has no phone number" }, { status: 400 });
         }
 
-        const sendResult = await sendWhatsAppMessage(phone, msgLog.message);
-        
-        if (sendResult.success) {
+        // Verify if number exists on WhatsApp first
+        const isRegistered = await onWhatsApp(phone);
+        if (!isRegistered) {
             await prisma.messageLog.update({
                 where: { id: messageLogId },
-                data: { status: "SENT", sentAt: new Date() }
+                data: { status: "FAILED_INVALID_NUMBER" }
             });
-            return NextResponse.json({ success: true, status: "SENT" });
-        } else {
-            return NextResponse.json({ error: "Failed to send message", status: "PENDING" }, { status: 500 });
+            return NextResponse.json({ error: "الرقم غير مسجل في واتساب", status: "FAILED_INVALID_NUMBER" }, { status: 400 });
+        }
+
+        try {
+            // Simulate human presence and typing state
+            await simulateHumanTyping(phone, msgLog.message.length);
+
+            const sendResult = await sendWhatsAppMessage(phone, msgLog.message);
+            
+            if (sendResult.success) {
+                await prisma.messageLog.update({
+                    where: { id: messageLogId },
+                    data: { status: "SENT", sentAt: new Date() }
+                });
+                return NextResponse.json({ success: true, status: "SENT" });
+            } else {
+                return NextResponse.json({ error: "Failed to send message", status: "PENDING" }, { status: 500 });
+            }
+        } catch (error) {
+            console.error("Error retrying single message:", error);
+            return NextResponse.json({ error: "Failed to process message send", status: "PENDING" }, { status: 500 });
         }
     } catch (error) {
         console.error("Error in retry message API:", error);

@@ -34,13 +34,13 @@ export function HeroSearchSection({ professions }: { professions: Profession[] }
                 transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
                 className="w-full max-w-xl relative group z-30"
             >
-                <label className="text-sm font-bold text-slate-400/80 mb-3 block flex items-center gap-2">
-                    <Search size={14} /> ابحث عن مهنتك وابدأ الاختبار:
+                <label className="text-sm font-bold text-slate-600 mb-3 block flex items-center gap-2">
+                    <Search size={14} className="text-[#074388]" /> ابحث عن مهنتك وابدأ الاختبار:
                 </label>
 
                 <div className="relative">
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 bg-white/10 p-2 rounded-full backdrop-blur-md">
-                        <GraduationCap size={20} className="text-[#5c9e45]" />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 bg-slate-50 border border-slate-100 p-2 rounded-full">
+                        <GraduationCap size={20} className="text-[#55943b]" />
                     </div>
                     <input
                         type="text"
@@ -53,14 +53,14 @@ export function HeroSearchSection({ professions }: { professions: Profession[] }
                         onFocus={() => setShowResults(true)}
                         onBlur={() => setShowResults(false)}
                         placeholder="ابحث عن مهنتك..."
-                        className="w-full h-[60px] bg-white/[0.08] border border-white/15 focus:border-[#5c9e45]/60 rounded-2xl pl-6 pr-16 text-lg text-white placeholder-slate-400/60 backdrop-blur-xl transition-all shadow-xl focus:outline-none focus:ring-4 focus:ring-[#5c9e45]/15 focus:bg-white/[0.12]"
+                        className="w-full h-[60px] bg-white border border-slate-200 focus:border-[#074388] rounded-2xl pl-6 pr-16 text-lg text-slate-800 placeholder-slate-400 shadow-sm transition-all focus:outline-none focus:ring-4 focus:ring-[#074388]/5 focus:bg-white"
                     />
                     <button
                         onClick={() => {
                             if (selectedSlug) router.push(`/${selectedSlug}`);
                             else if (filteredProfessions.length > 0) router.push(`/${filteredProfessions[0].slug}`);
                         }}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-gradient-to-l from-[#16539a] to-[#2563eb] w-11 h-11 flex items-center justify-center rounded-xl shadow-lg border border-white/10 hover:scale-105 transition-transform pointer-events-auto"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-[#074388] hover:bg-[#0c53a7] w-11 h-11 flex items-center justify-center rounded-xl shadow-md transition-all active:scale-95 pointer-events-auto"
                     >
                         <ArrowLeft size={18} className="text-white" />
                     </button>
@@ -74,7 +74,7 @@ export function HeroSearchSection({ professions }: { professions: Profession[] }
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 8, scale: 0.98 }}
                             transition={{ duration: 0.2 }}
-                            className="absolute top-full right-0 left-0 mt-3 bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] border border-slate-100 overflow-hidden z-50 flex flex-col"
+                            className="absolute top-full right-0 left-0 mt-3 bg-white rounded-2xl shadow-[0_20px_45px_rgba(15,23,42,0.08)] border border-slate-100/80 overflow-hidden z-50 flex flex-col"
                         >
                             <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                                 <span className="text-xs font-bold text-slate-500">نتائج البحث</span>
@@ -95,14 +95,14 @@ export function HeroSearchSection({ professions }: { professions: Profession[] }
                                             className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group"
                                         >
                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#16539a] flex items-center justify-center font-bold">
+                                                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#074388] flex items-center justify-center font-bold">
                                                     {prof.name.substring(0, 1)}
                                                 </div>
                                                 <div className="text-right">
-                                                    <h4 className="font-bold text-slate-800 text-base group-hover:text-[#16539a] transition-colors">{prof.name}</h4>
+                                                    <h4 className="font-bold text-slate-800 text-base group-hover:text-[#074388] transition-colors">{prof.name}</h4>
                                                 </div>
                                             </div>
-                                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-[#5c9e45] group-hover:text-white transition-all transform group-hover:-translate-x-1">
+                                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-[#55943b] group-hover:text-white transition-all transform group-hover:-translate-x-1">
                                                 <ChevronLeft size={18} />
                                             </div>
                                         </button>

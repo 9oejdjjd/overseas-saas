@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { 
     Trophy, XCircle, CheckCircle2, AlertCircle, ArrowLeft, BookOpen, Clock, ChevronDown, 
     Award, Target, BarChart3, Briefcase, ShieldCheck, HelpCircle, ArrowRight, Star, Sparkles, Filter,
-    Home, RefreshCw, MessageSquare, Phone, GraduationCap, Rocket, Users, HeartHandshake, Lock
+    Home, RefreshCw, MessageSquare, GraduationCap, Rocket, Users, Lock
 } from "lucide-react";
 import Link from "next/link";
+import { SITE_CONFIG } from "@/config/site";
 
 // Axis mapping
 const AXIS_NAMES: Record<string, string> = {
@@ -46,6 +47,7 @@ interface ResultData {
     startedAt: string;
     completedAt: string;
     restricted?: boolean;
+    isFirstAttemptTrial?: boolean;
     packageFeatures?: {
         showResultScore: boolean;
         showResultQuestions: boolean;
@@ -211,8 +213,8 @@ export default function ExamResultPage() {
     return (
         <div className="min-h-screen bg-[#0a0f1c] font-sans pb-32 lg:pb-32 text-white overflow-x-hidden relative" dir="rtl">
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] mix-blend-overlay pointer-events-none z-0"></div>
-            <div className={`fixed top-[-20%] right-[-10%] w-[800px] h-[800px] rounded-full blur-[160px] pointer-events-none z-0 transition-colors duration-1000 ${result.score >= 70 ? (result.score >= 80 ? 'bg-[#5c9e45]/10' : 'bg-blue-500/10') : 'bg-red-500/10'}`} />
-            <div className="fixed bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#16539a]/10 rounded-full blur-[140px] pointer-events-none z-0" />
+            <div className="fixed top-[-20%] right-[-10%] w-[800px] h-[800px] rounded-full blur-[160px] pointer-events-none z-0 bg-[#16539a]/10" />
+            <div className="fixed bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-indigo-600/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
             {/* ===== MOBILE: Top Logo Bar ===== */}
             <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white/5 backdrop-blur-2xl border-b border-white/10">
@@ -305,7 +307,7 @@ export default function ExamResultPage() {
                     </div>
 
                     <div className="shrink-0 relative group mt-4 md:mt-0">
-                        <div className={`w-48 h-48 md:w-64 md:h-64 rounded-full flex flex-col items-center justify-center shadow-inner relative transition-colors duration-1000 ${result.score >= 80 ? 'bg-emerald-500/5' : result.score >= 70 ? 'bg-blue-500/5' : result.score >= 60 ? 'bg-amber-500/5' : 'bg-red-500/5'}`}>
+                        <div className="w-48 h-48 md:w-64 md:h-64 rounded-full flex flex-col items-center justify-center shadow-inner relative bg-[#16539a]/5">
                             
                             <svg className="absolute inset-0 w-full h-full -rotate-90 scale-[1.05]">
                                 <circle cx="50%" cy="50%" r="120" stroke="rgba(255,255,255,0.05)" strokeWidth="12" fill="transparent" />
@@ -314,7 +316,7 @@ export default function ExamResultPage() {
                                     stroke="currentColor" strokeWidth="12" fill="transparent" 
                                     strokeDasharray={strokeDasharray}
                                     strokeDashoffset={strokeDashoffset}
-                                    className={`${result.score >= 80 ? 'text-emerald-500' : result.score >= 70 ? 'text-blue-500' : result.score >= 60 ? 'text-amber-500' : 'text-red-500'} opacity-90 drop-shadow-[0_0_10px_currentColor] transition-all duration-100`}
+                                    className="text-indigo-500 opacity-90 drop-shadow-[0_0_10px_currentColor] transition-all duration-100"
                                     strokeLinecap="round"
                                 />
                             </svg>
@@ -328,7 +330,7 @@ export default function ExamResultPage() {
                                     <div className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-1 relative z-10 transition-all duration-75">
                                         {animatedScore}<span className="text-2xl md:text-3xl opacity-50">%</span>
                                     </div>
-                                    <div className={`text-xs md:text-sm font-black uppercase tracking-widest px-3 md:px-4 py-1 md:py-1.5 rounded-full border relative z-10 ${result.score >= 80 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/20' : result.score >= 70 ? 'text-blue-400 border-blue-500/30 bg-blue-500/20' : result.score >= 60 ? 'text-amber-400 border-amber-500/30 bg-amber-500/20' : 'text-red-400 border-red-500/30 bg-red-500/20'}`}>
+                                    <div className={`text-xs md:text-sm font-black uppercase tracking-widest px-3 md:px-4 py-1 md:py-1.5 rounded-full border relative z-10 ${result.score >= 60 ? 'text-indigo-400 border-indigo-500/30 bg-indigo-500/20' : 'text-slate-400 border-slate-500/30 bg-slate-500/20'}`}>
                                         {result.score >= 60 ? 'اجتياز ✓' : 'لم يجتز ✕'}
                                     </div>
                                 </>
@@ -414,7 +416,7 @@ export default function ExamResultPage() {
                             {/* CTA Button */}
                             <div className="flex justify-center">
                                 <a 
-                                    href={`https://wa.me/967777263111?text=${encodeURIComponent(result.isPassed ? 'مرحباً، اجتزت الاختبار التجريبي بنجاح وأريد التسجيل في الاعتماد المهني. ما هي المتطلبات والخطوات؟' : 'مرحباً، أريد التسجيل في الاعتماد المهني وأحتاج مساعدة في التحضير. ما هي المتطلبات والخطوات؟')}`}
+                                    href={`https://wa.me/${SITE_CONFIG.supportWhatsapp}?text=${encodeURIComponent(result.isPassed ? 'مرحباً، اجتزت الاختبار التجريبي بنجاح وأريد التسجيل في الاعتماد المهني. ما هي المتطلبات والخطوات؟' : 'مرحباً، أريد التسجيل في الاعتماد المهني وأحتاج مساعدة في التحضير. ما هي المتطلبات والخطوات؟')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="group relative inline-flex items-center justify-center gap-3 w-full sm:w-auto px-10 py-5 bg-[#25D366] hover:bg-[#20bd5a] text-white font-black text-lg rounded-2xl shadow-[0_8px_30px_rgba(37,211,102,0.3)] hover:shadow-[0_12px_40px_rgba(37,211,102,0.4)] transition-all duration-300 hover:-translate-y-1 active:scale-[0.97]"
@@ -428,40 +430,7 @@ export default function ExamResultPage() {
                     </div>
                 </motion.div>}
 
-                {/* 3. NEW AXIS RADAR / PROGRESS BARS */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-6 md:mt-10 bg-white/5 rounded-[2rem] p-6 md:p-8 border border-white/5"
-                >
-                    <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-3 mb-6 md:mb-8 text-center sm:text-right">
-                        <BarChart3 className="text-blue-400" size={28} />
-                        <h2 className="text-xl md:text-2xl font-black text-white">تحليل أداء المحاور المهنية</h2>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                        {axesArray.map(ax => (
-                            <div key={ax.key} className="bg-white/5 p-5 rounded-2xl border border-white/5">
-                                <div className="flex justify-between items-end mb-2 md:mb-3">
-                                    <span className="font-bold text-slate-200 text-base md:text-lg">{ax.name}</span>
-                                    <span className={`font-black text-xs md:text-sm px-2 py-1 rounded-md ${ax.score >= 80 ? 'bg-emerald-500/20 text-emerald-400' : ax.score >= 60 ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'}`}>
-                                        {ax.score}%
-                                    </span>
-                                </div>
-                                <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden flex">
-                                    <motion.div 
-                                        initial={{ width: 0 }}
-                                        whileInView={{ width: `${ax.score}%` }}
-                                        viewport={{ once: true }}
-                                        transition={{ duration: 1.5, ease: "easeOut" }}
-                                        className={`h-full rounded-full ${ax.score >= 80 ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : ax.score >= 60 ? 'bg-blue-500 shadow-[0_0_10px_#3b82f6]' : 'bg-red-500 shadow-[0_0_10px_#ef4444]'}`}
-                                    />
-                                </div>
-
-                            </div>
-                        ))}
-                    </div>
-                </motion.div>
+                {/* 3. NEW AXIS RADAR / PROGRESS BARS - REMOVED AS REQUESTED */}
 
                 {/* 4. STATS GRID */}
                 <div className="grid grid-cols-3 gap-3 md:gap-6 mt-6 md:mt-10">
@@ -497,17 +466,42 @@ export default function ExamResultPage() {
                                 </p>
                             </div>
                         ) : result.packageFeatures?.showResultQuestions === false ? (
-                            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center">
-                                <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6 border border-white/5">
-                                    <Lock size={36} className="text-slate-400" />
+                            <div className="bg-gradient-to-b from-blue-900/20 to-transparent border border-blue-500/20 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center relative overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.1)]">
+                                <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-6 border border-blue-500/30 relative z-10 shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+                                    <Lock size={36} className="text-blue-400" />
                                 </div>
-                                <h3 className="text-xl md:text-2xl font-black text-white mb-3">محتوى الأسئلة محمي</h3>
-                                <p className="text-slate-400 text-sm md:text-base max-w-md mx-auto leading-relaxed">
-                                    بناءً على باقتك الحالية، لا تتوفر ميزة مراجعة الأسئلة وتصحيح الأخطاء. يمكنك الاشتراك في الباقة المتقدمة للاستفادة الكاملة من هذه الميزة.
+                                <h3 className="text-2xl md:text-3xl font-black text-white mb-4 relative z-10">اكتشف أخطاءك وتعلم منها!</h3>
+                                <p className="text-slate-300 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8 relative z-10">
+                                    المحاولة المجانية منحتك لمحة سريعة عن مستواك. لكن للاستفادة الحقيقية، تحتاج لمعرفة إجاباتك الخاطئة والشروحات التفصيلية لكل سؤال لضمان عدم تكرارها في الاختبار الفعلي للهيئة.
                                 </p>
+                                <Link href="/pricing" className="relative z-10 inline-flex flex-col items-center gap-2 group">
+                                    <div className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black text-lg transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:shadow-[0_0_40px_rgba(37,99,235,0.6)] hover:-translate-y-1 flex items-center gap-3">
+                                        <Award size={24} />
+                                        <span>ترقية الباقة وفتح الشروحات</span>
+                                    </div>
+                                    <span className="text-slate-400 text-xs font-bold mt-2">افتح جميع الأسئلة والشروحات فوراً</span>
+                                </Link>
                             </div>
                         ) : (
                         <>
+                        {result.isFirstAttemptTrial && (
+                            <div className="mb-8 bg-gradient-to-r from-emerald-900/40 to-emerald-800/20 border border-emerald-500/30 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 relative overflow-hidden shadow-2xl">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl"></div>
+                                <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center shrink-0 border border-emerald-500/30">
+                                    <Sparkles className="text-emerald-400 w-8 h-8" />
+                                </div>
+                                <div className="flex-1 text-center md:text-right z-10">
+                                    <h4 className="text-xl md:text-2xl font-black text-white mb-2">هدية المحاولة المجانية الأولى! 🎁</h4>
+                                    <p className="text-emerald-100/90 text-sm md:text-base leading-relaxed font-medium">
+                                        لقد فتحنا لك ميزة (رؤية تصحيح الأسئلة والشروحات) كهدية في محاولتك الأولى لتعيش تجربة الاعتماد المهني الكاملة. في المحاولات المجانية القادمة ستختفي هذه الميزة.. اشترك الآن للحفاظ عليها واستمر في التطور.
+                                    </p>
+                                </div>
+                                <Link href="/pricing" className="shrink-0 bg-emerald-500 text-white px-6 py-4 rounded-2xl font-black hover:bg-emerald-400 transition-colors z-10 shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center gap-2 hover:-translate-y-1">
+                                    <Star size={18} />
+                                    <span>ترقية للحفاظ على الميزات</span>
+                                </Link>
+                            </div>
+                        )}
                         <AnimatePresence mode="popLayout">
                             {filteredQuestions.map((q, idx) => {
                                 const isExpanded = expandedQuestion === q.id;
@@ -555,16 +549,9 @@ export default function ExamResultPage() {
                                             </div>
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-4 flex-wrap">
-                                                    <div className="hidden md:inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest border border-white/5">
-                                                        <BookOpen size={14} className="text-blue-400" />
-                                                        {AXIS_NAMES[q.axis || "GENERAL_SKILLS"]}
-                                                    </div>
-                                                    <span className={`hidden md:inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest border ${statusBg}`}>
+                                                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest border ${statusBg}`}>
                                                         {statusTxt}
                                                     </span>
-                                                    <div className="md:hidden inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest border border-white/5 bg-white/5">
-                                                        {AXIS_NAMES[q.axis || "GENERAL_SKILLS"]}
-                                                    </div>
                                                 </div>
                                                 <p className="text-slate-100 text-lg md:text-xl font-bold leading-relaxed">{q.text}</p>
                                                 {q.imageUrl && (

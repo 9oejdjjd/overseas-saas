@@ -13,6 +13,7 @@ export type RouteDefault = {
     costRoundTrip: number;
     fromDestination: { name: string };
     toDestination: { name: string };
+    currency: string;
 };
 
 export function useRoutePricing() {
@@ -30,6 +31,7 @@ export function useRoutePricing() {
         priceRoundTrip: "",
         cost: "",
         costRoundTrip: "",
+        currency: "YER",
     });
 
     const fetchRoutes = useCallback(async () => {
@@ -81,6 +83,7 @@ export function useRoutePricing() {
                     priceRoundTrip: "",
                     cost: "",
                     costRoundTrip: "",
+                    currency: "YER",
                 });
             } else {
                 toast("حدث خطأ أثناء حفظ الأسعار الافتراضية", "error");
@@ -117,6 +120,7 @@ export function useRoutePricing() {
             priceRoundTrip: route.priceRoundTrip ? route.priceRoundTrip.toString() : "",
             cost: route.cost ? route.cost.toString() : "",
             costRoundTrip: route.costRoundTrip ? route.costRoundTrip.toString() : "",
+            currency: route.currency || "YER",
         });
         setShowDialog(true);
     }, []);
@@ -129,6 +133,7 @@ export function useRoutePricing() {
             priceRoundTrip: "",
             cost: "",
             costRoundTrip: "",
+            currency: "YER",
         });
         setShowDialog(true);
     }, []);

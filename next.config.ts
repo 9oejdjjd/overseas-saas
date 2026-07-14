@@ -46,6 +46,30 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/blog/:path*',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/pricing/:path*',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/professions/:path*',
+        destination: '/',
+        permanent: false,
+      },
+      {
+        source: '/guide/:path*',
+        destination: '/',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

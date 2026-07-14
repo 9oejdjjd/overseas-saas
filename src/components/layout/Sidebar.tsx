@@ -22,7 +22,8 @@ import {
     BadgePercent,
     TicketPercent,
     FileText,
-    BookOpen
+    BookOpen,
+    Wallet
 } from "lucide-react";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ const navigation = [
     { name: "لوحة التحكم", href: "/dashboard", icon: LayoutDashboard, permission: null },
     { name: "المتقدمين", href: "/dashboard/applicants", icon: Users, permission: "VIEW_APPLICANTS" as const },
     { name: "الاختبارات التجريبية", href: "/dashboard/mock-exams", icon: BookOpen, permission: "VIEW_APPLICANTS" as const },
+    { name: "إدارة الأخبار والمدونة", href: "/dashboard/blog", icon: FileText, permission: "VIEW_APPLICANTS" as const },
     {
         name: "إدارة وجدولة النقل",
         href: "/dashboard/transport",
@@ -47,6 +49,12 @@ const navigation = [
         name: "المحاسبة",
         href: "/dashboard/accounting",
         icon: DollarSign,
+        permission: "VIEW_ACCOUNTING" as const,
+    },
+    {
+        name: "مراجعة الاشتراكات",
+        href: "/dashboard/payments",
+        icon: Wallet,
         permission: "VIEW_ACCOUNTING" as const,
     },
     { name: "الأسعار", href: "/dashboard/pricing", icon: PieChart, permission: "MANAGE_PRICING" as const },
@@ -69,6 +77,14 @@ export function Sidebar() {
     const pathname = usePathname();
     const { data: session } = useSession();
     const [collapsed, setCollapsed] = useState(false);
+
+    const activeNavigation = session?.user?.role === "APPLICANT"
+        ? [
+            { name: "لوحة التحكم المهنية", href: "/dashboard", icon: LayoutDashboard, permission: null },
+            { name: "تصفح الباقات", href: "/pricing", icon: BadgePercent, permission: null },
+            { name: "الدليل المهني", href: "/guide", icon: BookOpen, permission: null },
+          ]
+        : navigation;
 
     const canAccess = (permission: string | null) => {
         if (!permission) return true; // No permission required
@@ -98,7 +114,7 @@ export function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 py-6 px-2 space-y-1 overflow-y-auto">
-                {navigation.map((item) => {
+                {activeNavigation.map((item) => {
                     if (!canAccess(item.permission)) return null;
 
                     const isActive =

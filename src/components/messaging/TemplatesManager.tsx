@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Edit2, Wand2 } from "lucide-react";
+import { Loader2, Plus, Edit2, Wand2, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,16 +109,70 @@ export function TemplatesManager() {
                                 </span>
                             </div>
                             <Textarea
-                                className="min-h-[220px] font-sans leading-relaxed text-sm pt-3 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 rounded-2xl p-4"
+                                className="min-h-[120px] font-sans leading-relaxed text-sm pt-3 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 rounded-2xl p-4"
                                 value={selectedTemplate?.body || ""}
                                 onChange={e => setSelectedTemplate((prev: Template | null) => prev ? { ...prev, body: e.target.value } : null)}
                                 dir="auto"
                             />
                         </div>
 
-                        <div className="bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 text-xs p-3.5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30 flex gap-2.5 items-start">
-                            <Wand2 className="h-4.5 w-4.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
-                            <p className="leading-relaxed">سيتم تعويض الكلمات المحاطة بأقواس متعرجة {'{}'} تلقائياً ببيانات المتقدم الحقيقية (مثل الاسم، المركز، التذكرة) عند إرسال الرسالة.</p>
+                        {/* Variants Section */}
+                        <div className="space-y-3 pt-2">
+                            <div className="flex justify-between items-center">
+                                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">صيغ بديلة للقالب (اختياري)</Label>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-7 text-[10px] gap-1"
+                                    onClick={() => {
+                                        setSelectedTemplate((prev: Template | null) => {
+                                            if (!prev) return null;
+                                            return { ...prev, variants: [...(prev.variants || []), ""] };
+                                        });
+                                    }}
+                                >
+                                    <Plus className="h-3 w-3" /> إضافة صيغة بديلة
+                                </Button>
+                            </div>
+                            
+                            {selectedTemplate?.variants?.map((variant, index) => (
+                                <div key={index} className="relative group">
+                                    <Textarea
+                                        className="min-h-[80px] font-sans leading-relaxed text-sm pt-3 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 rounded-xl p-4 pr-10"
+                                        value={variant}
+                                        placeholder={`الصيغة البديلة رقم ${index + 1}`}
+                                        onChange={e => {
+                                            const newVariants = [...(selectedTemplate.variants || [])];
+                                            newVariants[index] = e.target.value;
+                                            setSelectedTemplate((prev: Template | null) => prev ? { ...prev, variants: newVariants } : null);
+                                        }}
+                                        dir="auto"
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute top-2 right-2 h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => {
+                                            const newVariants = [...(selectedTemplate.variants || [])];
+                                            newVariants.splice(index, 1);
+                                            setSelectedTemplate((prev: Template | null) => prev ? { ...prev, variants: newVariants } : null);
+                                        }}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 text-xs p-3.5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30 flex flex-col gap-2.5 items-start">
+                            <div className="flex gap-2.5 items-start">
+                                <Wand2 className="h-4.5 w-4.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                                <p className="leading-relaxed font-bold">ميزة التنويع الديناميكي (لتجنب الحظر):</p>
+                            </div>
+                            <ul className="list-disc list-inside space-y-1.5 mr-6 text-[11px] leading-relaxed">
+                                <li>يمكنك إضافة <strong>صيغ بديلة كاملة</strong> باستخدام الزر أعلاه، وسيختار النظام إحداها عشوائياً.</li>
+                                <li>يمكنك استخدام صيغة <strong>Spintax</strong> داخل أي نص. مثال: <code className="bg-emerald-100 dark:bg-emerald-900/40 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-200">{' {مرحباً|أهلاً|حياك الله} يا {name} '}</code> وسيتم اختيار كلمة عشوائية منها عند كل إرسال.</li>
+                            </ul>
                         </div>
                     </div>
 

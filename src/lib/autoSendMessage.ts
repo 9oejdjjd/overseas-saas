@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/evolution";
+import { sendWhatsAppMessage, simulateHumanTyping, sleepRandom, parseSpintax, onWhatsApp } from "@/lib/openwa";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -44,9 +44,24 @@ export async function autoSendMessage(
             return { success: false, error: "No phone number" };
         }
 
-        // 3. Build message text
+        // 3. Ensure the number is registered on WhatsApp before sending
+        const isOnWhatsApp = await onWhatsApp(phone);
+        if (!isOnWhatsApp) {
+            console.warn(`[AutoSend] Phone not on WhatsApp: ${phone}`);
+            return { success: false, error: "Number not on WhatsApp" };
+        }
+
+        // 4. Build message text from body or a random variant
         let text = template.body;
+        if (template.variants && Array.isArray(template.variants) && template.variants.length > 0) {
+            const allOptions = [template.body, ...template.variants];
+            text = allOptions[Math.floor(Math.random() * allOptions.length)] as string;
+        }
         text = await replaceVariables(text, applicant, options?.ticketId, options?.customVars);
+        text = parseSpintax(text);
+
+        // Simulate human interaction before actual send
+        await simulateHumanTyping(phone, text.length);
 
         // 4. Send via Evolution API
         const sendResult = await sendWhatsAppMessage(phone, text);
@@ -81,8 +96,8 @@ export async function autoSendMessage(
         // 7. Follow-up chain (e.g. ON_PASS → ON_FEEDBACK)
         if (sendResult.success && options?.followUpTriggers?.length) {
             for (const followUp of options.followUpTriggers) {
-                // Small delay to avoid overwhelming Evolution API
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Random delay (15-30 seconds) to avoid patterns and overwhelming the API
+                await sleepRandom(15, 30);
                 await autoSendMessage(applicantId, followUp, {
                     customVars: options?.customVars
                 });
@@ -108,7 +123,8 @@ export async function autoSendMessage(
                         notes: `قسيمة تسويقية للناجح [META:${JSON.stringify(metadata)}]`,
                     }
                 });
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Random delay to simulate human typing gap between messages
+                await sleepRandom(15, 30);
                 await autoSendMessage(applicantId, "ON_REFERRAL_VOUCHER", {
                     customVars: { voucherCode }
                 });
@@ -139,7 +155,18 @@ export async function autoSendDirectMessage(
             return { success: false };
         }
 
+        // Ensure number is registered on WhatsApp
+        const isOnWhatsApp = await onWhatsApp(phone);
+        if (!isOnWhatsApp) {
+            console.warn(`[AutoSendDirect] Phone not on WhatsApp: ${phone}`);
+            return { success: false };
+        }
+
         let text = template.body;
+        if (template.variants && Array.isArray(template.variants) && template.variants.length > 0) {
+            const allOptions = [template.body, ...template.variants];
+            text = allOptions[Math.floor(Math.random() * allOptions.length)] as string;
+        }
         // Robust replacement for all variables
         for (const [key, value] of Object.entries(vars)) {
             // Replace {key} regardless of case or using different naming conventions
@@ -152,6 +179,11 @@ export async function autoSendDirectMessage(
                 text = text.split(`{${snakeKey}}`).join(value || "");
             }
         }
+
+        text = parseSpintax(text);
+
+        // Simulate human interaction before actual send
+        await simulateHumanTyping(phone, text.length);
 
         const sendResult = await sendWhatsAppMessage(phone, text);
         const status = sendResult.success ? "SENT" : "PENDING";
@@ -309,3 +341,59 @@ async function replaceVariables(
 
     return text;
 }
+
+/**
+ * Send a notification message when a mock exam package is activated/paid.
+ */
+export async function sendMockPackageActivationMessage(purchaseId: string) {
+    try {
+        // 1. Fetch the purchase details
+        const purchase = await prisma.mockExamPurchase.findUnique({
+            where: { id: purchaseId },
+            include: { package: true }
+        });
+
+        if (!purchase || !purchase.isPaid) {
+            console.warn(`[AutoSendMockPackage] Purchase not found or not paid yet: ${purchaseId}`);
+            return { success: false, error: "Purchase not found or not active" };
+        }
+
+        // 2. Resolve base URL and profession slug to build direct link
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"));
+        
+        let mockLink = baseUrl;
+        if (purchase.profession) {
+            const profession = await prisma.profession.findFirst({
+                where: { name: purchase.profession, isActive: true }
+            });
+            if (profession) {
+                mockLink = `${baseUrl}/${profession.slug}`;
+            }
+        }
+
+        // 3. Format variables
+        const formattedExpiryDate = purchase.expiresAt 
+            ? format(new Date(purchase.expiresAt), "eeee yyyy/MM/dd", { locale: ar })
+            : "غير محدد";
+
+        const vars: Record<string, string> = {
+            name: purchase.buyerName || "عزيزي المشترك",
+            phone: purchase.phone,
+            profession: purchase.profession || "غير محدد",
+            packageName: purchase.package?.name || "باقة فردية",
+            examCredits: String(purchase.totalCredits),
+            amount: String(purchase.amount),
+            currency: purchase.currency === "SAR" ? "ر.س" : "ر.ي",
+            expiryDate: formattedExpiryDate,
+            mockLink
+        };
+
+        // 4. Send the message using autoSendDirectMessage
+        const result = await autoSendDirectMessage(purchase.phone, "ON_MOCK_PACKAGE_ACTIVATED", vars);
+        return result;
+    } catch (error) {
+        console.error(`[AutoSendMockPackage] Error sending message for purchase ${purchaseId}:`, error);
+        return { success: false, error: String(error) };
+    }
+}
+

@@ -17,35 +17,49 @@ interface SuspicionResult {
 function calculateSuspicion(group: {
     allNames: Set<string>;
     allPhones: Set<string>;
+    allEmails: Set<string>;
     allIps: Set<string>;
     allFingerprints: Set<string>;
     totalAttempts: number;
     isBanned: boolean;
     sessions: any[];
     type?: string;
+    hasPurchase?: boolean;
 }): SuspicionResult {
-    // If the candidate is PRIVATE (officially registered), completely bypass all suspicion checking rules
-    if (group.type === "PRIVATE") {
+    // Exempt both registered applicants (PRIVATE) and paying mock customers from suspicion scoring
+    if (group.type === "PRIVATE" || group.hasPurchase) {
         return { score: 0, level: "CLEAN", reasons: [] };
     }
 
     let score = 0;
     const reasons: string[] = [];
 
-    // --- Rule 1: Same Fingerprint + Multiple Names (40 pts) ---
+    // --- Rule 1: Same Email + Multiple Phones (40 pts) ---
+    if (group.allEmails.size >= 1 && group.allPhones.size > 1) {
+        score += 40;
+        reasons.push(`نفس الإيميل استخدم ${group.allPhones.size} أرقام هواتف مختلفة`);
+    }
+
+    // --- Rule 2: Same Email + Multiple Names (30 pts) ---
+    if (group.allEmails.size >= 1 && group.allNames.size > 1) {
+        score += 30;
+        reasons.push(`نفس الإيميل استخدم ${group.allNames.size} أسماء مختلفة`);
+    }
+
+    // --- Rule 3: Same Fingerprint + Multiple Names (40 pts) ---
     // This means the SAME device was used with different identities → definite fraud
     if (group.allFingerprints.size >= 1 && group.allNames.size > 1) {
         score += 40;
         reasons.push(`نفس الجهاز استخدم ${group.allNames.size} أسماء مختلفة`);
     }
 
-    // --- Rule 2: Same Fingerprint + Multiple Phones (40 pts) ---
+    // --- Rule 4: Same Fingerprint + Multiple Phones (40 pts) ---
     if (group.allFingerprints.size >= 1 && group.allPhones.size > 1) {
         score += 40;
         reasons.push(`نفس الجهاز استخدم ${group.allPhones.size} أرقام مختلفة`);
     }
 
-    // --- Rule 3: Same IP + Multiple Different Phones (30 pts for 3+) ---
+    // --- Rule 5: Same IP + Multiple Different Phones (30 pts for 3+) ---
     if (group.allIps.size >= 1 && group.allPhones.size >= 3) {
         score += 30;
         reasons.push(`${group.allPhones.size} أرقام مختلفة من نفس عنوان الشبكة`);
@@ -54,20 +68,20 @@ function calculateSuspicion(group: {
         reasons.push(`رقمان مختلفان من نفس عنوان الشبكة`);
     }
 
-    // --- Rule 4: Same Phone + Multiple Names (20 pts) ---
+    // --- Rule 6: Same Phone + Multiple Names (20 pts) ---
     if (group.allPhones.size === 1 && group.allNames.size > 1) {
         score += 20;
         reasons.push(`نفس الرقم استخدم ${group.allNames.size} أسماء مختلفة`);
     }
 
-    // --- Rule 5: Excessive Attempts (10 pts per attempt beyond 3) ---
+    // --- Rule 7: Excessive Attempts (10 pts per attempt beyond 3) ---
     if (group.totalAttempts > 3) {
         const extraAttempts = group.totalAttempts - 3;
         score += Math.min(extraAttempts * 10, 30);
         reasons.push(`تجاوز الحد المجاني بـ ${extraAttempts} محاولات إضافية (${group.totalAttempts} إجمالي)`);
     }
 
-    // --- Rule 6: Previously Banned (50 pts) ---
+    // --- Rule 8: Previously Banned (50 pts) ---
     if (group.isBanned) {
         score += 50;
         reasons.push(`محظور سابقاً من قبل الإدارة`);
@@ -174,7 +188,8 @@ export async function GET(request: Request) {
             where,
             include: {
                 profession: { select: { name: true, id: true, maxAttempts: true } },
-                applicant: { select: { fullName: true, whatsappNumber: true } }
+                applicant: { select: { fullName: true, whatsappNumber: true } },
+                purchase: { include: { package: true } }
             },
             orderBy: { createdAt: 'desc' },
             take: 1000
@@ -213,6 +228,7 @@ export async function GET(request: Request) {
                     profession: sess.profession,
                     allNames: new Set<string>(),
                     allPhones: new Set<string>(),
+                    allEmails: new Set<string>(),
                     allIps: new Set<string>(),
                     allFingerprints: new Set<string>(),
                     allProfessions: new Set<string>(),
@@ -222,13 +238,24 @@ export async function GET(request: Request) {
                     hasSetLastScore: false,
                     isPassed: false,
                     totalAttempts: 0,
+                    maxAttempts: sess.purchase?.totalCredits ?? 3,
                     isBanned: false,
                     status: sess.status,
-                    createdAt: sess.createdAt
+                    createdAt: sess.createdAt,
+                    hasPurchase: !!sess.purchaseId,
+                    customerType: sess.type === "PRIVATE" ? "APPLICANT" : (sess.purchaseId ? "CUSTOMER" : "VISITOR")
                 });
             }
 
             const group = groupedMap.get(groupKey);
+
+            if (sess.purchase?.totalCredits) {
+                group.maxAttempts = sess.purchase.totalCredits;
+            }
+            if (sess.purchaseId) {
+                group.hasPurchase = true;
+                if (group.type !== "PRIVATE") group.customerType = "CUSTOMER";
+            }
 
             // Collect identity data
             const name = sess.applicant?.fullName || sess.visitorName;
@@ -236,6 +263,9 @@ export async function GET(request: Request) {
 
             const phone = sess.applicant?.whatsappNumber || sess.visitorPhone;
             if (phone) group.allPhones.add(phone);
+
+            const email = sess.applicant?.platformEmail || sess.visitorEmail;
+            if (email) group.allEmails.add(email);
 
             if (sess.ipAddress && sess.ipAddress !== "unknown") group.allIps.add(sess.ipAddress);
             
@@ -277,9 +307,12 @@ export async function GET(request: Request) {
                 displayName: g.displayName,
                 displayPhone: g.displayPhone,
                 type: g.type,
+                customerType: g.customerType,
+                hasPurchase: g.hasPurchase,
                 profession: g.profession,
                 allNames: Array.from(g.allNames),
                 allPhones: Array.from(g.allPhones),
+                allEmails: Array.from(g.allEmails),
                 allIps: Array.from(g.allIps),
                 allFingerprints: Array.from(g.allFingerprints),
                 allProfessions: Array.from(g.allProfessions),
@@ -288,6 +321,7 @@ export async function GET(request: Request) {
                 lastScore: g.lastScore,
                 isPassed: g.isPassed,
                 totalAttempts: g.totalAttempts,
+                maxAttempts: g.maxAttempts,
                 isBanned: g.isBanned,
                 status: g.status,
                 createdAt: g.createdAt,

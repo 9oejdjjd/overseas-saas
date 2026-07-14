@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { fromId, toId, price, priceRoundTrip, cost, costRoundTrip } = body;
+        const { fromId, toId, price, priceRoundTrip, cost, costRoundTrip, currency } = body;
 
         const record = await prisma.transportRouteDefault.upsert({
             where: {
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
                 priceRoundTrip: priceRoundTrip ? parseFloat(priceRoundTrip) : null,
                 cost: cost ? parseFloat(cost) : 0,
                 costRoundTrip: costRoundTrip ? parseFloat(costRoundTrip) : 0,
+                currency: currency || "YER"
             },
             create: {
                 fromDestinationId: fromId,
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
                 priceRoundTrip: priceRoundTrip ? parseFloat(priceRoundTrip) : null,
                 cost: cost ? parseFloat(cost) : 0,
                 costRoundTrip: costRoundTrip ? parseFloat(costRoundTrip) : 0,
+                currency: currency || "YER"
             }
         });
 

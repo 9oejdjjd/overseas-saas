@@ -5,7 +5,7 @@ import { Applicant } from "@/types/applicant";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MoreHorizontal, ArrowUpDown, Bus, Wallet, CalendarClock, Phone, CheckCircle2, XCircle, AlertCircle, Plane, BookOpen, Loader2, Beaker, Tag } from "lucide-react";
+import { MoreHorizontal, ArrowUpDown, Bus, Wallet, CalendarClock, Phone, CheckCircle2, XCircle, AlertCircle, Plane, BookOpen, Loader2, Beaker, Tag, Copy } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -30,6 +30,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useToast } from "@/components/ui/simple-toast";
 
 // Extended type to include ticket from API
 export type ApplicantData = Applicant & {
@@ -61,8 +62,10 @@ const getTicketStatus = (app: ApplicantData) => {
 
 // Credit-aware mock exam link sender
 function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
+    const { toast } = useToast();
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
+    const [hasError, setHasError] = useState(false);
     const [copying, setCopying] = useState(false);
     const [creditInfo, setCreditInfo] = useState<{ hasCredits: boolean; remaining: number } | null>(null);
     const [checked, setChecked] = useState(false);
@@ -96,6 +99,7 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
     const handleSend = async () => {
         if (noCredits) return;
         setSending(true);
+        setHasError(false);
         try {
             const genRes = await fetch("/api/messages/generate", {
                 method: "POST",
@@ -122,8 +126,16 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
             });
             if (!sendRes.ok) throw new Error("Failed to send");
             setSent(true);
+            toast("تم إرسال رابط الاختبار التجريبي بنجاح.", "success");
+            
+            // Revert icon back to normal after 5 seconds so they can send again if they want
+            setTimeout(() => setSent(false), 5000);
+            
         } catch (e) {
             console.error("Mock exam link send error:", e);
+            setHasError(true);
+            toast("حدث خطأ أثناء محاولة إرسال رابط الاختبار عبر الواتساب.", "error");
+            setTimeout(() => setHasError(false), 5000);
         } finally {
             setSending(false);
         }
@@ -146,9 +158,10 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
             if (!genRes.ok) throw new Error("Failed to generate");
             const { message } = await genRes.json();
             await navigator.clipboard.writeText(message);
-            // Optional: you could show a brief toast here if you import useToast
+            toast("تم نسخ قالب الرسالة إلى الحافظة.", "success");
         } catch (e) {
             console.error("Copy error:", e);
+            toast("تعذر إنشاء قالب الرسالة للنسخ.", "error");
         } finally {
             setCopying(false);
         }
@@ -165,7 +178,8 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
                             className={cn(
                                 "h-8 w-8 p-0",
                                 noCredits ? "text-gray-300 cursor-not-allowed" :
-                                sent ? "text-green-600" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                sent ? "text-green-600" : 
+                                hasError ? "text-red-600" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                             )}
                             onClick={handleSend}
                             disabled={sending || sent || !!noCredits}
@@ -174,13 +188,15 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : sent ? (
                                 <CheckCircle2 className="h-4 w-4" />
+                            ) : hasError ? (
+                                <XCircle className="h-4 w-4" />
                             ) : (
                                 <BookOpen className="h-4 w-4" />
                             )}
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                        <p>{noCredits ? "لا يوجد رصيد اختبارات ❌" : sent ? "تم الإرسال ✓" : `إرسال رابط اختبار (متبقي: ${remainingText})`}</p>
+                        <p>{noCredits ? "لا يوجد رصيد اختبارات ❌" : sent ? "تم الإرسال ✓" : hasError ? "فشل الإرسال ❌" : `إرسال رابط اختبار (متبقي: ${remainingText})`}</p>
                     </TooltipContent>
                 </Tooltip>
                 

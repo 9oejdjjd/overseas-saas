@@ -57,6 +57,18 @@ export const authOptions: NextAuthOptions = {
                 token.role = user.role;
                 token.requirePasswordChange = user.requirePasswordChange;
                 token.permissions = user.permissions;
+            } else if (token?.id && token.requirePasswordChange) {
+                try {
+                    const dbUser = await prisma.user.findUnique({
+                        where: { id: token.id },
+                        select: { requirePasswordChange: true }
+                    });
+                    if (dbUser) {
+                        token.requirePasswordChange = dbUser.requirePasswordChange;
+                    }
+                } catch (e) {
+                    console.error("Error fetching requirePasswordChange in jwt callback:", e);
+                }
             }
             return token;
         },

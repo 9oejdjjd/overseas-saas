@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { HeadphonesIcon, MessageCircle, Mail, ArrowLeft, Clock } from "lucide-react";
+import { SITE_CONFIG } from "@/config/site";
 
 export function ContactSection() {
     return (
@@ -26,13 +27,13 @@ export function ContactSection() {
                         </p>
 
                         <div className="flex flex-col gap-5">
-                            <a href="https://wa.me/967777263111" target="_blank" rel="noopener noreferrer" className="group flex items-center gap-5 p-5 rounded-2xl border-2 border-slate-100 hover:border-[#5c9e45] bg-slate-50 hover:bg-green-50/50 transition-all">
+                            <a href={SITE_CONFIG.supportWhatsappUrl} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-5 p-5 rounded-2xl border-2 border-slate-100 hover:border-[#5c9e45] bg-slate-50 hover:bg-green-50/50 transition-all">
                                 <div className="w-14 h-14 rounded-full bg-[#5c9e45]/10 flex items-center justify-center text-[#5c9e45] group-hover:bg-[#5c9e45] group-hover:text-white transition-colors shrink-0">
                                     <MessageCircle size={26} />
                                 </div>
                                 <div className="flex-1">
                                     <h4 className="font-bold text-slate-800 text-base mb-1">واتساب مباشر</h4>
-                                    <p className="text-sm text-slate-500 font-mono" dir="ltr">+967 777 263 111</p>
+                                    <p className="text-sm text-slate-500 font-mono" dir="ltr">+967 715 454 154</p>
                                 </div>
                                 <ArrowLeft className="text-slate-300 group-hover:text-[#5c9e45] transition-colors shrink-0" />
                             </a>

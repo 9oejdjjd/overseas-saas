@@ -28,6 +28,8 @@ export async function POST(request: Request) {
         const location = await prisma.location.create({
             data: {
                 name: body.name,
+                nameEn: body.nameEn,
+                nameAr: body.nameAr,
                 code: body.code,
                 address: body.address,
                 locationUrl: body.locationUrl,

@@ -56,6 +56,8 @@ export default function MockExamsAdminPage() {
         setSearchTerm,
         suspicionFilter,
         setSuspicionFilter,
+        customerFilter,
+        setCustomerFilter,
         expandedGroups,
         toggleGroup,
         reviewSessionId,
@@ -167,6 +169,8 @@ export default function MockExamsAdminPage() {
                                 <SessionsFilters
                                     suspicionFilter={suspicionFilter}
                                     setSuspicionFilter={setSuspicionFilter}
+                                    customerFilter={customerFilter}
+                                    setCustomerFilter={setCustomerFilter}
                                     searchTerm={searchTerm}
                                     setSearchTerm={setSearchTerm}
                                     suspiciousCount={stats.suspiciousCount}

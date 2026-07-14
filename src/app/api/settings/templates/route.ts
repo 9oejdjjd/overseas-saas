@@ -15,7 +15,10 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { id, name, body: textBody, trigger } = body;
+        const { id, name, body: textBody, trigger, variants } = body;
+
+        // Ensure variants is passed as JSON or undefined
+        const variantsData = variants ? (Array.isArray(variants) ? variants : []) : undefined;
 
         // If no ID, treated as CREATE (or we can use a separate PUT)
         if (!id) {
@@ -23,6 +26,7 @@ export async function POST(request: Request) {
                 data: {
                     name,
                     body: textBody,
+                    variants: variantsData || undefined,
                     type: "WHATSAPP", // Default
                     trigger: trigger || null
                 }
@@ -35,6 +39,7 @@ export async function POST(request: Request) {
             data: {
                 name,
                 body: textBody,
+                variants: variantsData !== undefined ? variantsData : undefined,
                 trigger: trigger || null
             }
         });

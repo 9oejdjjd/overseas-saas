@@ -6,6 +6,7 @@ export type Applicant = {
     whatsappNumber: string;
     platformEmail?: string | null;
     platformPassword?: string | null;
+    notificationEmail?: string | null;
     examDate?: string | null;
     examTime?: string | null;
     examLocation: string;
@@ -88,6 +89,8 @@ export interface ExtendedApplicant extends Applicant {
     location?: {
         id: string;
         name: string;
+        nameEn?: string | null;
+        nameAr?: string | null;
         code?: string;
         address?: string | null;
         locationUrl?: string | null;
@@ -98,7 +101,12 @@ export interface ExtendedApplicant extends Applicant {
         id: string;
         name: string;
     } | null;
-    transportFrom?: { id: string; name: string } | null;
+    transportFrom?: {
+        id: string;
+        name: string;
+        nameEn?: string | null;
+        nameAr?: string | null;
+    } | null;
     transportType?: string | null;
 
     // Policy Info attached by API

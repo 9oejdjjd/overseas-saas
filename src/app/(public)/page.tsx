@@ -47,12 +47,14 @@ export default async function EnhancedLandingPage() {
             <div className="relative z-20 bg-white">
                 <ProblemsSection />
                 <div id="about" className="pt-4"></div>
+                <div id="services" className="pt-4"></div>
                 <SolutionSection />
                 <TimelineSection />
                 
                 <ProfessionSearchSection />
                 
                 <TrustSection />
+                <div id="achievements" className="pt-10"></div>
                 <AchievementsSection />
                 
                 <div id="faq" className="pt-10"></div>

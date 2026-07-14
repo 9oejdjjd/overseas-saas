@@ -9,12 +9,14 @@
 import { useState, useEffect, useMemo } from "react";
 
 export type SuspicionFilterType = "ALL" | "ANY" | "WATCH" | "SUSPICIOUS" | "CRITICAL";
+export type CustomerTypeFilter = "ALL" | "APPLICANT" | "CUSTOMER" | "VISITOR";
 
 export function useMockExamsSessions() {
     const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [suspicionFilter, setSuspicionFilter] = useState<SuspicionFilterType>("ALL");
+    const [customerFilter, setCustomerFilter] = useState<CustomerTypeFilter>("ALL");
     const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
     // حالات نافذة المراجعة الفردية
@@ -157,14 +159,20 @@ export function useMockExamsSessions() {
         };
     }, [sessions]);
 
-    // تصفية الجلسات محلياً حسب مستويات الاشتباه المحددة
+    // تصفية الجلسات محلياً حسب مستويات الاشتباه ونوع العميل المحددة
     const filteredSessions = useMemo(() => {
-        if (suspicionFilter === "ALL") return sessions;
-        if (suspicionFilter === "ANY") {
-            return sessions.filter(g => g.suspicionLevel !== "CLEAN");
+        let result = sessions;
+        
+        if (customerFilter !== "ALL") {
+            result = result.filter(g => g.customerType === customerFilter);
         }
-        return sessions.filter(g => g.suspicionLevel === suspicionFilter);
-    }, [sessions, suspicionFilter]);
+
+        if (suspicionFilter === "ALL") return result;
+        if (suspicionFilter === "ANY") {
+            return result.filter(g => g.suspicionLevel !== "CLEAN");
+        }
+        return result.filter(g => g.suspicionLevel === suspicionFilter);
+    }, [sessions, suspicionFilter, customerFilter]);
 
     return {
         sessions,
@@ -174,6 +182,8 @@ export function useMockExamsSessions() {
         setSearchTerm,
         suspicionFilter,
         setSuspicionFilter,
+        customerFilter,
+        setCustomerFilter,
         expandedGroups,
         toggleGroup,
         

@@ -7,7 +7,7 @@ import { normalizePhone } from "@/lib/phone-utils";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { visitorName, professionSlug, deviceFingerprint } = body;
+        const { visitorName, professionSlug, deviceFingerprint, visitorEmail } = body;
         const visitorPhone = normalizePhone(body.visitorPhone || "");
         const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
 
@@ -38,35 +38,41 @@ export async function POST(request: Request) {
         }
 
         // --- 1.5. Security: Check for Banned Status ---
-        // Block if any session matching this IP, Phone, or Fingerprint is banned.
+        // Block if any session matching this IP, Phone, Email, or Fingerprint is banned.
+        const bannedConditions: any[] = [
+            { visitorPhone: visitorPhone },
+            { visitorPhone: phoneWithoutPlus },
+            { ipAddress: ipAddress }
+        ];
+        if (visitorEmail) bannedConditions.push({ visitorEmail: visitorEmail });
+        if (baseFingerprint) bannedConditions.push({ deviceFingerprint: { startsWith: baseFingerprint } });
+
         const isBanned = await prisma.examSession.findFirst({
             where: {
                 isBanned: true,
-                OR: [
-                    { visitorPhone: visitorPhone },
-                    { visitorPhone: phoneWithoutPlus },
-                    { ipAddress: ipAddress },
-                    ...(baseFingerprint ? [{ deviceFingerprint: { startsWith: baseFingerprint } }] : [])
-                ]
+                OR: bannedConditions
             }
         });
 
         if (isBanned) {
             return NextResponse.json({ 
-                error: "عفواً، لقد تم حظر هذا الجهاز أو الرقم من الوصول للنظام. يرجى مراجعة الإدارة." 
+                error: "عفواً، لقد تم حظر هذا الجهاز أو الرقم أو الإيميل من الوصول للنظام. يرجى مراجعة الإدارة." 
             }, { status: 403 });
         }
 
         // --- 2. Check for existing UNFINISHED session (for THIS profession only) ---
+        const existingSessionConditions: any[] = [
+            { visitorPhone: visitorPhone },
+            { visitorPhone: phoneWithoutPlus }
+        ];
+        if (visitorEmail) existingSessionConditions.push({ visitorEmail: visitorEmail });
+        if (baseFingerprint) existingSessionConditions.push({ deviceFingerprint: { startsWith: baseFingerprint } });
+
         const existingSession = await prisma.examSession.findFirst({
             where: {
                 professionId: profession.id,
                 status: { in: ["NEW", "STARTED", "RESUMED"] },
-                OR: [
-                    { visitorPhone: visitorPhone },
-                    { visitorPhone: phoneWithoutPlus },
-                    ...(baseFingerprint ? [{ deviceFingerprint: { startsWith: baseFingerprint } }] : [])
-                ]
+                OR: existingSessionConditions
             },
             orderBy: { createdAt: "desc" }
         });
@@ -91,6 +97,7 @@ export async function POST(request: Request) {
                     data: {
                         visitorPhone: visitorPhone,
                         ipAddress: ipAddress,
+                        ...(visitorEmail ? { visitorEmail } : {}),
                         ...(deviceFingerprint ? { deviceFingerprint } : {})
                     }
                 });
@@ -107,10 +114,16 @@ export async function POST(request: Request) {
         let attemptNum = 1;
 
         if (packagesEnabled) {
+            const activePurchaseConditions: any[] = [
+                { phone: visitorPhone },
+                { phone: phoneWithoutPlus }
+            ];
+            if (visitorEmail) activePurchaseConditions.push({ email: visitorEmail });
+
             // Find active purchase
             let activePurchase = await prisma.mockExamPurchase.findFirst({
                 where: {
-                    OR: [{ phone: visitorPhone }, { phone: phoneWithoutPlus }],
+                    OR: activePurchaseConditions,
                     status: { in: ["ACTIVE", "PAID"] },
                     isPaid: true,
                 },
@@ -127,7 +140,7 @@ export async function POST(request: Request) {
                 // Check if they ever had a purchase (Free or Paid) that was exhausted
                 const pastPurchase = await prisma.mockExamPurchase.findFirst({
                     where: {
-                        OR: [{ phone: visitorPhone }, { phone: phoneWithoutPlus }],
+                        OR: activePurchaseConditions,
                         status: { in: ["ACTIVE", "PAID"] },
                         isPaid: true,
                     },
@@ -135,7 +148,7 @@ export async function POST(request: Request) {
                 });
 
                 if (pastPurchase) {
-                    return NextResponse.json({ error: "لقد استنفذت جميع محاولات باقاتك السابقة. يرجى الاشتراك في إحدى الباقات للاستمرار." }, { status: 403 });
+                    return NextResponse.json({ error: "لقد استنفذت جميع محاولات باقاتك السابقة. يرجى الاشتراك في إحدى الباقات المتاحة للاستمرار." }, { status: 403 });
                 }
 
                 // Try to find a FREE package and auto-assign since they are a new user
@@ -149,6 +162,7 @@ export async function POST(request: Request) {
                         data: {
                             phone: visitorPhone,
                             buyerName: visitorName,
+                            email: visitorEmail || null,
                             packageId: freePackage.id,
                             totalCredits: freePackage.examCredits,
                             amount: 0,
@@ -159,7 +173,7 @@ export async function POST(request: Request) {
                         }
                     });
                 } else {
-                    return NextResponse.json({ error: "لا توجد باقة أو محاولات متاحة لك حالياً. يرجى الاشتراك في إحدى الباقات." }, { status: 403 });
+                    return NextResponse.json({ error: "عذراً، لا توجد لديك أي محاولات متاحة في الوقت الحالي. يرجى الاشتراك في إحدى باقات الاختبارات." }, { status: 403 });
                 }
             }
 
@@ -185,9 +199,15 @@ export async function POST(request: Request) {
                     where: { type: "PUBLIC", deviceFingerprint: { startsWith: baseFingerprint }, status: { in: consumedStatuses } }
                 });
             }
-            const previousAttempts = Math.max(attemptsByPhone, attemptsByFingerprint);
+            let attemptsByEmail = 0;
+            if (visitorEmail) {
+                attemptsByEmail = await prisma.examSession.count({
+                    where: { type: "PUBLIC", visitorEmail: visitorEmail, status: { in: consumedStatuses } }
+                });
+            }
+            const previousAttempts = Math.max(attemptsByPhone, attemptsByFingerprint, attemptsByEmail);
             if (previousAttempts >= MAX_GLOBAL_ATTEMPTS) {
-                return NextResponse.json({ error: `لقد استنفذت جميع محاولاتك المجانية (${MAX_GLOBAL_ATTEMPTS} محاولات).` }, { status: 403 });
+                return NextResponse.json({ error: "لقد استنفذت جميع محاولاتك المجانية المتاحة." }, { status: 403 });
             }
             attemptNum = previousAttempts + 1;
         }
@@ -234,10 +254,9 @@ export async function POST(request: Request) {
             }
         });
         
-        // TEMPORARY BYPASS: Removed strict verification check
-        // if (!applicant && !otpRecord?.verified) {
-        //     return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });
-        // }
+        if (!applicant && !otpRecord?.verified) {
+            return NextResponse.json({ error: "الرجاء تأكيد رقم الهاتف أولاً" }, { status: 403 });
+        }
 
         // --- 5. Create New Session ---
         const session = await prisma.examSession.create({
@@ -246,6 +265,7 @@ export async function POST(request: Request) {
                 professionId: profession.id,
                 visitorName: visitorName,
                 visitorPhone: visitorPhone,
+                visitorEmail: visitorEmail || null,
                 deviceFingerprint: deviceFingerprint || null,
                 ipAddress: ipAddress,
                 passingScore: profession.passingScore,

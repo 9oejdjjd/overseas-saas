@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMockExamPackages, MockPackage } from "@/hooks/pricing/useMockExamPackages";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Pencil, Copy, Trash2, Crown, Star, Gem, Rocket, Gift, Check, X, Coins, Percent, ArrowLeftRight, Landmark, BadgeCheck } from "lucide-react";
+import { Plus, Settings, Pencil, Copy, Trash2, Crown, Star, Gem, Rocket, Gift, Check, X, Coins, Percent, ArrowLeftRight, Landmark, BadgeCheck, Car, Award } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,40 @@ const ICONS: Record<string, any> = {
     gift: Gift 
 };
 
+const EXAMS_ONLY_FEATURES = [
+    "اختبارات تجريبية غير محدودة لجميع المهن",
+    "أسئلة محدثة مطابقة تماماً للمهنة المطلوبة",
+    "تقرير نجاح/رسوب فوري بالتفصيل والدرجات",
+    "مراجعة إجابات وتوضيح مواضع الأخطاء",
+    "مراجعة كاملة لجميع الأخطاء مع شروحات علمية",
+    "تقرير أداء مفصل مرسل فورياً على الواتساب",
+    "تقرير أداء مفصل فوري على الواتساب الخاص بك",
+    "دعم فني أساسي عبر البريد الإلكتروني",
+    "دعم فني مباشر وسريع عبر الواتساب",
+    "دعم فني مباشر وسريع جداً عبر الواتساب على مدار الساعة",
+    "ضمان النجاح (إعادة الاختبار التجريبي مجاناً)"
+];
+
+const REGISTRATION_FEATURES = [
+    "إتمام إجراءات التسجيل كاملة في البوابة الرسمية",
+    "تسجيل فوري ومكتمل 100% مع مراجعة دقيقة للمستندات",
+    "حجز وتأكيد موعد الاختبار في أقرب مركز معتمد",
+    "حجز الموعد الأسرع والأقرب جغرافياً لمركز إقامتك",
+    "متابعة مستمرة للطلب حتى صدور الموعد والاعتماد",
+    "دعم فني استباقي عبر الواتساب لحل أي عقبات تقنية",
+    "ضمان اجتياز الاختبار الفعلي (إعادة حجز وتأهيل مجاني)"
+];
+
+const TRANSPORT_B2B_FEATURES = [
+    "نقل وتأمين مواصلات لمركز الاختبار (ذهاب وعودة مشتركة)",
+    "مواصلات VIP خاصة (ذهاباً وإياباً) من مكان إقامتك شاملة الضيافة",
+    "مرافق شخصي معتمد من فريقنا لتسهيل كافة إجراءات المركز والدخول",
+    "لوحة تحكم مركزية للشركات ومكاتب الاستقدام",
+    "لوحة تحكم إشرافية متعددة الموظفين",
+    "مدير حساب مخصص لمتابعة أداء مجموعات العمالة",
+    "جدولة مواعيد موحدة وحسومات استثنائية للشركات"
+];
+
 export function MockExamPackages() {
     const {
         packages,
@@ -29,6 +64,8 @@ export function MockExamPackages() {
         setIsConfigEditing,
         isPackageModalOpen,
         setIsPackageModalOpen,
+        isFreePackageModalOpen,
+        setIsFreePackageModalOpen,
         currentPackage,
         isSaving,
         handleSaveConfig,
@@ -36,12 +73,54 @@ export function MockExamPackages() {
         handleDelete,
         handleDuplicate,
         handleToggle,
-        openNew,
+        openNewFree,
+        openNewPaid,
         openEdit,
         updateConfigField,
         updatePackageField,
+        updateAttemptConfig,
         fetchData
     } = useMockExamPackages();
+
+    const handleFeatureTextChange = (idx: number, val: string) => {
+        if (!currentPackage) return;
+        const currentFeatures = Array.isArray(currentPackage.features) ? [...currentPackage.features] : [];
+        const normalized = currentFeatures.map(f => typeof f === 'string' ? { text: f, isIncluded: true } : f);
+        normalized[idx] = { ...normalized[idx], text: val };
+        updatePackageField("features", normalized);
+    };
+
+    const handleFeatureToggle = (idx: number, isIncluded: boolean) => {
+        if (!currentPackage) return;
+        const currentFeatures = Array.isArray(currentPackage.features) ? [...currentPackage.features] : [];
+        const normalized = currentFeatures.map(f => typeof f === 'string' ? { text: f, isIncluded: true } : f);
+        normalized[idx] = { ...normalized[idx], isIncluded };
+        updatePackageField("features", normalized);
+    };
+
+    const handleRemoveFeature = (idx: number) => {
+        if (!currentPackage) return;
+        const currentFeatures = Array.isArray(currentPackage.features) ? [...currentPackage.features] : [];
+        currentFeatures.splice(idx, 1);
+        updatePackageField("features", currentFeatures);
+    };
+
+    const addNewFeatureField = () => {
+        if (!currentPackage) return;
+        const currentFeatures = Array.isArray(currentPackage.features) ? [...currentPackage.features] : [];
+        const normalized = currentFeatures.map(f => typeof f === 'string' ? { text: f, isIncluded: true } : f);
+        updatePackageField("features", [...normalized, { text: "", isIncluded: true }]);
+    };
+
+    const handleAddSuggestedFeature = (f: string) => {
+        if (!currentPackage) return;
+        const currentFeatures = Array.isArray(currentPackage.features) ? [...currentPackage.features] : [];
+        const normalized = currentFeatures.map(f => typeof f === 'string' ? { text: f, isIncluded: true } : f);
+        if (!normalized.some(feat => feat.text === f)) {
+            updatePackageField("features", [...normalized, { text: f, isIncluded: true }]);
+        }
+    };
+
 
     if (loading) {
         return (
@@ -218,12 +297,20 @@ export function MockExamPackages() {
                                 تخصيص وتوزيع الباقات الحالية، وإعداد درجات وامتيازات المبيعات
                             </CardDescription>
                         </div>
-                        <Button 
-                            onClick={openNew} 
-                            className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100 rounded-xl"
-                        >
-                            <Plus className="h-4 w-4" /> إضافة باقة جديدة
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button 
+                                onClick={openNewFree} 
+                                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-100 rounded-xl"
+                            >
+                                <Plus className="h-4 w-4" /> إضافة باقة مجانية
+                            </Button>
+                            <Button 
+                                onClick={openNewPaid} 
+                                className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100 rounded-xl"
+                            >
+                                <Plus className="h-4 w-4" /> إضافة باقة مدفوعة
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -249,14 +336,20 @@ export function MockExamPackages() {
                                     </TableRow>
                                 ) : (
                                     packages.map(pkg => {
-                                        const IconComponent = ICONS[pkg.icon] || Star;
+                                        const themeColor = pkg.color || '#16539a';
+                                        const isBlueTheme = themeColor === '#16539a';
+                                        const IconComponent = pkg.includesTransport 
+                                            ? Car 
+                                            : (pkg.includesRegistration 
+                                                ? Award 
+                                                : (isBlueTheme ? Crown : Star));
                                         return (
                                             <TableRow key={pkg.id} className="hover:bg-slate-50/40 transition-colors group">
                                                 <TableCell className="px-5 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div 
                                                             className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm transition-transform duration-300 group-hover:scale-110" 
-                                                            style={{ backgroundColor: pkg.color || '#3B82F6' }}
+                                                            style={{ backgroundColor: themeColor }}
                                                         >
                                                             <IconComponent className="h-5 w-5" />
                                                         </div>
@@ -390,7 +483,7 @@ export function MockExamPackages() {
                             <span className="p-1 bg-indigo-50 text-indigo-600 rounded">
                                 <Star className="h-5 w-5" />
                             </span>
-                            {currentPackage?.id ? 'تعديل تفاصيل باقة الاختبارات' : 'بناء باقة اختبارات تجريبية جديدة'}
+                            {currentPackage?.id ? 'تعديل تفاصيل باقة الاختبارات المدفوعة' : 'بناء باقة اختبارات مدفوعة جديدة'}
                         </DialogTitle>
                         <DialogDescription className="text-slate-500 text-xs">
                             تحديد مكونات العرض، الأسعار بالعملتين، ومزايا الطالب في صفحة النتيجة
@@ -435,52 +528,7 @@ export function MockExamPackages() {
                                 </div>
                             </div>
 
-                            {/* Appearance Options */}
-                            <div className="space-y-4">
-                                <h3 className="text-xs font-black text-indigo-700 block border-r-2 border-indigo-500 pr-2">تخصيص المظهر والشارات</h3>
-                                <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-200/50">
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-slate-600">أيقونة التمييز</label>
-                                        <select 
-                                            className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none" 
-                                            value={currentPackage.icon || 'star'} 
-                                            onChange={e => updatePackageField("icon", e.target.value)}
-                                        >
-                                            <option value="star">⭐ نجمة (Star)</option>
-                                            <option value="crown">👑 تاج ذهبي (Crown)</option>
-                                            <option value="diamond">💎 ماسة زرقاء (Gem)</option>
-                                            <option value="rocket">🚀 صاروخ ترويجي (Rocket)</option>
-                                            <option value="gift">🎁 هدية مجانية (Gift)</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-slate-600">لون خلفية الأيقونة</label>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="color" 
-                                                className="h-10 w-10 p-1.5 rounded-xl border border-slate-200 cursor-pointer bg-white" 
-                                                value={currentPackage.color || '#3B82F6'} 
-                                                onChange={e => updatePackageField("color", e.target.value)} 
-                                            />
-                                            <Input 
-                                                value={currentPackage.color || '#3B82F6'} 
-                                                onChange={e => updatePackageField("color", e.target.value)} 
-                                                dir="ltr" 
-                                                className="rounded-xl border-slate-200 text-xs font-semibold [direction:ltr]"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-slate-600">شارة مميزة (Badge)</label>
-                                        <Input 
-                                            placeholder="مثال: الأكثر مبيعاً" 
-                                            value={currentPackage.badge} 
-                                            onChange={e => updatePackageField("badge", e.target.value)} 
-                                            className="rounded-xl border-slate-200"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
+
 
                             {/* Exams & Validity configs */}
                             <div className="space-y-4">
@@ -508,91 +556,230 @@ export function MockExamPackages() {
                                         </div>
                                     </div>
 
-                                    {/* Free switch */}
-                                    <div className="flex items-center gap-3 p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
-                                        <Switch 
-                                            checked={currentPackage.isFree} 
-                                            onCheckedChange={c => updatePackageField("isFree", c)} 
-                                            id="package-free"
-                                        />
-                                        <div className="space-y-0.5">
-                                            <label htmlFor="package-free" className="text-xs font-black text-emerald-800 block cursor-pointer">
-                                                اعتبار هذه الباقة باقة مجانية (Free Exam Package)
-                                            </label>
-                                            <span className="text-[10px] text-emerald-600 block">
-                                                سيتم تصفير الرسوم تلقائياً للطلاب المشمولين بهدايا أو عروض خاصة.
-                                            </span>
+                                    {/* YER & SAR pricing inputs */}
+                                    <div className="grid grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100/50">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-indigo-900">سعر الحزمة الرسمي (بالريال اليمني)</label>
+                                            <div className="relative">
+                                                <Input 
+                                                    type="number" 
+                                                    className="rounded-xl border-indigo-200 bg-white font-extrabold text-indigo-950 pl-14" 
+                                                    value={currentPackage.examPrice} 
+                                                    onChange={e => updatePackageField("examPrice", Number(e.target.value))} 
+                                                />
+                                                <span className="absolute left-4 top-2.5 text-xs font-bold text-indigo-400">ر.ي</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-emerald-900">سعر الحزمة الرسمي (بالريال السعودي)🇸🇦</label>
+                                            <div className="relative">
+                                                <Input 
+                                                    type="number" 
+                                                    className="rounded-xl border-emerald-200 bg-white font-extrabold text-emerald-950 pl-14" 
+                                                    value={currentPackage.priceSAR} 
+                                                    onChange={e => updatePackageField("priceSAR", Number(e.target.value))} 
+                                                />
+                                                <span className="absolute left-4 top-2.5 text-xs font-bold text-emerald-400">ر.س</span>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    {/* YER & SAR pricing inputs */}
-                                    {!currentPackage.isFree && (
-                                        <div className="grid grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100/50">
-                                            <div className="space-y-1">
-                                                <label className="text-xs font-bold text-indigo-900">سعر الحزمة الرسمي (بالريال اليمني)</label>
-                                                <div className="relative">
-                                                    <Input 
-                                                        type="number" 
-                                                        className="rounded-xl border-indigo-200 bg-white font-extrabold text-indigo-950 pl-14" 
-                                                        value={currentPackage.examPrice} 
-                                                        onChange={e => updatePackageField("examPrice", Number(e.target.value))} 
-                                                    />
-                                                    <span className="absolute left-4 top-2.5 text-xs font-bold text-indigo-400">ر.ي</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-xs font-bold text-emerald-900">سعر الحزمة الرسمي (بالريال السعودي)🇸🇦</label>
-                                                <div className="relative">
-                                                    <Input 
-                                                        type="number" 
-                                                        className="rounded-xl border-emerald-200 bg-white font-extrabold text-emerald-950 pl-14" 
-                                                        value={currentPackage.priceSAR} 
-                                                        onChange={e => updatePackageField("priceSAR", Number(e.target.value))} 
-                                                    />
-                                                    <span className="absolute left-4 top-2.5 text-xs font-bold text-emerald-400">ر.س</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
-                            {/* Result Page Rules */}
+
+                            {/* Allowed Question Types Control */}
                             <div className="space-y-4">
-                                <h3 className="text-xs font-black text-indigo-700 block border-r-2 border-indigo-500 pr-2">صلاحيات صفحة نتيجة الطالب (تخصيص الأمان)</h3>
-                                <div className="p-4 bg-amber-50/20 border border-amber-100 rounded-2xl space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <Switch 
-                                            checked={currentPackage.showResultScore} 
-                                            onCheckedChange={c => updatePackageField("showResultScore", c)} 
-                                            id="p-show-score"
-                                        />
-                                        <label htmlFor="p-show-score" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                                            إظهار النسبة المئوية الاجمالية للنتيجة (مثل: حصلت على 85% في الامتحان)
-                                        </label>
+                                <h3 className="text-xs font-black text-indigo-700 block border-r-2 border-indigo-500 pr-2">أنواع الأسئلة المتاحة في الباقة</h3>
+                                <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50/30 space-y-4">
+                                    <p className="text-[10px] text-slate-500">حدد أنواع الأسئلة التي تود لطلاب هذه الباقة التدرب عليها. يجب اختيار نوع واحد على الأقل.</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[
+                                            { key: "MCQ", label: "اختيار من متعدد (MCQ)" },
+                                            { key: "TRUE_FALSE", label: "صح وخطأ (True/False)" },
+                                            { key: "FILL_BLANK", label: "إكمال الفراغات (Fill Blank)" },
+                                            { key: "IMAGE", label: "أسئلة تحتوي على صور" }
+                                        ].map(typeItem => {
+                                            const allowedTypes = (currentPackage.allowedQuestionTypes || "MCQ,TRUE_FALSE,FILL_BLANK,IMAGE")
+                                                .split(",")
+                                                .map((t: string) => t.trim())
+                                                .filter(Boolean);
+                                            const isChecked = allowedTypes.includes(typeItem.key);
+
+                                            return (
+                                                <div key={typeItem.key} className="flex items-center gap-2.5 p-2.5 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                                    <Switch 
+                                                        checked={isChecked}
+                                                        onCheckedChange={() => {
+                                                            let updatedTypes;
+                                                            if (isChecked) {
+                                                                if (allowedTypes.length === 1) return;
+                                                                updatedTypes = allowedTypes.filter(t => t !== typeItem.key);
+                                                            } else {
+                                                                updatedTypes = [...allowedTypes, typeItem.key];
+                                                            }
+                                                            updatePackageField("allowedQuestionTypes", updatedTypes.join(","));
+                                                        }}
+                                                        id={`type-${typeItem.key}`}
+                                                    />
+                                                    <label htmlFor={`type-${typeItem.key}`} className="text-xs font-bold text-slate-700 cursor-pointer">
+                                                        {typeItem.label}
+                                                     </label>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <Switch 
-                                            checked={currentPackage.showResultQuestions} 
-                                            onCheckedChange={c => updatePackageField("showResultQuestions", c)} 
-                                            id="p-show-questions"
-                                        />
-                                        <label htmlFor="p-show-questions" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                                            إظهار تفاصيل الأسئلة المنجزة (الأسئلة الصحيحة والخاطئة مع الخيارات)
-                                        </label>
-                                    </div>
-                                    {currentPackage.showResultQuestions && (
-                                        <div className="flex items-center gap-3 pr-6 animate-in slide-in-from-top-2 duration-300">
-                                            <Switch 
-                                                checked={currentPackage.showResultCorrectAnswers} 
-                                                onCheckedChange={c => updatePackageField("showResultCorrectAnswers", c)} 
-                                                id="p-show-answers"
-                                            />
-                                            <label htmlFor="p-show-answers" className="text-xs font-semibold text-slate-500 cursor-pointer">
-                                                إظهار الإجابة النموذجية وتصحيح الخطأ (مكافحة الغش وسرقة الأسئلة)
-                                            </label>
+                                </div>
+                            </div>
+
+                            {/* Features Checklist */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-indigo-700 block border-r-2 border-indigo-500 pr-2">ميزات الحزمة المشمولة (Checklist Features)</h3>
+                                <div className="p-4 border border-slate-200 rounded-2xl space-y-6 max-h-[360px] overflow-y-auto bg-slate-50/30">
+                                    
+                                    {/* Current Features List */}
+                                    <div className="space-y-2.5">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="text-xs font-bold text-slate-700">الميزات المضافة حالياً للباقة ({Array.isArray(currentPackage.features) ? currentPackage.features.length : 0})</h4>
+                                            <Button
+                                                type="button"
+                                                onClick={addNewFeatureField}
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 text-[10px] rounded-lg border-indigo-200 text-indigo-700 hover:bg-indigo-50 gap-1"
+                                            >
+                                                <Plus className="h-3 w-3" /> إضافة ميزة يدوية
+                                            </Button>
                                         </div>
-                                    )}
+                                        {(!Array.isArray(currentPackage.features) || currentPackage.features.length === 0) ? (
+                                            <p className="text-[10px] text-slate-400 py-3 text-center bg-white border border-slate-100 rounded-xl border-dashed">
+                                                لا توجد ميزات مضافة لهذه الباقة حالياً. اختر من المقترحات أدناه أو أضف ميزة يدوياً.
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {(currentPackage.features as any[]).map((f: any, idx: number) => {
+                                                    const featText = typeof f === 'string' ? f : (f.text || "");
+                                                    const isIncluded = typeof f === 'string' ? true : (f.isIncluded !== false);
+                                                    return (
+                                                    <div key={idx} className="flex gap-2 items-center bg-white p-1.5 rounded-xl border border-slate-150 shadow-sm animate-in fade-in duration-200">
+                                                        <Switch
+                                                            checked={isIncluded}
+                                                            onCheckedChange={(c) => handleFeatureToggle(idx, c)}
+                                                            className={isIncluded ? "data-[state=checked]:bg-emerald-500" : "data-[state=unchecked]:bg-rose-500"}
+                                                        />
+                                                        <Input
+                                                            value={featText}
+                                                            onChange={e => handleFeatureTextChange(idx, e.target.value)}
+                                                            placeholder="اكتب الميزة هنا..."
+                                                            className="h-8 text-xs flex-1 rounded-lg border-slate-150 focus-visible:ring-indigo-500 font-medium"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            onClick={() => handleRemoveFeature(idx)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg shrink-0"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                )})}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Predefined Features Suggestions */}
+                                    <div className="space-y-3 pt-3 border-t border-slate-200/50">
+                                        <div className="space-y-0.5 text-right" dir="rtl">
+                                            <h4 className="text-[11px] font-black text-indigo-700">اقتراحات ميزات سريعة (اضغط للإضافة)</h4>
+                                            <p className="text-[9px] text-slate-400">انقر على الميزة لإضافتها مباشرة إلى قائمة الميزات أعلاه وتعديلها</p>
+                                        </div>
+
+                                        {/* Exams suggested features */}
+                                        <div className="space-y-1.5">
+                                            <span className="text-[10px] font-black text-slate-400 block text-right">اختبارات المحاكاة والاستعداد:</span>
+                                            <div className="flex flex-wrap gap-1.5 justify-start" dir="rtl">
+                                                {EXAMS_ONLY_FEATURES.map(f => {
+                                                    const currentFeatures = Array.isArray(currentPackage.features) ? (currentPackage.features as any[]).map(x => typeof x === 'string' ? x : x.text) : [];
+                                                    const alreadyAdded = currentFeatures.includes(f);
+                                                    return (
+                                                        <button
+                                                            key={f}
+                                                            type="button"
+                                                            onClick={() => handleAddSuggestedFeature(f)}
+                                                            disabled={alreadyAdded}
+                                                            className={cn(
+                                                                "px-2 py-1 rounded-lg border text-[9px] font-semibold text-right transition-all",
+                                                                alreadyAdded
+                                                                    ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed select-none"
+                                                                    : "bg-white border-slate-200 text-slate-655 hover:bg-indigo-50/30 hover:border-indigo-200 hover:text-indigo-950"
+                                                            )}
+                                                        >
+                                                            + {f}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Registration suggested features */}
+                                        {currentPackage.includesRegistration && (
+                                            <div className="space-y-1.5 pt-1.5 border-t border-slate-200/30">
+                                                <span className="text-[10px] font-black text-orange-600 block text-right">التسجيل الرسمي وحجز الموعد:</span>
+                                                <div className="flex flex-wrap gap-1.5 justify-start" dir="rtl">
+                                                    {REGISTRATION_FEATURES.map(f => {
+                                                        const currentFeatures = Array.isArray(currentPackage.features) ? (currentPackage.features as any[]).map(x => typeof x === 'string' ? x : x.text) : [];
+                                                        const alreadyAdded = currentFeatures.includes(f);
+                                                        return (
+                                                            <button
+                                                                key={f}
+                                                                type="button"
+                                                                onClick={() => handleAddSuggestedFeature(f)}
+                                                                disabled={alreadyAdded}
+                                                                className={cn(
+                                                                    "px-2 py-1 rounded-lg border text-[9px] font-semibold text-right transition-all",
+                                                                    alreadyAdded
+                                                                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed select-none"
+                                                                        : "bg-white border-slate-200 text-slate-655 hover:bg-orange-50/20 hover:border-orange-200 hover:text-orange-950"
+                                                                )}
+                                                            >
+                                                                + {f}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Transport suggested features */}
+                                        {currentPackage.includesTransport && (
+                                            <div className="space-y-1.5 pt-1.5 border-t border-slate-200/30">
+                                                <span className="text-[10px] font-black text-purple-600 block text-right">النقل والمواصلات VIP:</span>
+                                                <div className="flex flex-wrap gap-1.5 justify-start" dir="rtl">
+                                                    {TRANSPORT_B2B_FEATURES.map(f => {
+                                                        const currentFeatures = Array.isArray(currentPackage.features) ? (currentPackage.features as any[]).map(x => typeof x === 'string' ? x : x.text) : [];
+                                                        const alreadyAdded = currentFeatures.includes(f);
+                                                        return (
+                                                            <button
+                                                                key={f}
+                                                                type="button"
+                                                                onClick={() => handleAddSuggestedFeature(f)}
+                                                                disabled={alreadyAdded}
+                                                                className={cn(
+                                                                    "px-2 py-1 rounded-lg border text-[9px] font-semibold text-right transition-all",
+                                                                    alreadyAdded
+                                                                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed select-none"
+                                                                        : "bg-white border-slate-200 text-slate-655 hover:bg-purple-50/20 hover:border-purple-200 hover:text-purple-950"
+                                                                )}
+                                                            >
+                                                                + {f}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                 </div>
                             </div>
 
@@ -708,31 +895,74 @@ export function MockExamPackages() {
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t border-slate-200/80">
-                                    <div className="flex items-center gap-2">
-                                        <Switch 
-                                            checked={currentPackage.isFeatured} 
-                                            onCheckedChange={c => updatePackageField("isFeatured", c)} 
-                                            id="p-feat"
-                                        />
-                                        <label htmlFor="p-feat" className="text-xs font-black text-amber-600 cursor-pointer">
-                                            إدراج شارة مميزة (Featured Package)
-                                        </label>
+                                    {/* Optional promotional original price (strike-through) */}
+                                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200/60 text-right" dir="rtl">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-500 block">السعر الأصلي قبل الخصم (للتسويق - ريال يمني - اختياري)</label>
+                                            <div className="relative">
+                                                <Input 
+                                                    type="number" 
+                                                    placeholder="اتركه فارغاً لعدم إظهار خصم"
+                                                    className="rounded-lg border-slate-200 h-8 font-bold bg-white pl-10 text-xs" 
+                                                    value={currentPackage.actualCost || ""} 
+                                                    onChange={e => updatePackageField("actualCost", e.target.value ? Number(e.target.value) : 0)} 
+                                                />
+                                                <span className="absolute left-2 top-1.5 text-[10px] font-bold text-slate-400">ر.ي</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs font-bold text-slate-600">ترتيب العرض:</label>
-                                        <Input 
-                                            type="number" 
-                                            className="w-16 h-8 rounded-lg font-bold text-center" 
-                                            value={currentPackage.sortOrder} 
-                                            onChange={e => updatePackageField("sortOrder", Number(e.target.value))} 
-                                        />
+
+                                    <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t border-slate-200/80">
+                                        <div className="flex items-center gap-2">
+                                            <Switch 
+                                                checked={currentPackage.isFeatured} 
+                                                onCheckedChange={c => updatePackageField("isFeatured", c)} 
+                                                id="p-feat"
+                                            />
+                                            <label htmlFor="p-feat" className="text-xs font-black text-amber-600 cursor-pointer">
+                                                إدراج شارة مميزة وتلوين كرت الباقة
+                                            </label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-bold text-slate-600">ترتيب العرض:</label>
+                                            <Input 
+                                                type="number" 
+                                                className="w-16 h-8 rounded-lg font-bold text-center" 
+                                                value={currentPackage.sortOrder} 
+                                                onChange={e => updatePackageField("sortOrder", Number(e.target.value))} 
+                                            />
+                                        </div>
                                     </div>
+
+                                    {/* Dynamic Branding Colors & Badge Text (Visible ONLY if isFeatured is true) */}
+                                    {currentPackage.isFeatured && (
+                                        <div className="grid grid-cols-2 gap-4 p-3 bg-amber-50/20 border border-amber-100 rounded-xl mt-3 animate-in slide-in-from-top-2 duration-300 text-right" dir="rtl">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-600 block">ثيم تلوين كرت الباقة *</label>
+                                                <select 
+                                                    className="flex h-8 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none" 
+                                                    value={currentPackage.color || '#16539a'} 
+                                                    onChange={e => updatePackageField("color", e.target.value)}
+                                                >
+                                                    <option value="#16539a">🔵 أزرق الهوية البصرية الرسمية (Accreditation Blue)</option>
+                                                    <option value="#5c9e45">🟢 أخضر الهوية البصرية الرسمية (Accreditation Green)</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-600 block">نص الشارة المميزة *</label>
+                                                <Input 
+                                                    placeholder="مثال: الأكثر مبيعاً" 
+                                                    value={currentPackage.badge} 
+                                                    onChange={e => updatePackageField("badge", e.target.value)} 
+                                                    className="rounded-lg border-slate-200 h-8 text-xs font-bold bg-white"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-
-                        </div>
-                    )}
+                        )}
                     <DialogFooter className="border-t border-slate-100 pt-3 gap-2">
                         <Button 
                             variant="outline" 
@@ -745,6 +975,233 @@ export function MockExamPackages() {
                             onClick={handleSavePackage} 
                             disabled={isSaving}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm"
+                        >
+                            {isSaving ? "جاري الحفظ..." : "حفظ الباقة والمزامنة"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Free Package Form Dialog */}
+            <Dialog open={isFreePackageModalOpen} onOpenChange={setIsFreePackageModalOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-6 text-right" dir="rtl">
+                    <DialogHeader className="border-b border-slate-100 pb-3">
+                        <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <span className="p-1 bg-emerald-50 text-emerald-600 rounded">
+                                <Gift className="h-5 w-5" />
+                            </span>
+                            {currentPackage?.id ? 'تعديل باقة الاختبارات المجانية' : 'إنشاء باقة اختبارات مجانية جديدة'}
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-500 text-xs">
+                            تخصيص الخصائص الأساسية للباقة المجانية والتحكم المتقدم بكل محاولة اختبار
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {currentPackage && (
+                        <div className="space-y-6 py-4">
+                            
+                            {/* Basic Info Row */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-emerald-700 block border-r-2 border-emerald-500 pr-2">البيانات التعريفية الأساسية</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-600">اسم الباقة (بالعربية)</label>
+                                        <Input 
+                                            value={currentPackage.name} 
+                                            onChange={e => updatePackageField("name", e.target.value)} 
+                                            className="rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
+                                            placeholder="مثال: باقة التجربة المجانية"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-600">اسم الباقة (بالإنجليزية)</label>
+                                        <Input 
+                                            value={currentPackage.nameEn || ""} 
+                                            onChange={e => updatePackageField("nameEn", e.target.value)} 
+                                            dir="ltr" 
+                                            className="rounded-xl border-slate-200 text-left focus:border-emerald-500 focus:ring-emerald-500"
+                                            placeholder="e.g. Free Trial Package"
+                                        />
+                                    </div>
+                                    <div className="col-span-2 space-y-1">
+                                        <label className="text-xs font-bold text-slate-600">وصف وشرح الحزمة الترويجي</label>
+                                        <Input 
+                                            value={currentPackage.description || ""} 
+                                            onChange={e => updatePackageField("description", e.target.value)} 
+                                            className="rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
+                                            placeholder="توضيح موجز يظهر للمتقدم مثل: تمنحك إمكانية تجربة نمط الاختبارات مجاناً"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Attempts & Validity */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-emerald-700 block border-r-2 border-emerald-500 pr-2">رصيد الاختبارات والصلاحية</h3>
+                                <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50/35">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-600">عدد المحاولات المجانية</label>
+                                            <Input 
+                                                type="number" 
+                                                min="1"
+                                                value={currentPackage.examCredits} 
+                                                onChange={e => updatePackageField("examCredits", Math.max(1, Number(e.target.value)))} 
+                                                className="rounded-xl border-slate-200 font-bold focus:border-emerald-500 focus:ring-emerald-500"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-600">صلاحية الباقة (بالأيام)</label>
+                                            <Input 
+                                                type="number" 
+                                                placeholder="اتركه فارغاً لصلاحية أبدية" 
+                                                value={currentPackage.validityDays || ''} 
+                                                onChange={e => updatePackageField("validityDays", e.target.value ? Number(e.target.value) : null)} 
+                                                className="rounded-xl border-slate-200 font-semibold focus:border-emerald-500 focus:ring-emerald-500"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Advanced per-attempt configuration */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-emerald-700 block border-r-2 border-emerald-500 pr-2">التحكم المتقدم بكل محاولة</h3>
+                                <div className="p-4 border border-slate-200 rounded-2xl bg-white space-y-4">
+                                    <p className="text-[10px] text-slate-500">
+                                        يمكنك تحديد الإعدادات المستقلة لكل محاولة اختبار بشكل منفصل (أنواع الأسئلة وصلاحيات عرض النتيجة).
+                                    </p>
+                                    <div className="overflow-x-auto rounded-xl border border-slate-150">
+                                        <Table className="w-full text-right text-xs">
+                                            <TableHeader className="bg-slate-50">
+                                                <TableRow>
+                                                    <TableHead className="font-bold text-slate-700 text-right w-[15%]">المحاولة</TableHead>
+                                                    <TableHead className="font-bold text-slate-700 text-right w-[45%]">أنواع الأسئلة المسموحة</TableHead>
+                                                    <TableHead className="font-bold text-slate-700 text-right w-[40%]">صلاحيات النتيجة</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody className="divide-y divide-slate-150">
+                                                {currentPackage.attemptsConfig?.map((item) => {
+                                                    const allowedTypes = (item.allowedQuestionTypes || "").split(",").map(t => t.trim()).filter(Boolean);
+                                                    return (
+                                                        <TableRow key={item.attempt} className="hover:bg-slate-50/50">
+                                                            <TableCell className="font-bold text-slate-800">
+                                                                المحاولة {item.attempt}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {[
+                                                                        { key: "MCQ", label: "MCQ" },
+                                                                        { key: "TRUE_FALSE", label: "صح/خطأ" },
+                                                                        { key: "FILL_BLANK", label: "فراغات" },
+                                                                        { key: "IMAGE", label: "صور" }
+                                                                    ].map(qType => {
+                                                                        const isChecked = allowedTypes.includes(qType.key);
+                                                                        return (
+                                                                            <label key={qType.key} className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isChecked}
+                                                                                    onChange={() => {
+                                                                                        let newTypes;
+                                                                                        if (isChecked) {
+                                                                                            if (allowedTypes.length === 1) return;
+                                                                                            newTypes = allowedTypes.filter(t => t !== qType.key);
+                                                                                        } else {
+                                                                                            newTypes = [...allowedTypes, qType.key];
+                                                                                        }
+                                                                                        updateAttemptConfig(item.attempt, "allowedQuestionTypes", newTypes.join(","));
+                                                                                    }}
+                                                                                    className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                                                                                />
+                                                                                <span className="text-[10px] text-slate-700 font-semibold">{qType.label}</span>
+                                                                            </label>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Switch
+                                                                            checked={item.showResultScore}
+                                                                            onCheckedChange={val => updateAttemptConfig(item.attempt, "showResultScore", val)}
+                                                                            className="scale-75 origin-right"
+                                                                        />
+                                                                        <span className="text-[10px] text-slate-600 font-medium">عرض النسبة</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Switch
+                                                                            checked={item.showResultQuestions}
+                                                                            onCheckedChange={val => updateAttemptConfig(item.attempt, "showResultQuestions", val)}
+                                                                            className="scale-75 origin-right"
+                                                                        />
+                                                                        <span className="text-[10px] text-slate-600 font-medium">عرض تفاصيل الأسئلة</span>
+                                                                    </div>
+                                                                    {item.showResultQuestions && (
+                                                                        <div className="flex items-center gap-2 pr-4">
+                                                                            <Switch
+                                                                                checked={item.showResultCorrectAnswers}
+                                                                                onCheckedChange={val => updateAttemptConfig(item.attempt, "showResultCorrectAnswers", val)}
+                                                                                className="scale-75 origin-right"
+                                                                            />
+                                                                            <span className="text-[10px] text-slate-500 font-medium">عرض الإجابة الصحيحة</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Extra Settings */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-emerald-700 block border-r-2 border-emerald-500 pr-2">خيارات إضافية</h3>
+                                <div className="p-4 border border-slate-200 rounded-2xl space-y-3">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <Switch 
+                                                checked={currentPackage.isActive} 
+                                                onCheckedChange={c => updatePackageField("isActive", c)} 
+                                                id="free-active"
+                                            />
+                                            <label htmlFor="free-active" className="text-xs font-black text-slate-700 cursor-pointer">
+                                                تفعيل الباقة فورياً للطلاب
+                                            </label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-bold text-slate-600">ترتيب العرض:</label>
+                                            <Input 
+                                                type="number" 
+                                                className="w-16 h-8 rounded-lg font-bold text-center focus:border-emerald-500 focus:ring-emerald-500" 
+                                                value={currentPackage.sortOrder} 
+                                                onChange={e => updatePackageField("sortOrder", Number(e.target.value))} 
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    )}
+
+                    <DialogFooter className="border-t border-slate-100 pt-3 gap-2">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setIsFreePackageModalOpen(false)}
+                            className="rounded-xl border-slate-200 text-slate-500 hover:bg-slate-50"
+                        >
+                            إلغاء
+                        </Button>
+                        <Button 
+                            onClick={handleSavePackage} 
+                            disabled={isSaving}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm shadow-emerald-100"
                         >
                             {isSaving ? "جاري الحفظ..." : "حفظ الباقة والمزامنة"}
                         </Button>

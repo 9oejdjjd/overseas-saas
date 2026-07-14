@@ -152,19 +152,86 @@ export async function POST(request: Request) {
                         where: { name: applicantData.profession, isActive: true }
                     });
                     if (profession) {
+                        // Find active purchase to link and check credits
+                        const phone = applicantData.phone;
+                        const phoneWithoutPlus = phone.replace(/^\+/, "");
+                        const uniquePhones = [phone, phoneWithoutPlus, phone.startsWith('+') ? phone.slice(1) : `+${phone}`];
+
+                        let activePurchase = await prisma.mockExamPurchase.findFirst({
+                            where: {
+                                OR: [
+                                    ...(applicantId ? [{ applicantId: applicantId }] : []),
+                                    { phone: { in: uniquePhones } }
+                                ],
+                                status: { in: ["ACTIVE", "PAID"] },
+                            },
+                            orderBy: { createdAt: "desc" }
+                        });
+
+                        if (activePurchase) {
+                            if (activePurchase.totalCredits !== -1 && activePurchase.usedCredits >= activePurchase.totalCredits) {
+                                activePurchase = null;
+                            }
+                            if (activePurchase?.expiresAt && activePurchase.expiresAt < new Date()) {
+                                activePurchase = null;
+                            }
+                        }
+
+                        // Auto-assign free package if none active and trigger is exam link
+                        if (!activePurchase && trigger === "ON_MOCK_EXAM_LINK") {
+                            const freePackage = await prisma.mockExamPackage.findFirst({
+                                where: { isFree: true, isActive: true },
+                                orderBy: { sortOrder: "asc" }
+                            });
+
+                            if (freePackage) {
+                                activePurchase = await prisma.mockExamPurchase.create({
+                                    data: {
+                                        phone: phone,
+                                        buyerName: applicantData.fullName,
+                                        applicantId: applicantId || null,
+                                        packageId: freePackage.id,
+                                        totalCredits: freePackage.examCredits,
+                                        amount: 0,
+                                        isPaid: true,
+                                        status: "ACTIVE",
+                                        activatedAt: new Date(),
+                                        expiresAt: freePackage.validityDays ? new Date(Date.now() + freePackage.validityDays * 24 * 60 * 60 * 1000) : null
+                                    }
+                                });
+                            }
+                        }
+
+                        if (!activePurchase && trigger === "ON_MOCK_EXAM_LINK") {
+                            return NextResponse.json({ error: "لا يوجد باقة نشطة أو رصيد كافٍ لإجراء الاختبار" }, { status: 400 });
+                        }
+
+                        // Deduct a credit now
+                        if (activePurchase && activePurchase.totalCredits !== -1) {
+                            await prisma.mockExamPurchase.update({
+                                where: { id: activePurchase.id },
+                                data: { usedCredits: { increment: 1 } }
+                            });
+                        }
+
                         const sessionData: any = {
                             type: applicantId ? "PRIVATE" : "PUBLIC",
                             status: "NEW",
                             professionId: profession.id,
                             passingScore: profession.passingScore,
+                            attemptNumber: activePurchase ? (activePurchase.usedCredits + 1) : 1
                         };
                         
                         if (applicantId) {
                             sessionData.applicantId = applicantId;
-                        } else if (mockPurchase) {
-                            sessionData.purchaseId = mockPurchase.id;
-                            sessionData.visitorPhone = mockPurchase.phone;
-                            sessionData.visitorName = mockPurchase.buyerName;
+                        }
+                        if (activePurchase) {
+                            sessionData.purchaseId = activePurchase.id;
+                            sessionData.visitorPhone = activePurchase.phone;
+                            sessionData.visitorName = activePurchase.buyerName;
+                        } else {
+                            sessionData.visitorPhone = applicantData.phone;
+                            sessionData.visitorName = applicantData.fullName;
                         }
 
                         activeSession = await prisma.examSession.create({

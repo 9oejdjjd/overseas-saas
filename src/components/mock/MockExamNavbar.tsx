@@ -22,41 +22,26 @@ export function MockExamNavbar({
         setScrolled(latest > 30);
     });
 
-    // In exam mode (hideBackUrl + leftElement), always use solid bg for readability
-    const isExamMode = hideBackUrl && leftElement;
-
     return (
         <motion.header 
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.5, type: "spring" }}
-            className={`sticky top-0 z-50 w-full transition-all duration-500 ${
-                isExamMode
-                    ? 'bg-white shadow-sm border-b border-slate-100'
-                    : scrolled 
-                        ? 'bg-white/90 backdrop-blur-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border-b border-white/50' 
-                        : 'bg-white/10 backdrop-blur-md border-b border-white/10'
-            }`}
+            className="sticky top-0 z-50 w-full transition-all duration-500 bg-white/95 backdrop-blur-xl shadow-[0_2px_15px_rgba(15,23,42,0.03)] border-b border-slate-200/60"
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-            <div className="w-full px-3 md:px-10 h-[60px] md:h-[72px] flex items-center justify-between">
+            <div className="w-full px-4 md:px-10 h-[64px] md:h-[72px] flex items-center justify-between">
                 {/* Left Side: Back button or leftElement (e.g. Timer) */}
                 <div className="flex items-center">
                     {!hideBackUrl ? (
                         <button 
                             onClick={() => router.push("/")} 
-                            className={`flex items-center gap-1.5 md:gap-2 transition-colors group ${
-                                scrolled ? 'text-slate-500 hover:text-[#16539a]' : 'text-white/70 hover:text-white'
-                            }`}
+                            className="flex items-center gap-2.5 transition-colors group text-slate-600 hover:text-[#16539a]"
                         >
-                            <div className={`w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center transition-colors ${
-                                scrolled 
-                                    ? 'bg-slate-50 border border-slate-100 group-hover:bg-blue-50 group-hover:border-blue-100' 
-                                    : 'bg-white/10 border border-white/20 group-hover:bg-white/20'
-                            }`}>
+                            <div className="w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center transition-colors bg-slate-50 border border-slate-200/80 group-hover:bg-blue-50 group-hover:border-blue-100 text-slate-500 group-hover:text-brand-blue shadow-sm">
                                 <ArrowRight size={16} className="md:w-[18px] md:h-[18px] transform group-hover:translate-x-0.5 transition-transform" />
                             </div>
-                            <span className={`font-bold text-xs md:text-sm hidden sm:block ${scrolled ? '' : 'text-white/80'}`}>العودة</span>
+                            <span className="font-bold text-xs md:text-sm hidden sm:block">العودة للرئيسية</span>
                         </button>
                     ) : (
                         leftElement || <div></div>
@@ -68,9 +53,9 @@ export function MockExamNavbar({
                     <img 
                         src="/logo1.png" 
                         alt="بوابة الاعتماد المهني" 
-                        className="h-10 md:h-12 w-auto object-contain"
+                        className="h-9 md:h-11 w-auto object-contain brightness-100"
                         width="180"
-                        height="48"
+                        height="44"
                         onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -81,7 +66,7 @@ export function MockExamNavbar({
                         <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-[#16539a] to-[#5c9e45] flex items-center justify-center text-white shadow-md">
                             <Award size={18} />
                         </div>
-                        <span className={`font-bold text-sm md:text-base hidden sm:block ${isExamMode ? 'text-slate-800' : scrolled ? 'text-slate-800' : 'text-white'}`}>بوابة الاعتماد المهني</span>
+                        <span className="font-bold text-sm md:text-base hidden sm:block text-slate-800">بوابة الاعتماد المهني</span>
                     </div>
                 </div>
 
@@ -90,7 +75,7 @@ export function MockExamNavbar({
                     {hideBackUrl && leftElement ? (
                         <div></div> 
                     ) : (
-                        <h1 className={`font-bold text-xs md:text-sm hidden lg:block truncate max-w-[200px] ${isExamMode ? 'text-slate-500' : scrolled ? 'text-slate-500' : 'text-white/60'}`}>{title}</h1>
+                        <h1 className="font-bold text-xs md:text-sm text-slate-500 hidden lg:block truncate max-w-[200px]">{title}</h1>
                     )}
                 </div>
             </div>

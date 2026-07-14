@@ -100,8 +100,8 @@ export function ApplicantsTableToolbar<TData>({
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="ALL">الكل</SelectItem>
-                        <SelectItem value="APPLICANTS">متقدمين</SelectItem>
-                        <SelectItem value="VISITORS">زوار</SelectItem>
+                        <SelectItem value="APPLICANTS">مسجلي النظام</SelectItem>
+                        <SelectItem value="VISITORS">الزوار</SelectItem>
                     </SelectContent>
                 </Select>
 

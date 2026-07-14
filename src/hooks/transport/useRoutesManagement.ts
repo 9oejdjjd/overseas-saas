@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useToast } from "@/components/ui/simple-toast";
 
-export type Destination = { id: string; name: string };
+export type Destination = { id: string; name: string; nameEn?: string | null; nameAr?: string | null };
 export type RouteStop = {
     destinationId: string;
     minutesFromStart: number;

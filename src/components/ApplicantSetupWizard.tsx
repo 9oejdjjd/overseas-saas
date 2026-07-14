@@ -77,6 +77,7 @@ export function ApplicantSetupWizard({
             // Or maybe just let it be accessible after Exam if ticket skipped?
             return !hasExam;
         }
+        if (step === 5) return false; // Mock exams are always unlocked
         return true;
     };
 
@@ -210,6 +211,7 @@ export function ApplicantSetupWizard({
                         </div>
                         <MockExamRenewalCard
                             phone={applicant.phone}
+                            buyerName={applicant.fullName}
                             applicantId={applicant.id}
                             currentPurchase={mockPurchase}
                             onUpdate={() => {

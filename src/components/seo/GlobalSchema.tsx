@@ -1,4 +1,5 @@
 import { SchemaMarkup } from "./SchemaMarkup";
+import { SITE_CONFIG } from "@/config/site";
 
 export function GlobalSchema() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://local-pacc.sa"; // Fallback URL
@@ -13,7 +14,7 @@ export function GlobalSchema() {
     "description": "منصة متخصصة تقدم اختبارات تجريبية للعمالة لتجهيزهم لاختبار الاعتماد المهني السعودي.",
     "contactPoint": {
       "@type": "ContactPoint",
-      "telephone": "+967777263111",
+      "telephone": `+${SITE_CONFIG.supportWhatsapp}`,
       "contactType": "customer service",
       "areaServed": "YE",
       "availableLanguage": ["Arabic"]
@@ -85,7 +86,7 @@ export function GlobalSchema() {
         "name": "كيف يمكنني بدء إجراءات التسجيل في الاعتماد المهني؟",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "يمكنك البدء فوراً من خلال خطوتين بسيطتين: أولاً، ابحث عن مهنتك في الموقع وجرب الاختبار التجريبي المجاني لتقييم مستواك. ثانياً، تواصل معنا عبر الواتساب على الرقم +967777263111 وسيقوم فريقنا المتخصص بمتابعة كافة إجراءات التسجيل في المنصة الرسمية نيابةً عنك، بما في ذلك إنشاء الحساب، إدخال البيانات بدقة، وحجز موعد الاختبار في المكان والزمان الأنسب."
+          "text": `يمكنك البدء فوراً من خلال خطوتين بسيطتين: أولاً، ابحث عن مهنتك في الموقع وجرب الاختبار التجريبي المجاني لتقييم مستواك. ثانياً، تواصل معنا عبر الواتساب على الرقم +${SITE_CONFIG.supportWhatsapp} وسيقوم فريقنا المتخصص بمتابعة كافة إجراءات التسجيل في المنصة الرسمية نيابةً عنك، بما في ذلك إنشاء الحساب، إدخال البيانات بدقة، وحجز موعد الاختبار في المكان والزمان الأنسب.`
         }
       },
       {

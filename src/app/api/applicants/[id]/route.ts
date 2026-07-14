@@ -90,6 +90,44 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Check if it's an Applicant first
+    const existingApplicant = await prisma.applicant.findUnique({
+      where: { id },
+      select: { id: true }
+    });
+
+    if (!existingApplicant) {
+      // Check if it's a Visitor Purchase
+      const purchase = await prisma.mockExamPurchase.findUnique({
+        where: { id }
+      });
+
+      if (purchase) {
+        // Update Visitor Purchase
+        const allowedVisitorFields = ['email', 'buyerName', 'phone', 'profession'];
+        let visitorDataToUpdate: any = {};
+        allowedVisitorFields.forEach(field => {
+          if (body[field] !== undefined) visitorDataToUpdate[field] = body[field];
+        });
+
+        const updatedPurchase = await prisma.mockExamPurchase.update({
+          where: { id },
+          data: visitorDataToUpdate
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: "تم تحديث بيانات الزائر بنجاح",
+          visitor: updatedPurchase
+        });
+      }
+
+      return NextResponse.json(
+        { error: "الملف أو المعاملة غير موجودة" },
+        { status: 404 }
+      );
+    }
+
     let dataToUpdate: any = {};
     let newStatus = body.status;
 
@@ -245,14 +283,15 @@ export async function PATCH(
       body.notes !== undefined || body.travelDate !== undefined || body.totalAmount !== undefined ||
       body.remainingBalance !== undefined || body.discount !== undefined || body.amountPaid !== undefined ||
       body.examLocation !== undefined || body.hasTransportation !== undefined || body.transportType !== undefined ||
-      body.passportExpiry !== undefined || body.dob !== undefined || body.nationalId !== undefined
+      body.passportExpiry !== undefined || body.dob !== undefined || body.nationalId !== undefined ||
+      body.notificationEmail !== undefined
     ) {
       // Whitelist fields to update
       const allowedFields = [
         'fullName', 'firstName', 'lastName', 'passportNumber', 'nationalId', 'profession', 'notes',
         'locationId', 'transportFromId', 'transportType', 'hasTransportation',
         'totalAmount', 'discount', 'amountPaid', 'remainingBalance',
-        'examLocation', 'examCenterId', 'phone', 'whatsappNumber' // Note: examDate/Time handled above
+        'examLocation', 'examCenterId', 'phone', 'whatsappNumber', 'platformEmail', 'notificationEmail' // Note: examDate/Time handled above
       ];
 
       allowedFields.forEach(field => {
@@ -360,6 +399,210 @@ export async function PATCH(
     console.error("Update Error:", error);
     return NextResponse.json(
       { error: "Failed to update applicant" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Check if it's an Applicant first
+    const applicant = await prisma.applicant.findUnique({
+      where: { id },
+      include: {
+        ticket: true,
+        transactions: true,
+      }
+    });
+
+    if (applicant) {
+      // ── Applicant Soft Delete (Archive) ──
+      
+      // Fetch associated mock packages
+      const mockPurchases = await prisma.mockExamPurchase.findMany({
+        where: { applicantId: id },
+        include: { package: true }
+      });
+
+      // Calculate consumed costs
+      // 1. Registration Fee (if confirmed/scheduled)
+      let consumedReg = 0;
+      const isExamConfirmed = applicant.examDate !== null || 
+        ["EXAM_SCHEDULED", "AWAITING_EXAM", "ATTENDED_EXAM", "PASSED", "FAILED"].includes(applicant.status);
+      
+      if (isExamConfirmed) {
+        const regTx = applicant.transactions.find(t => t.type === "CHARGE" && t.category === "REGISTRATION_FEE");
+        if (regTx) {
+          consumedReg = Number(regTx.amount);
+        }
+      }
+
+      // 2. Transport Fee (if ticket issued)
+      let consumedTrans = 0;
+      const isTransportConfirmed = applicant.ticket !== null;
+      if (isTransportConfirmed) {
+        const transTx = applicant.transactions.find(t => t.type === "CHARGE" && t.category === "TRANSPORT_FEE");
+        if (transTx) {
+          consumedTrans = Number(transTx.amount);
+        }
+      }
+
+      // 3. Mock Exams (used attempts prorated)
+      let consumedMock = 0;
+      for (const purchase of mockPurchases) {
+        if (purchase.status === "ACTIVE" || purchase.status === "PAID") {
+          const totalCredits = purchase.totalCredits;
+          const usedCredits = purchase.usedCredits;
+          const mockCost = Number(purchase.amount);
+          if (totalCredits > 0) {
+            consumedMock += mockCost * (usedCredits / totalCredits);
+          }
+        }
+      }
+
+      const totalConsumed = consumedReg + consumedTrans + consumedMock;
+      const amountPaid = Number(applicant.amountPaid);
+      const totalAmount = Number(applicant.totalAmount);
+
+      let cashRefund = 0;
+      let newTotalAmount = totalAmount;
+      let newAmountPaid = amountPaid;
+
+      if (amountPaid > totalConsumed) {
+        cashRefund = amountPaid - totalConsumed;
+        newTotalAmount = totalConsumed;
+        newAmountPaid = totalConsumed;
+      } else {
+        // Waive unpaid balance, no cash refund
+        cashRefund = 0;
+        newTotalAmount = amountPaid;
+        newAmountPaid = amountPaid;
+      }
+
+      const totalRefund = Math.max(0, totalAmount - newTotalAmount);
+      const debtWaiver = Math.max(0, totalRefund - cashRefund);
+
+      // Perform updates inside transaction
+      await prisma.$transaction(async (tx) => {
+        // Soft delete applicant
+        await tx.applicant.update({
+          where: { id },
+          data: {
+            isArchived: true,
+            status: "CANCELLED",
+            totalAmount: newTotalAmount,
+            amountPaid: newAmountPaid,
+            remainingBalance: 0
+          }
+        });
+
+        // Cancel associated mock purchases
+        await tx.mockExamPurchase.updateMany({
+          where: { applicantId: id, status: { in: ["ACTIVE", "PAID", "PENDING"] } },
+          data: { status: "CANCELLED" }
+        });
+
+        // Create withdrawal transaction if cash refund exists
+        if (cashRefund > 0) {
+          await tx.transaction.create({
+            data: {
+              applicantId: id,
+              amount: cashRefund,
+              type: "WITHDRAWAL",
+              notes: `تسوية حساب وأرشفة ملف المتقدم | مسترجع نقدي: ${cashRefund.toLocaleString()} ر.ي | إعفاء مستحقات: ${debtWaiver.toLocaleString()} ر.ي`,
+              category: "CLIENT_REFUND",
+              locationId: applicant.locationId
+            }
+          });
+        }
+
+        // Log Activity
+        await tx.activityLog.create({
+          data: {
+            action: "APPLICANT_ARCHIVED",
+            details: `أرشفة ملف المتقدم ${applicant.fullName} | القيمة المستهلكة: ${totalConsumed.toLocaleString()} ر.ي | مسترجع نقدي: ${cashRefund.toLocaleString()} ر.ي | إعفاء مستحقات: ${debtWaiver.toLocaleString()} ر.ي`,
+            applicantId: id
+          }
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "تم أرشفة ملف المتقدم بنجاح وتسوية الحساب",
+        cashRefund,
+        debtWaiver
+      });
+    }
+
+    // If not Applicant, check if it's a Visitor Purchase
+    const purchase = await prisma.mockExamPurchase.findUnique({
+      where: { id },
+      include: { package: true }
+    });
+
+    if (purchase) {
+      // ── Visitor Hard Delete ──
+      const refundAmount = Number(purchase.amount);
+
+      await prisma.$transaction(async (tx) => {
+        // Unlink matched sms transactions
+        await tx.smsTransaction.updateMany({
+          where: { matchedPurchaseId: id },
+          data: { matchedPurchaseId: null, isMatched: false }
+        });
+
+        // Delete associated sessions
+        await tx.examSession.deleteMany({
+          where: { purchaseId: id }
+        });
+
+        // Delete the purchase record itself
+        await tx.mockExamPurchase.delete({
+          where: { id }
+        });
+
+        // Create transaction entry for refund if paid
+        if (purchase.isPaid && refundAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              amount: refundAmount,
+              type: "WITHDRAWAL",
+              notes: `حذف باقة زائر (${purchase.phone}) واسترجاع كامل القيمة: ${refundAmount.toLocaleString()} ر.ي`,
+              category: "CLIENT_REFUND"
+            }
+          });
+        }
+
+        // Create global activity log
+        await tx.activityLog.create({
+          data: {
+            action: "VISITOR_DELETED",
+            details: `حذف باقة زائر (${purchase.phone}) واسترجاع كامل القيمة: ${refundAmount.toLocaleString()} ر.ي`
+          }
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "تم حذف بيانات الزائر بالكامل واسترجاع الرصيد",
+        cashRefund: purchase.isPaid ? refundAmount : 0,
+        debtWaiver: 0
+      });
+    }
+
+    return NextResponse.json(
+      { error: "الملف أو المعاملة غير موجودة" },
+      { status: 404 }
+    );
+  } catch (error) {
+    console.error("Delete Error:", error);
+    return NextResponse.json(
+      { error: "فشل في حذف أو أرشفة الملف" },
       { status: 500 }
     );
   }

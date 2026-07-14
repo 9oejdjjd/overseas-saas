@@ -66,22 +66,25 @@ export function useApplicantTicket({ applicant, ticket, onUpdate }: UseApplicant
     // Auto-fill parameters from Applicant data
     useEffect(() => {
         if (!ticket && destinations.length > 0) {
-            const fromName = applicant.transportFrom?.name;
-            if (fromName) {
-                const match = destinations.find(d => d.name === fromName);
-                if (match) setFromId(match.id);
-            } else if (applicant.transportFromId) {
+            if (applicant.transportFromId) {
                 const match = destinations.find(d => d.id === applicant.transportFromId);
+                if (match) setFromId(match.id);
+            } else if (applicant.transportFrom?.name) {
+                const fromName = applicant.transportFrom.name;
+                const match = destinations.find(d => d.name === fromName || d.nameEn === fromName || d.nameAr === fromName);
                 if (match) setFromId(match.id);
             }
 
             const toName = applicant.location?.name;
+            const toNameEn = applicant.location?.nameEn;
+            const toNameAr = applicant.location?.nameAr;
+
             if (toName) {
-                const match = destinations.find(d => d.name === toName);
+                const match = destinations.find(d => d.name === toName || (toNameEn && d.nameEn === toNameEn) || (toNameAr && d.nameAr === toNameAr));
                 if (match) setToId(match.id);
             } else if (applicant.locationId) {
-                const match = destinations.find(d => d.id === applicant.locationId);
-                if (match) setToId(match.id);
+                // Notice: applicant.locationId is a Location ID, not a TransportDestination ID!
+                // We rely on the names matched above. If we reach here without a name match, it's a problem.
             }
 
             if (applicant.examDate) {

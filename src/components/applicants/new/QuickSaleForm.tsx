@@ -112,6 +112,16 @@ export function QuickSaleForm({ hook }: QuickSaleFormProps) {
                                 className="dir-ltr"
                             />
                         </div>
+                        <div className="space-y-2">
+                            <Label>البريد الإلكتروني (اختياري)</Label>
+                            <Input
+                                value={quickSale.email || ""}
+                                onChange={e => setQuickSale({ ...quickSale, email: e.target.value })}
+                                className="dir-ltr text-left"
+                                placeholder="example@email.com"
+                                type="email"
+                            />
+                        </div>
                     </div>
                 </CardContent>
             </Card>
@@ -154,23 +164,22 @@ export function QuickSaleForm({ hook }: QuickSaleFormProps) {
                                         <div
                                             key={pkg.id}
                                             onClick={() => setQuickSale({ ...quickSale, packageId: pkg.id })}
-                                            className={`relative cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${quickSale.packageId === pkg.id ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200'}`}
+                                            className={`relative cursor-pointer rounded-xl border p-4 transition-all hover:bg-gray-50/50 ${quickSale.packageId === pkg.id ? 'border-gray-900 bg-gray-50/80 shadow-sm' : 'border-gray-200 bg-white'}`}
                                         >
-                                            {pkg.isFeatured && <Badge className="absolute -top-2 right-3 bg-amber-500">مميزة</Badge>}
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div
-                                                    className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                                                    style={{ backgroundColor: pkg.color || '#3B82F6' }}
-                                                >
-                                                    <Icon className="h-4 w-4" />
-                                                </div>
-                                                <span className="font-bold">{pkg.name}</span>
+                                            {pkg.isFeatured && <Badge className="absolute -top-2 right-3 bg-gray-900 text-white border-0">مميزة</Badge>}
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-bold text-gray-900">{pkg.name}</span>
+                                                {quickSale.packageId === pkg.id ? (
+                                                    <span className="text-xs bg-gray-900 text-white px-2 py-0.5 rounded font-medium">✓ محدد</span>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 font-medium">تحديد</span>
+                                                )}
                                             </div>
-                                            <div className="text-sm text-gray-600 mb-2">
+                                            <div className="text-xs text-gray-500 mb-2">
                                                 {pkg.examCredits === -1 ? '∞ غير محدودة' : `${pkg.examCredits} اختبار`}
                                             </div>
-                                            {pkg.badge && <Badge variant="outline" className="mb-2">{pkg.badge}</Badge>}
-                                            <div className="text-xl font-black text-green-700">{Number(pkg.examPrice)} ر.ي</div>
+                                            {pkg.badge && <Badge variant="secondary" className="mb-2 text-[10px] bg-gray-100 text-gray-600 border-0">{pkg.badge}</Badge>}
+                                            <div className="text-lg font-black text-gray-900">{Number(pkg.examPrice).toLocaleString()} ر.ي</div>
                                         </div>
                                     );
                                 })}

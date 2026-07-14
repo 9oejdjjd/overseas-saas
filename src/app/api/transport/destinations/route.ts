@@ -22,10 +22,47 @@ export async function POST(request: Request) {
         if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
 
         const destination = await prisma.transportDestination.create({
-            data: { name, code }
+            data: { name, nameEn: body.nameEn, nameAr: body.nameAr, code }
         });
         return NextResponse.json(destination);
     } catch (error) {
         return NextResponse.json({ error: "Failed to create destination" }, { status: 500 });
     }
 }
+
+export async function PUT(request: Request) {
+    try {
+        const body = await request.json();
+        const { id, name, code } = body;
+
+        if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+        if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+
+        const destination = await prisma.transportDestination.update({
+            where: { id },
+            data: { name, nameEn: body.nameEn, nameAr: body.nameAr, code }
+        });
+        return NextResponse.json(destination);
+    } catch (error) {
+        return NextResponse.json({ error: "Failed to update destination" }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get("id");
+
+        if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+
+        // Soft delete the destination by setting isActive to false
+        const destination = await prisma.transportDestination.update({
+            where: { id },
+            data: { isActive: false }
+        });
+        return NextResponse.json(destination);
+    } catch (error) {
+        return NextResponse.json({ error: "Failed to delete destination" }, { status: 500 });
+    }
+}
+

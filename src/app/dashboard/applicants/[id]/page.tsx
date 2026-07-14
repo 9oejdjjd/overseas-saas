@@ -49,6 +49,38 @@ export default function ApplicantDetailPage() {
         refresh
     } = useApplicantData(params.id as string);
 
+    const handleDelete = async () => {
+        if (!applicant) return;
+        const msg = "هل أنت متأكد من أرشفة (حذف) ملف هذا المتقدم وتسوية حسابه المالي؟ سيتم إخفاء المتقدم من الجدول مع إمكانية استعراض بياناته لاحقاً.";
+        
+        if (!window.confirm(msg)) return;
+
+        try {
+            const res = await fetch(`/api/applicants/${applicant.id}`, {
+                method: "DELETE"
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || "حدث خطأ أثناء تنفيذ العملية");
+                return;
+            }
+            
+            let alertMsg = data.message;
+            if (data.cashRefund > 0) {
+                alertMsg += `\n\nالمبلغ المسترجع نقداً للعميل: ${data.cashRefund.toLocaleString()} ر.ي`;
+            }
+            if (data.debtWaiver > 0) {
+                alertMsg += `\nالمبلغ المخصوم من المستحقات (إعفاء دين): ${data.debtWaiver.toLocaleString()} ر.ي`;
+            }
+            alert(alertMsg);
+            
+            router.push("/dashboard/applicants");
+        } catch (err) {
+            console.error("Failed to delete/archive applicant:", err);
+            alert("حدث خطأ في الاتصال بالخادم");
+        }
+    };
+
     // NextAuth Session Check
     if (status === "loading") {
         return (
@@ -148,7 +180,10 @@ export default function ApplicantDetailPage() {
                                 {hasAccess(session?.user, "applicants.delete") && (
                                     <>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+                                        <DropdownMenuItem 
+                                            onClick={handleDelete}
+                                            className="cursor-pointer text-destructive focus:text-destructive"
+                                        >
                                             <Trash2 className="h-4 w-4 ml-2" />
                                             حذف الملف
                                         </DropdownMenuItem>

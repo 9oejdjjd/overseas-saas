@@ -24,13 +24,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: "monthly",
             priority: 0.6,
         },
+        {
+            url: `${baseUrl}/blog`,
+            lastModified: new Date(),
+            changeFrequency: "daily",
+            priority: 0.9,
+        },
     ];
 
-    // Dynamic profession pages
+    // Dynamic pages (Professions & Blog Articles)
     try {
         const professions = await prisma.profession.findMany({
             where: { isActive: true },
             select: { slug: true, updatedAt: true },
+        });
+
+        const articles = await prisma.article.findMany({
+            where: {
+                status: "PUBLISHED",
+                publishedAt: { lte: new Date() }
+            },
+            select: { slug: true, updatedAt: true }
         });
 
         const professionPages: MetadataRoute.Sitemap = professions.flatMap((prof) => [
@@ -50,9 +64,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             },
         ]);
 
-        return [...staticPages, ...professionPages];
+        const blogPages: MetadataRoute.Sitemap = articles.map((art) => ({
+            url: `${baseUrl}/blog/${art.slug}`,
+            lastModified: art.updatedAt,
+            changeFrequency: "weekly" as const,
+            priority: 0.8,
+        }));
+
+        return [...staticPages, ...professionPages, ...blogPages];
     } catch (error) {
-        console.warn("Failed to generate sitemap professions:", error);
+        console.warn("Failed to generate sitemap professions or articles:", error);
         return staticPages;
     }
 }

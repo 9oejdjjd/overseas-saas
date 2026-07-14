@@ -10,11 +10,13 @@ import { cn } from "@/lib/utils";
 export function ServicesList() {
     const {
         config,
+        currencies,
         loading,
         isEditing,
         setIsEditing,
         handleSaveConfig,
         updateConfig,
+        updateCurrency,
         fetchData
     } = useServicesList();
 
@@ -197,6 +199,87 @@ export function ServicesList() {
                             </div>
 
                         </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Currency Exchange Management Section */}
+            <Card className="border-slate-200/80 shadow-md bg-white/70 backdrop-blur-md overflow-hidden transition-all duration-300 hover:shadow-lg mt-6">
+                <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+                
+                <CardHeader className="pb-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+                                    <TrendingUp className="h-5 w-5" />
+                                </span>
+                                أسعار صرف العملات الأجنبية مقابل الريال اليمني
+                            </CardTitle>
+                            <CardDescription className="text-slate-500 text-sm">
+                                تحديد أسعار بيع وشراء العملات المعتمدة في النظام لتحويل وتحديث أسعار الباقات وخطوط النقل آلياً
+                            </CardDescription>
+                        </div>
+                    </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-6 pt-4">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {currencies.map((curr, idx) => (
+                            <div key={curr.id} className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl border border-slate-200/60 relative overflow-hidden group">
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl">{curr.code === "SAR" ? "🇸🇦" : "🌐"}</span>
+                                            <span className="font-extrabold text-slate-800">{curr.name} ({curr.code})</span>
+                                        </div>
+                                        <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">نشط</span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-bold text-slate-600">سعر الشراء (من العميل)</label>
+                                            <p className="text-[10px] text-slate-400 mt-0.5">لتحويل قيم اليمني إلى سعودي بالقسمة</p>
+                                            <div className="relative">
+                                                <Input
+                                                    type="number"
+                                                    value={curr.buyRate}
+                                                    onChange={e => updateCurrency(idx, "buyRate", Number(e.target.value))}
+                                                    disabled={!isEditing}
+                                                    className={cn(
+                                                        "pl-14 pr-4 py-5 font-black text-lg [direction:ltr] text-right rounded-xl shadow-inner",
+                                                        isEditing 
+                                                            ? "border-emerald-300 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 text-emerald-900 bg-white" 
+                                                            : "bg-slate-200/40 border-transparent text-slate-700 select-none"
+                                                    )}
+                                                />
+                                                <span className="absolute left-4 top-3 text-xs font-black text-slate-400">ر.ي</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-bold text-slate-600">سعر البيع (للعميل)</label>
+                                            <p className="text-[10px] text-slate-400 mt-0.5">لتحويل الفاتورة من سعودي لليمني بالضرب</p>
+                                            <div className="relative">
+                                                <Input
+                                                    type="number"
+                                                    value={curr.sellRate}
+                                                    onChange={e => updateCurrency(idx, "sellRate", Number(e.target.value))}
+                                                    disabled={!isEditing}
+                                                    className={cn(
+                                                        "pl-14 pr-4 py-5 font-black text-lg [direction:ltr] text-right rounded-xl shadow-inner",
+                                                        isEditing 
+                                                            ? "border-teal-300 focus-visible:ring-teal-500 focus-visible:border-teal-500 text-teal-900 bg-white" 
+                                                            : "bg-slate-200/40 border-transparent text-slate-700 select-none"
+                                                    )}
+                                                />
+                                                <span className="absolute left-4 top-3 text-xs font-black text-slate-400">ر.ي</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </CardContent>
             </Card>
