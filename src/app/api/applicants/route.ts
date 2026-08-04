@@ -200,7 +200,8 @@ export async function POST(request: NextRequest) {
                     profession: body.profession,
                     phone: body.phone,
                     whatsappNumber: body.whatsappNumber,
-                    platformEmail: body.platformEmail || null,
+                    notificationEmail: body.notificationEmail || null,
+                    platformEmail: null,
 
                     // Location linking
                     locationId: body.locationId,
@@ -223,12 +224,33 @@ export async function POST(request: NextRequest) {
                 },
             });
 
-            // 2.5 Link Visitor Conversion if applicable
+            // 2.5 Link Visitor Conversion if applicable or auto-link by phone
             if (body.visitorPurchaseId) {
                 await tx.mockExamPurchase.update({
                     where: { id: body.visitorPurchaseId },
                     data: { applicantId: applicant.id }
                 });
+            } else if (body.phone) {
+                // Auto-link any unlinked purchases matching the phone number
+                const cleanPhone = body.phone.replace(/\D/g, "");
+                const unlinked = await tx.mockExamPurchase.findMany({
+                    where: {
+                        applicantId: null,
+                        OR: [
+                            { phone: body.phone },
+                            { phone: `+${cleanPhone}` },
+                            { phone: cleanPhone },
+                            { phone: body.whatsappNumber || body.phone }
+                        ]
+                    },
+                    select: { id: true }
+                });
+                if (unlinked.length > 0) {
+                    await tx.mockExamPurchase.updateMany({
+                        where: { id: { in: unlinked.map((u: { id: string }) => u.id) } },
+                        data: { applicantId: applicant.id }
+                    });
+                }
             }
 
             // 2.6 Create Mock Exam Purchase if selected
@@ -473,32 +495,79 @@ export async function GET(request: NextRequest) {
             });
 
             // Attach mock purchase data to applicants
+            const appIds = apps.map((a: any) => a.id);
             const phones = apps.map((a: any) => a.phone).filter(Boolean);
             const phonesPlus = phones.map((p: string) => p.startsWith('+') ? p : `+${p}`);
             const allPhoneVariants = [...new Set([...phones, ...phonesPlus])];
 
-            const mockPurchases = allPhoneVariants.length > 0 ? await prisma.mockExamPurchase.findMany({
-                where: { phone: { in: allPhoneVariants } },
-                include: { package: { select: { name: true } } },
+            const mockPurchases = (allPhoneVariants.length > 0 || appIds.length > 0) ? await prisma.mockExamPurchase.findMany({
+                where: {
+                    OR: [
+                        { applicantId: { in: appIds } },
+                        { phone: { in: allPhoneVariants } }
+                    ]
+                },
+                include: { package: { select: { name: true, isFree: true } } },
                 orderBy: { createdAt: 'desc' }
             }) : [];
 
             applicantRows = apps.map((a: any) => {
-                const purchase = mockPurchases.find((p: any) =>
-                    p.phone === a.phone || p.phone === `+${a.phone}` || `+${p.phone}` === a.phone
+                const userPurchases = mockPurchases.filter((p: any) =>
+                    p.applicantId === a.id || p.phone === a.phone || p.phone === `+${a.phone}` || `+${p.phone}` === a.phone
                 );
+
+                if (userPurchases.length === 0) {
+                    return { ...a, isVisitor: false, mockPurchase: null };
+                }
+
+                // Sort: Direct applicantId match > Non-free > Paid > Recent
+                userPurchases.sort((x: any, y: any) => {
+                    const xAppMatch = x.applicantId === a.id ? 1 : 0;
+                    const yAppMatch = y.applicantId === a.id ? 1 : 0;
+                    if (xAppMatch !== yAppMatch) return yAppMatch - xAppMatch;
+
+                    const xFree = (x.package?.isFree || Number(x.amount || 0) === 0) ? 1 : 0;
+                    const yFree = (y.package?.isFree || Number(y.amount || 0) === 0) ? 1 : 0;
+                    if (xFree !== yFree) return xFree - yFree;
+
+                    const xPaid = x.isPaid ? 1 : 0;
+                    const yPaid = y.isPaid ? 1 : 0;
+                    if (xPaid !== yPaid) return yPaid - xPaid;
+
+                    return new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime();
+                });
+
+                const primaryPurchase = userPurchases[0];
+
+                let activeTotal = 0;
+                let activeUsed = 0;
+                let hasUnlimited = false;
+                let hasActivePurchases = false;
+
+                userPurchases.forEach((p: any) => {
+                    if (p.status === "ACTIVE" || p.status === "PAID") {
+                        hasActivePurchases = true;
+                        if (p.totalCredits === -1) hasUnlimited = true;
+                        else activeTotal += p.totalCredits;
+                        activeUsed += p.usedCredits;
+                    }
+                });
+
+                const finalTotalCredits = hasUnlimited ? -1 : (hasActivePurchases ? activeTotal : primaryPurchase.totalCredits);
+                const finalUsedCredits = hasActivePurchases ? activeUsed : primaryPurchase.usedCredits;
+
                 return {
                     ...a,
                     isVisitor: false,
-                    mockPurchase: purchase ? {
-                        id: purchase.id,
-                        packageId: purchase.packageId,
-                        packageName: purchase.package?.name || null,
-                        totalCredits: purchase.totalCredits,
-                        usedCredits: purchase.usedCredits,
-                        status: purchase.status,
-                        expiresAt: purchase.expiresAt?.toISOString() || null,
-                    } : null,
+                    mockPurchase: {
+                        id: primaryPurchase.id,
+                        packageId: primaryPurchase.packageId,
+                        packageName: primaryPurchase.package?.name || (primaryPurchase.packageId ? null : "اختبارات مفردة"),
+                        totalCredits: finalTotalCredits,
+                        usedCredits: finalUsedCredits,
+                        status: primaryPurchase.status,
+                        expiresAt: primaryPurchase.expiresAt?.toISOString() || null,
+                    },
                 };
             });
         }

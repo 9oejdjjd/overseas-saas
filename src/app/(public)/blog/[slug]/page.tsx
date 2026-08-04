@@ -17,10 +17,15 @@ interface ArticlePageProps {
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
     const { slug } = await params;
-    const article = await prisma.article.findUnique({
-        where: { slug },
-        include: { author: true }
-    });
+    let article: any = null;
+    try {
+        article = await prisma.article.findUnique({
+            where: { slug },
+            include: { author: true }
+        });
+    } catch (e) {
+        console.warn("Failed to fetch article metadata:", e);
+    }
 
     if (!article) {
         return {
@@ -62,15 +67,21 @@ export default async function SingleArticlePage({ params, searchParams }: Articl
     const query = await searchParams;
     const isPreview = query.preview === "true";
 
-    // Fetch the article
-    const article = await prisma.article.findUnique({
-        where: { slug },
-        include: {
-            category: true,
-            author: true,
-            tags: true
-        }
-    });
+    let article: any = null;
+    let relatedArticles: any[] = [];
+
+    try {
+        article = await prisma.article.findUnique({
+            where: { slug },
+            include: {
+                category: true,
+                author: true,
+                tags: true
+            }
+        });
+    } catch (e) {
+        console.warn("Failed to fetch article:", e);
+    }
 
     // Handle 404 or Drafts (unless it is a preview request)
     if (!article) notFound();
@@ -89,16 +100,20 @@ export default async function SingleArticlePage({ params, searchParams }: Articl
     }
 
     // Fetch related articles (from same category, excluding current one)
-    const relatedArticles = await prisma.article.findMany({
-        where: {
-            categoryId: article.categoryId,
-            id: { not: article.id },
-            status: "PUBLISHED",
-            publishedAt: { lte: new Date() }
-        },
-        take: 3,
-        orderBy: { publishedAt: "desc" }
-    });
+    try {
+        relatedArticles = await prisma.article.findMany({
+            where: {
+                categoryId: article.categoryId,
+                id: { not: article.id },
+                status: "PUBLISHED",
+                publishedAt: { lte: new Date() }
+            },
+            take: 3,
+            orderBy: { publishedAt: "desc" }
+        });
+    } catch (e) {
+        console.warn("Failed to fetch related articles:", e);
+    }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://local-pacc.sa";
     const articleUrl = `${baseUrl}/blog/${article.slug}`;

@@ -72,7 +72,7 @@ export function useFullRegistration() {
         dob: undefined as Date | undefined,
         phone: prefillPhone,
         whatsappNumber: prefillPhone,
-        platformEmail: "",
+        notificationEmail: "",
         passportNumber: "",
         passportExpiry: undefined as Date | undefined,
         nationalId: "",

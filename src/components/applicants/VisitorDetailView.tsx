@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Tag, Phone, Beaker, UserPlus, CalendarClock, Trash2, Mail, Pencil, Plus, Check, X, Copy, Loader2 } from "lucide-react";
+import { Tag, Phone, Beaker, UserPlus, CalendarClock, Trash2, Mail, Pencil, Plus, Check, X, Copy, Loader2, Briefcase } from "lucide-react";
 import { MockExamRenewalCard } from "./MockExamRenewalCard";
 import { useToast } from "@/components/ui/simple-toast";
 import { useRouter } from "next/navigation";
@@ -26,10 +26,28 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
     const [emailInput, setEmailInput] = useState(visitor.email || "");
     const [savingEmail, setSavingEmail] = useState(false);
 
+    const [isEditingProfession, setIsEditingProfession] = useState(false);
+    const [professionInput, setProfessionInput] = useState(visitor.profession || "");
+    const [savingProfession, setSavingProfession] = useState(false);
+    const [availableProfessions, setAvailableProfessions] = useState<string[]>([]);
+    const [showProfDropdown, setShowProfDropdown] = useState(false);
+
     useEffect(() => {
         setEmailInput(visitor.email || "");
         setIsEditingEmail(false);
-    }, [visitor.visitorPurchaseId, visitor.email]);
+        setProfessionInput(visitor.profession || "");
+        setIsEditingProfession(false);
+
+        // Fetch professions list for autocomplete
+        fetch("/api/mock/public/professions")
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setAvailableProfessions(data.map((p: any) => p.name).filter(Boolean));
+                }
+            })
+            .catch(() => {});
+    }, [visitor.visitorPurchaseId, visitor.email, visitor.profession]);
 
     const handleSaveEmail = async () => {
         setSavingEmail(true);
@@ -53,6 +71,31 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
             toast("حدث خطأ في الاتصال بالخادم", "error");
         } finally {
             setSavingEmail(false);
+        }
+    };
+
+    const handleSaveProfession = async () => {
+        setSavingProfession(true);
+        try {
+            const res = await fetch(`/api/applicants/${visitor.visitorPurchaseId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ profession: professionInput })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast(data.error || "فشل في حفظ المهنة", "error");
+                return;
+            }
+            toast("تم حفظ المهنة بنجاح", "success");
+            setIsEditingProfession(false);
+            visitor.profession = professionInput; // Optimistic update
+            onUpdate();
+        } catch (err) {
+            console.error("Save profession error:", err);
+            toast("حدث خطأ في الاتصال بالخادم", "error");
+        } finally {
+            setSavingProfession(false);
         }
     };
 
@@ -85,7 +128,6 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
     const isExpired = mp?.expiresAt && new Date(mp.expiresAt) < new Date();
 
     const handleConvertToApplicant = () => {
-        // Navigate to new applicant page with pre-filled data
         const params = new URLSearchParams({
             prefill: "true",
             name: visitor.fullName || "",
@@ -107,7 +149,91 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
                                 <Badge className="bg-orange-500 text-white text-xs"><Tag className="h-3 w-3 ml-1" /> زائر</Badge>
                             </div>
                             <h2 className="text-xl font-bold text-gray-900">{visitor.fullName}</h2>
-                            {visitor.profession && <p className="text-sm text-gray-500 mt-1">{visitor.profession}</p>}
+                            
+                            {/* Profession View / Edit */}
+                            <div className="mt-1.5 min-h-[30px] flex items-center gap-2">
+                                <Briefcase className="h-3.5 w-3.5 text-gray-400" />
+                                {isEditingProfession ? (
+                                    <div className="relative flex items-center gap-1.5 w-full max-w-[260px]">
+                                        <Input
+                                            value={professionInput}
+                                            onChange={e => {
+                                                setProfessionInput(e.target.value);
+                                                setShowProfDropdown(true);
+                                            }}
+                                            onFocus={() => setShowProfDropdown(true)}
+                                            onBlur={() => setTimeout(() => setShowProfDropdown(false), 200)}
+                                            placeholder="اختر أو اكتب المهنة..."
+                                            className="h-7 py-0.5 px-2 text-xs bg-white border border-orange-200 focus:border-orange-500 focus-visible:ring-0"
+                                            disabled={savingProfession}
+                                        />
+                                        <Button 
+                                            onClick={handleSaveProfession} 
+                                            disabled={savingProfession} 
+                                            size="sm" 
+                                            className="h-7 w-7 p-0 bg-orange-600 hover:bg-orange-700 text-white shrink-0"
+                                        >
+                                            {savingProfession ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        <Button 
+                                            onClick={() => {
+                                                setProfessionInput(visitor.profession || "");
+                                                setIsEditingProfession(false);
+                                            }} 
+                                            disabled={savingProfession} 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600 shrink-0"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </Button>
+
+                                        {showProfDropdown && availableProfessions.length > 0 && (
+                                            <div className="absolute top-full right-0 left-0 mt-1 bg-white border rounded-md shadow-lg z-50 max-h-36 overflow-y-auto">
+                                                {availableProfessions
+                                                    .filter(p => p.toLowerCase().includes((professionInput || "").toLowerCase()))
+                                                    .map((p, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="px-3 py-1.5 hover:bg-orange-50 cursor-pointer text-xs border-b border-gray-50 last:border-0"
+                                                            onMouseDown={e => {
+                                                                e.preventDefault();
+                                                                setProfessionInput(p);
+                                                                setShowProfDropdown(false);
+                                                            }}
+                                                        >
+                                                            {p}
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        {visitor.profession ? (
+                                            <>
+                                                <span className="text-sm text-gray-700 font-medium">{visitor.profession}</span>
+                                                <button 
+                                                    onClick={() => setIsEditingProfession(true)} 
+                                                    className="text-gray-400 hover:text-orange-600 p-0.5 rounded transition-colors"
+                                                    title="تعديل المهنة"
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button 
+                                                onClick={() => setIsEditingProfession(true)} 
+                                                className="text-[10px] text-orange-700 hover:text-orange-800 font-bold flex items-center gap-1 bg-orange-100/60 hover:bg-orange-100 px-2 py-0.5 rounded border border-orange-200/50 transition-colors"
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                                إضافة مهنة
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex flex-col gap-2 mt-3 text-sm text-gray-600">
                                 <div className="flex items-center gap-4">
                                     <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {visitor.phone}</span>
@@ -240,7 +366,7 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
                 </Card>
             )}
 
-            {/* Renewal */}
+            {/* Renewal & Actions */}
             <MockExamRenewalCard
                 phone={visitor.phone}
                 buyerName={visitor.fullName}
@@ -248,37 +374,25 @@ export function VisitorDetailView({ visitor, onUpdate, onClose }: VisitorDetailV
                 onUpdate={onUpdate}
             />
 
-            {/* Convert to Applicant */}
-            <Card className="border-blue-200 bg-blue-50/30">
-                <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h4 className="font-bold text-sm flex items-center gap-2">
-                                <UserPlus className="h-4 w-4 text-blue-600" />
-                                تحويل إلى متقدم
-                            </h4>
-                            <p className="text-xs text-gray-500 mt-1">
-                                تسجيل الزائر كمتقدم كامل في النظام مع إدخال كافة البيانات
-                            </p>
-                        </div>
-                        <Button onClick={handleConvertToApplicant} disabled={converting} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100">
-                            <UserPlus className="h-4 w-4 ml-2" />
-                            تسجيل كمتقدم
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Delete Visitor */}
-            <div className="flex justify-end pt-2">
-                <Button 
-                    onClick={handleDeleteVisitor} 
-                    disabled={deleting} 
-                    variant="ghost" 
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs gap-1.5"
+            {/* Actions Bar */}
+            <div className="flex items-center justify-between pt-2 border-t mt-4">
+                <Button
+                    variant="outline"
+                    onClick={handleConvertToApplicant}
+                    className="gap-2 text-green-700 border-green-200 hover:bg-green-50"
                 >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    حذف بيانات الزائر نهائياً
+                    <UserPlus className="h-4 w-4" />
+                    تسجيل كمتقدم رسمي
+                </Button>
+
+                <Button
+                    variant="ghost"
+                    onClick={handleDeleteVisitor}
+                    disabled={deleting}
+                    className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    حذف وإلغاء الباقة
                 </Button>
             </div>
         </div>

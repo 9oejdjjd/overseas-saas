@@ -15,45 +15,53 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function BlogPage() {
-    const articles = await prisma.article.findMany({
-        where: {
-            status: "PUBLISHED",
-            publishedAt: {
-                lte: new Date(),
+    let articles: any[] = [];
+    let popularArticles: any[] = [];
+    let categories: any[] = [];
+
+    try {
+        articles = await prisma.article.findMany({
+            where: {
+                status: "PUBLISHED",
+                publishedAt: {
+                    lte: new Date(),
+                },
             },
-        },
-        include: {
-            category: true,
-            author: true,
-            tags: true,
-        },
-        orderBy: {
-            publishedAt: "desc",
-        },
-    });
-
-    const popularArticles = await prisma.article.findMany({
-        where: {
-            status: "PUBLISHED",
-            publishedAt: {
-                lte: new Date(),
+            include: {
+                category: true,
+                author: true,
+                tags: true,
             },
-        },
-        include: {
-            category: true,
-        },
-        orderBy: {
-            views: "desc",
-        },
-        take: 3,
-    });
+            orderBy: {
+                publishedAt: "desc",
+            },
+        });
 
-    const categories = await prisma.category.findMany({
-        select: { name: true },
-        orderBy: { name: "asc" },
-    });
+        popularArticles = await prisma.article.findMany({
+            where: {
+                status: "PUBLISHED",
+                publishedAt: {
+                    lte: new Date(),
+                },
+            },
+            include: {
+                category: true,
+            },
+            orderBy: {
+                views: "desc",
+            },
+            take: 3,
+        });
 
-    const categoryNames = ["الكل", ...categories.map((c) => c.name)];
+        categories = await prisma.category.findMany({
+            select: { name: true },
+            orderBy: { name: "asc" },
+        });
+    } catch (error) {
+        console.warn("Failed to fetch articles for blog page during build/render:", error);
+    }
+
+    const categoryNames = ["الكل", ...categories.map((c: any) => c.name)];
 
     return (
         <BlogClient 

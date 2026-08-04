@@ -21,11 +21,12 @@ function calculateSuspicion(group: {
     allIps: Set<string>;
     allFingerprints: Set<string>;
     totalAttempts: number;
+    maxAttempts?: number;
     isBanned: boolean;
     sessions: any[];
     type?: string;
     hasPurchase?: boolean;
-}): SuspicionResult {
+}, defaultFreeCredits: number = 2): SuspicionResult {
     // Exempt both registered applicants (PRIVATE) and paying mock customers from suspicion scoring
     if (group.type === "PRIVATE" || group.hasPurchase) {
         return { score: 0, level: "CLEAN", reasons: [] };
@@ -74,11 +75,12 @@ function calculateSuspicion(group: {
         reasons.push(`نفس الرقم استخدم ${group.allNames.size} أسماء مختلفة`);
     }
 
-    // --- Rule 7: Excessive Attempts (10 pts per attempt beyond 3) ---
-    if (group.totalAttempts > 3) {
-        const extraAttempts = group.totalAttempts - 3;
+    // --- Rule 7: Excessive Attempts (dynamic based on free package credits) ---
+    const allowedLimit = group.maxAttempts || defaultFreeCredits;
+    if (group.totalAttempts > allowedLimit) {
+        const extraAttempts = group.totalAttempts - allowedLimit;
         score += Math.min(extraAttempts * 10, 30);
-        reasons.push(`تجاوز الحد المجاني بـ ${extraAttempts} محاولات إضافية (${group.totalAttempts} إجمالي)`);
+        reasons.push(`تجاوز الحد المسموح بـ ${extraAttempts} محاولات إضافية (${group.totalAttempts} إجمالي)`);
     }
 
     // --- Rule 8: Previously Banned (50 pts) ---
@@ -163,6 +165,13 @@ export async function GET(request: Request) {
         // Run self-healing auto-resolution on-the-fly
         await autoResolveExpiredSessions();
 
+        // Fetch default free package credits for dynamic fallback
+        const freePkg = await prisma.mockExamPackage.findFirst({
+            where: { isFree: true, isActive: true },
+            select: { examCredits: true }
+        });
+        const defaultFreeCredits = freePkg?.examCredits ?? 2;
+
         const url = new URL(request.url);
         const professionId = url.searchParams.get("professionId");
         const type = url.searchParams.get("type");
@@ -238,7 +247,7 @@ export async function GET(request: Request) {
                     hasSetLastScore: false,
                     isPassed: false,
                     totalAttempts: 0,
-                    maxAttempts: sess.purchase?.totalCredits ?? 3,
+                    maxAttempts: sess.purchase?.totalCredits ?? defaultFreeCredits,
                     isBanned: false,
                     status: sess.status,
                     createdAt: sess.createdAt,
@@ -300,7 +309,7 @@ export async function GET(request: Request) {
 
         // Apply suspicion scoring and serialize
         const finalGroupedList = Array.from(groupedMap.values()).map(g => {
-            const suspicion = calculateSuspicion(g);
+            const suspicion = calculateSuspicion(g, defaultFreeCredits);
 
             return {
                 id: g.id,

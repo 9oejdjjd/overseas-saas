@@ -239,10 +239,10 @@ export function FullRegistrationForm({ hook }: FullRegistrationFormProps) {
                                     placeholder="واتساب"
                                 />
                                 <Input
-                                    value={formData.platformEmail || ""}
-                                    onChange={e => setFormData({ ...formData, platformEmail: e.target.value })}
+                                    value={formData.notificationEmail || ""}
+                                    onChange={e => setFormData({ ...formData, notificationEmail: e.target.value })}
                                     className="dir-ltr text-left"
-                                    placeholder="البريد الإلكتروني (اختياري)"
+                                    placeholder="بريد الإشعارات (اختياري)"
                                     type="email"
                                 />
                             </div>

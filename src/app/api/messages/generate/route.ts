@@ -19,6 +19,43 @@ const formatArabicTime = (timeStr: string | null | undefined) => {
     return `${h}:${minutes} ${ampm}`;
 };
 
+// Helper: Smart Profession Lookup with Fallback
+async function findActiveProfession(professionQuery: string | null | undefined) {
+    if (professionQuery && professionQuery.trim()) {
+        const trimmed = professionQuery.trim();
+        // 1. Exact match
+        let prof = await prisma.profession.findFirst({
+            where: { name: trimmed, isActive: true }
+        });
+        if (prof) return prof;
+
+        // 2. Insensitive / Contains match
+        prof = await prisma.profession.findFirst({
+            where: { name: { contains: trimmed, mode: 'insensitive' }, isActive: true }
+        });
+        if (prof) return prof;
+
+        // 3. Slug match
+        const slugified = trimmed.toLowerCase().replace(/\s+/g, '-');
+        prof = await prisma.profession.findFirst({
+            where: { slug: { contains: slugified }, isActive: true }
+        });
+        if (prof) return prof;
+
+        // 4. Reverse contains match
+        const allProfessions = await prisma.profession.findMany({ where: { isActive: true } });
+        const matchedProf = allProfessions.find(p => trimmed.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(trimmed.toLowerCase()));
+        if (matchedProf) return matchedProf;
+    }
+
+    // 5. Fallback: First active profession so session creation never fails
+    const fallbackProf = await prisma.profession.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: 'asc' }
+    });
+    return fallbackProf;
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -125,7 +162,7 @@ export async function POST(request: Request) {
         text = text.replace(/{name}/g, applicantData.fullName || "");
         text = text.replace(/{applicantCode}|{applicant_code}/g, applicantData.applicantCode || "");
         text = text.replace(/{phone}/g, applicantData.phone || "");
-        text = text.replace(/{profession}/g, applicantData.profession || "");
+        text = text.replace(/{profession}/g, (applicantData.profession || "").trim());
         text = text.replace(/{email}/g, applicantData.platformEmail || "");
         text = text.replace(/{password}/g, applicantData.platformPassword || "");
 
@@ -135,33 +172,37 @@ export async function POST(request: Request) {
             
             if (applicantId) {
                 activeSession = await prisma.examSession.findFirst({
-                    where: { applicantId: applicantId, status: { in: ["NEW", "STARTED"] } },
+                    where: { applicantId: applicantId, status: { in: ["NEW", "STARTED", "RESUMED"] } },
                     orderBy: { createdAt: "desc" }
                 });
             } else if (mockPurchase) {
                 activeSession = await prisma.examSession.findFirst({
-                    where: { purchaseId: mockPurchase.id, status: { in: ["NEW", "STARTED"] } },
+                    where: { purchaseId: mockPurchase.id, status: { in: ["NEW", "STARTED", "RESUMED"] } },
                     orderBy: { createdAt: "desc" }
                 });
             }
 
-            // Auto-create session if none exists, based on applicantData's profession
-            if (!activeSession && applicantData.profession) {
+            // Auto-create session if none exists
+            if (!activeSession) {
                 try {
-                    const profession = await prisma.profession.findFirst({
-                        where: { name: applicantData.profession, isActive: true }
-                    });
+                    const profession = await findActiveProfession(applicantData.profession);
                     if (profession) {
+                        // Fill profession name if applicant's profession text was empty
+                        if (!applicantData.profession) {
+                            applicantData.profession = profession.name;
+                            text = text.replace(/{profession}/g, profession.name);
+                        }
+
                         // Find active purchase to link and check credits
-                        const phone = applicantData.phone;
-                        const phoneWithoutPlus = phone.replace(/^\+/, "");
-                        const uniquePhones = [phone, phoneWithoutPlus, phone.startsWith('+') ? phone.slice(1) : `+${phone}`];
+                        const reqPhoneNum = applicantData.phone || applicantData.whatsappNumber || "";
+                        const phoneWithoutPlus = reqPhoneNum ? reqPhoneNum.replace(/^\+/, "") : "";
+                        const uniquePhones = reqPhoneNum ? [reqPhoneNum, phoneWithoutPlus, reqPhoneNum.startsWith('+') ? reqPhoneNum.slice(1) : `+${reqPhoneNum}`] : [];
 
                         let activePurchase = await prisma.mockExamPurchase.findFirst({
                             where: {
                                 OR: [
                                     ...(applicantId ? [{ applicantId: applicantId }] : []),
-                                    { phone: { in: uniquePhones } }
+                                    ...(uniquePhones.length > 0 ? [{ phone: { in: uniquePhones } }] : [])
                                 ],
                                 status: { in: ["ACTIVE", "PAID"] },
                             },
@@ -187,7 +228,7 @@ export async function POST(request: Request) {
                             if (freePackage) {
                                 activePurchase = await prisma.mockExamPurchase.create({
                                     data: {
-                                        phone: phone,
+                                        phone: reqPhoneNum || "000000000",
                                         buyerName: applicantData.fullName,
                                         applicantId: applicantId || null,
                                         packageId: freePackage.id,
@@ -202,11 +243,7 @@ export async function POST(request: Request) {
                             }
                         }
 
-                        if (!activePurchase && trigger === "ON_MOCK_EXAM_LINK") {
-                            return NextResponse.json({ error: "لا يوجد باقة نشطة أو رصيد كافٍ لإجراء الاختبار" }, { status: 400 });
-                        }
-
-                        // Deduct a credit now
+                        // Deduct a credit if applicable
                         if (activePurchase && activePurchase.totalCredits !== -1) {
                             await prisma.mockExamPurchase.update({
                                 where: { id: activePurchase.id },
@@ -252,6 +289,9 @@ export async function POST(request: Request) {
             }
         }
 
+        // Clean up empty profession references if any
+        text = text.replace(/لمهن[ةه]\s*،/g, "للاختبار التجريبي،");
+        text = text.replace(/لمهن[ةه]\s*ق/g, "للاختبار التجريبي ق");
 
         // Location & Map (Safe from undefined)
         const cityName = applicantData.location?.name || applicantData.examLocation || "";
@@ -268,56 +308,54 @@ export async function POST(request: Request) {
         if (applicantData.examDate) {
             text = text.replace(/{examDate}|{exam_date}/g, formatDate(applicantData.examDate));
         } else {
-            text = text.replace(/{examDate}|{exam_date}/g, "غير محدد");
+            text = text.replace(/{examDate}|{exam_date}/g, "سيتم تحديده لاحقاً");
         }
 
         if (applicantData.examTime) {
             text = text.replace(/{examTime}|{exam_time}/g, formatArabicTime(applicantData.examTime));
         } else {
-            text = text.replace(/{examTime}|{exam_time}/g, "غير محدد");
+            text = text.replace(/{examTime}|{exam_time}/g, "سيتم تحديده لاحقاً");
         }
 
         // Ticket Replacements
         if (ticket) {
             text = text.replace(/{ticketNumber}|{ticket_number}/g, ticket.ticketNumber || "");
-            text = text.replace(/{transportCompany}|{transport_company}/g, ticket.transportCompany || "");
-            text = text.replace(/{departureLocation}|{departure_location}/g, ticket.departureLocation || "");
-            text = text.replace(/{arrivalLocation}|{arrival_location}/g, ticket.arrivalLocation || "");
-            text = text.replace(/{busNumber}|{bus_number}/g, ticket.trip?.busNumber || ticket.busNumber || "");
-            text = text.replace(/{seatNumber}|{seat_number}/g, ticket.seatNumber || "");
-
-            // For Cancel Ticket we need departure date usually linked to the old ticket
-            const tDate = ticket.trip?.date || ticket.departureDate;
-            text = text.replace(/{departureDate}|{travelDate}|{new_travel_date}/g, formatDate(tDate));
-
-            if (ticket.trip?.departureTime) {
-                text = text.replace(/{departureTime}/g, formatArabicTime(ticket.trip.departureTime));
-            } else {
-                text = text.replace(/{departureTime}/g, "غير محدد");
-            }
-
-            text = text.replace(/{destination}/g, ticket.arrivalLocation || "");
+            text = text.replace(/{transportCompany}/g, ticket.transportCompany || "");
+            text = text.replace(/{departureLocation}/g, ticket.departureLocation || "");
+            text = text.replace(/{arrivalLocation}/g, ticket.arrivalLocation || "");
+            text = text.replace(/{departureDate}/g, formatDate(ticket.departureDate));
+            text = text.replace(/{departureTime}/g, ticket.trip?.departureTime ? formatArabicTime(ticket.trip.departureTime) : "");
+            text = text.replace(/{busNumber}/g, ticket.busNumber || "");
+            text = text.replace(/{seatNumber}/g, ticket.seatNumber || "");
+        } else {
+            text = text.replace(/{ticketNumber}|{ticket_number}/g, "");
+            text = text.replace(/{transportCompany}/g, "");
+            text = text.replace(/{departureLocation}/g, "");
+            text = text.replace(/{arrivalLocation}/g, "");
+            text = text.replace(/{departureDate}/g, "");
+            text = text.replace(/{departureTime}/g, "");
+            text = text.replace(/{busNumber}/g, "");
+            text = text.replace(/{seatNumber}/g, "");
         }
 
-        // Inject Custom Variables (like voucher codes from props)
-        if (customVars) {
-            for (const [key, value] of Object.entries(customVars)) {
-                const regex = new RegExp(`{${key}}`, "g");
-                text = text.replace(regex, value as string);
-            }
+        // Custom Variables Replacement (Overrides)
+        if (customVars && typeof customVars === "object") {
+            Object.keys(customVars).forEach((key) => {
+                const val = customVars[key];
+                if (val !== undefined && val !== null) {
+                    const reg = new RegExp(`{${key}}`, "g");
+                    text = text.replace(reg, String(val));
+                }
+            });
         }
-
-        // Clean up unreplaced curly braces just in case, but usually better left for debug
-        // text = text.replace(/\{[a-zA-Z_]+\}/g, "غير متوفر");
 
         return NextResponse.json({
-            templateName: template.name,
             message: text,
             phone: applicantData.whatsappNumber || applicantData.phone
         });
 
     } catch (error) {
         console.error("Error generating message:", error);
-        return NextResponse.json({ error: "Failed to generate message" }, { status: 500 });
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

@@ -124,11 +124,31 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
                     trigger: "ON_MOCK_EXAM_LINK",
                 })
             });
-            if (!sendRes.ok) throw new Error("Failed to send");
+
+            const sendData = await sendRes.json();
+
+            if (!sendRes.ok && !sendData.success) {
+                throw new Error(sendData.error || "فشل إرسال الرسالة عبر القنوات المتاحة");
+            }
+
             setSent(true);
-            toast("تم إرسال رابط الاختبار التجريبي بنجاح.", "success");
-            
-            // Revert icon back to normal after 5 seconds so they can send again if they want
+
+            const waSuccess = Boolean(sendData.whatsapp?.success);
+            const emailSuccess = Boolean(sendData.email?.success);
+            const emailRecipient = sendData.email?.recipient;
+            const emailErr = sendData.email?.error;
+
+            if (waSuccess && emailSuccess) {
+                toast(`✅ تم إرسال الرابط بنجاح عبر الواتساب والبريد الإلكتروني (${emailRecipient}).`, "success");
+            } else if (waSuccess && !emailSuccess) {
+                toast(`✅ تم الإرسال عبر الواتساب. (ℹ️ الإيميل: ${emailErr || 'لم يرسل'})`, "success");
+            } else if (!waSuccess && emailSuccess) {
+                toast(`✅ تم إرسال الرابط بنجاح عبر البريد الإلكتروني (${emailRecipient}). (⚠️ تعذر الواتساب)`, "success");
+            } else {
+                setHasError(true);
+                toast(`❌ تعذر الإرسال عبر الواتساب والبريد الإلكتروني. يرجى التحقق من اتصال السيرفرات.`, "error");
+            }
+
             setTimeout(() => setSent(false), 5000);
             
         } catch (e) {

@@ -188,8 +188,12 @@ export async function POST(request: Request) {
             attemptNum = activePurchase.usedCredits + 1;
 
         } else {
-            // Legacy 3 Global Attempts Logic
-            const MAX_GLOBAL_ATTEMPTS = 3;
+            // Dynamic Global Attempts Fallback Logic
+            const freePackage = await prisma.mockExamPackage.findFirst({
+                where: { isFree: true, isActive: true },
+                select: { examCredits: true }
+            });
+            const MAX_GLOBAL_ATTEMPTS = freePackage?.examCredits ?? 2;
             const attemptsByPhone = await prisma.examSession.count({
                 where: { type: "PUBLIC", OR: [{ visitorPhone: visitorPhone }, { visitorPhone: phoneWithoutPlus }], status: { in: consumedStatuses } }
             });
