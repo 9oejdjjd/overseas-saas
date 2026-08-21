@@ -16,6 +16,7 @@ export async function GET() {
                     examChangeFee: 16000,
                     maxFreeChanges: 1,
                     mockExamSinglePrice: 0,
+                    agentMockExamSinglePrice: 0,
                     mockExamPackagesEnabled: true
                 }
             });
@@ -43,6 +44,7 @@ export async function PATCH(request: Request) {
                 examCancellationDeadline: body.examCancellationDeadline,
                 enableMockExamNewQuestions: body.enableMockExamNewQuestions !== undefined ? body.enableMockExamNewQuestions : undefined,
                 mockExamSinglePrice: body.mockExamSinglePrice !== undefined ? body.mockExamSinglePrice : undefined,
+                agentMockExamSinglePrice: body.agentMockExamSinglePrice !== undefined ? body.agentMockExamSinglePrice : undefined,
                 mockExamPackagesEnabled: body.mockExamPackagesEnabled !== undefined ? body.mockExamPackagesEnabled : undefined
             }
         });

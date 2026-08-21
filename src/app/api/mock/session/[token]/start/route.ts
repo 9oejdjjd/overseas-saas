@@ -151,7 +151,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 select: { id: true, type: true, axis: true, imageUrl: true, cognitiveLevel: true, difficulty: true, createdAt: true }
             });
 
-            const totalRequired = session.profession.questionCount || 30;
+            let totalRequired = session.profession.questionCount || 30;
+            const pkgQuestionsCount = session.purchase?.package?.examQuestionsCount;
+            if (pkgQuestionsCount && pkgQuestionsCount > 0) {
+                totalRequired = pkgQuestionsCount;
+            }
+
             const algorithmConfig = (session.profession as any).algorithmConfig;
 
             let typeQuota: Record<string, number> = { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
@@ -163,9 +168,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
             if (algorithmConfig && algorithmConfig.typeQuota && algorithmConfig.axes) {
                 isCustomAlgorithm = true;
-                typeQuota = { ...algorithmConfig.typeQuota };
-                for (const a of algorithmConfig.axes) {
-                    axisQuota[a.name] = a.quota;
+                const originalTotal = session.profession.questionCount || 30;
+
+                if (totalRequired !== originalTotal) {
+                    const scale = totalRequired / originalTotal;
+                    
+                    // Scale typeQuota
+                    typeQuota = {};
+                    let typeSum = 0;
+                    const types = Object.keys(algorithmConfig.typeQuota);
+                    types.forEach((type, idx) => {
+                        if (idx === types.length - 1) {
+                            typeQuota[type] = totalRequired - typeSum;
+                        } else {
+                            const val = Math.round((algorithmConfig.typeQuota[type] || 0) * scale);
+                            typeQuota[type] = val;
+                            typeSum += val;
+                        }
+                    });
+
+                    // Scale axisQuota
+                    axisQuota = {};
+                    let axisSum = 0;
+                    const axes = algorithmConfig.axes;
+                    axes.forEach((a: any, idx: number) => {
+                        if (idx === axes.length - 1) {
+                            axisQuota[a.name] = totalRequired - axisSum;
+                        } else {
+                            const val = Math.round((a.quota || 0) * scale);
+                            axisQuota[a.name] = val;
+                            axisSum += val;
+                        }
+                    });
+                } else {
+                    typeQuota = { ...algorithmConfig.typeQuota };
+                    for (const a of algorithmConfig.axes) {
+                        axisQuota[a.name] = a.quota;
+                    }
                 }
             } else {
                 // Fallback to original hardcoded logic
@@ -214,13 +253,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
             // Helper to determine the effective bucket of a question
             const getEffectiveType = (q: any) => {
-                if (isCustomAlgorithm) {
-                     if (q.imageUrl && (typeQuota["IMAGE"] || 0) > 0 && q.type === "MCQ") return "IMAGE";
-                     return q.type;
-                } else {
-                     if (q.imageUrl && enableNewQuestions && enabledTypes.includes("IMAGE")) return "IMAGE";
-                     return q.type;
+                if (q.imageUrl && q.imageUrl.trim() !== "" && q.imageUrl !== "null") {
+                    return "IMAGE";
                 }
+                return q.type;
             };
 
             const getEffectiveAxis = (q: any) => {
@@ -243,7 +279,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             };
 
             const getEffectiveCognitive = (q: any) => {
-                return (q.cognitiveLevel === "K3" || q.difficulty === "EXPERT") ? "K3" : "K2";
+                if (q.cognitiveLevel === "K1") return "K1";
+                if (q.cognitiveLevel === "K3" || q.difficulty === "EXPERT") return "K3";
+                if (q.cognitiveLevel === "K4") return "K4";
+                if (q.cognitiveLevel === "K5") return "K5";
+                return "K2"; // Default fallback
             };
 
             // Determine allowed question types based on the purchase package and attempt number
@@ -284,22 +324,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                 // Exclude question types not allowed by the package/attempt
                 if (!allowedTypesFromPackage.includes(eType)) return false;
 
-                if (isCustomAlgorithm) {
-                    if (eType !== "MCQ" && eType !== "IMAGE" && eType !== "TRUE_FALSE" && eType !== "FILL_BLANK") return false;
-                    return true;
-                } else {
-                    if (eType !== "MCQ" && eType !== "IMAGE" && !enabledTypes.includes(eType)) return false;
-                    if (eType === "IMAGE" && !enabledTypes.includes("IMAGE")) return false;
-                    return true;
-                }
+                // Exclude question types not enabled for this profession
+                if (!enabledTypes.includes(eType)) return false;
+
+                return true;
             });
 
-            // Set 50% K3 and 50% K2 Quota
-            const targetK3 = Math.ceil(totalRequired * 0.5);
-            let kQuota: Record<string, number> = {
-                K3: targetK3,
-                K2: totalRequired - targetK3
-            };
+            // Load cognitive levels quota from custom algorithm configuration or fallback to 50% K3 & 50% K2
+            let kQuota: Record<string, number> = { K1: 0, K2: 0, K3: 0, K4: 0, K5: 0 };
+            if (algorithmConfig && algorithmConfig.cognitiveQuota) {
+                const originalTotal = session.profession.questionCount || 30;
+                if (totalRequired !== originalTotal) {
+                    const scale = totalRequired / originalTotal;
+                    let kSum = 0;
+                    const ks = ["K1", "K2", "K3", "K4", "K5"];
+                    ks.forEach((k, idx) => {
+                        if (idx === ks.length - 1) {
+                            kQuota[k] = totalRequired - kSum;
+                        } else {
+                            const val = Math.round((Number(algorithmConfig.cognitiveQuota[k]) || 0) * scale);
+                            kQuota[k] = val;
+                            kSum += val;
+                        }
+                    });
+                } else {
+                    kQuota = {
+                        K1: Number(algorithmConfig.cognitiveQuota.K1) || 0,
+                        K2: Number(algorithmConfig.cognitiveQuota.K2) || 0,
+                        K3: Number(algorithmConfig.cognitiveQuota.K3) || 0,
+                        K4: Number(algorithmConfig.cognitiveQuota.K4) || 0,
+                        K5: Number(algorithmConfig.cognitiveQuota.K5) || 0,
+                    };
+                }
+            } else {
+                const targetK3 = Math.ceil(totalRequired * 0.5);
+                kQuota.K3 = targetK3;
+                kQuota.K2 = totalRequired - targetK3;
+            }
 
             // 5. The Smart Bucket-Based Iterative Picker
             const shuffledBank = shuffleArray(validQuestions);
@@ -404,6 +465,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     }))
                 })
             ];
+
+            if (session.agentOrderId) {
+                updates.push(
+                    prisma.agentExamOrder.update({
+                        where: { id: session.agentOrderId },
+                        data: { status: "STARTED" }
+                    })
+                );
+            }
 
             // Save relationship
             await prisma.$transaction(updates);

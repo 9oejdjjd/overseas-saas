@@ -10,6 +10,35 @@ export interface ValidationResult {
     success: boolean;
     error: string | null;
     parsedData: any[];
+    warnings?: string[];
+}
+
+/**
+ * دالة لحساب نسبة تداخل الكلمات بين نصين للتحقق من التشابه المفرط
+ */
+function calculateWordOverlap(text1: string, text2: string): number {
+    const normalize = (text: string) => {
+        return text
+            .toLowerCase()
+            .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()؟]/g, "")
+            .split(/\s+/)
+            .filter(w => w.length > 2); // الكلمات التي طولها أكثر من حرفين
+    };
+
+    const words1 = new Set(normalize(text1));
+    const words2 = new Set(normalize(text2));
+
+    if (words1.size === 0 || words2.size === 0) return 0;
+
+    let intersection = 0;
+    for (const word of words1) {
+        if (words2.has(word)) {
+            intersection++;
+        }
+    }
+
+    const union = new Set([...words1, ...words2]).size;
+    return intersection / union;
 }
 
 /**
@@ -28,6 +57,8 @@ export function validateQuestionsJson(jsonText: string, questionType: string): V
             parsedData: []
         };
     }
+
+    const warnings: string[] = [];
 
     try {
         // تنظيف ذكي للـ JSON: استخراج المصفوفة في حال وضعها داخل كتلة كود مارك داون (```json ... ```)
@@ -76,13 +107,15 @@ export function validateQuestionsJson(jsonText: string, questionType: string): V
                 };
             }
 
+            // تحديد نوع السؤال الفعلي (من الكائن نفسه أو القيمة الافتراضية الممررة)
+            const currentQType = q.type || questionType || "MCQ";
             // تحديد عدد الخيارات المطلوب بناءً على نوع السؤال
-            const expectedOptions = questionType === "TRUE_FALSE" ? 2 : 4;
+            const expectedOptions = currentQType === "TRUE_FALSE" ? 2 : 4;
             
             if (!q.options || !Array.isArray(q.options) || q.options.length !== expectedOptions) {
                 return {
                     success: false,
-                    error: `السؤال رقم ${qNumber} يجب أن يحتوي على ${expectedOptions} خيارات بالضبط لنوع الأسئلة المحدد (${questionType})`,
+                    error: `السؤال رقم ${qNumber} يجب أن يحتوي على ${expectedOptions} خيارات بالضبط لنوع الأسئلة المحدد (${currentQType})`,
                     parsedData: []
                 };
             }
@@ -109,12 +142,54 @@ export function validateQuestionsJson(jsonText: string, questionType: string): V
                     parsedData: []
                 };
             }
+
+            // التحقق من أسئلة الصور والتحذيرات
+            if (q.requireImage === true || q.requireImage === "true") {
+                if (!q.imageDescription || typeof q.imageDescription !== "string" || !q.imageDescription.trim()) {
+                    return {
+                        success: false,
+                        error: `السؤال رقم ${qNumber} يتطلب صورة ولكن حقل 'imageDescription' فارغ أو مفقود`,
+                        parsedData: []
+                    };
+                }
+
+                if (q.imageDescription.trim().length < 8) {
+                    warnings.push(`السؤال رقم ${qNumber}: وصف الصورة قصير جداً، قد لا يصف شيئاً حقيقياً بشكل كافٍ.`);
+                }
+
+                if (q.imageDescription.trim().length > 200) {
+                    warnings.push(`السؤال رقم ${qNumber}: وصف الصورة طويل جداً (${q.imageDescription.trim().length} حرف). يُفضل أن يكون سطر واحد يصف شيئاً واقعياً بشكل مباشر.`);
+                }
+
+                // التحقق من التداخل/التشابه
+                const similarity = calculateWordOverlap(q.text, q.imageDescription);
+                if (similarity > 0.35) {
+                    warnings.push(`السؤال رقم ${qNumber}: هناك تداخل كبير في الكلمات بين نص السؤال ووصف الصورة (${Math.round(similarity * 100)}% تشابه). يجب تجنب وصف تفاصيل الصورة داخل السؤال نفسه لكي تظل الصورة ضرورية لحله.`);
+                }
+
+                // التحقق من العبارات الوصفية التي تكرر محتوى الصورة داخل السؤال
+                const descriptivePhrases = [
+                    "تظهر في الصورة",
+                    "الصورة تظهر",
+                    "كما هو موضح في الصورة",
+                    "التي تظهر في الصورة",
+                    "بالنظر إلى الصورة المرفقة التي",
+                    "بالنظر إلى الصورة التي تظهر"
+                ];
+                for (const phrase of descriptivePhrases) {
+                    if (q.text.includes(phrase)) {
+                        warnings.push(`السؤال رقم ${qNumber}: نص السؤال يحتوي على العبارة الوصفية "${phrase}". يرجى صياغة السؤال بحيث يسأل عن الصورة (مثال: "ما دلالة الإشارة الموضحة بالصورة؟") بدلاً من وصف مكوناتها.`);
+                        break;
+                    }
+                }
+            }
         }
 
         return {
             success: true,
             error: null,
-            parsedData: parsed
+            parsedData: parsed,
+            warnings
         };
 
     } catch (err: any) {

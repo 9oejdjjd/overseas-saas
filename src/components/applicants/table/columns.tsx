@@ -41,6 +41,20 @@ export type ApplicantData = Applicant & {
         ticketNumber: string;
         departureDate: string;
     } | null;
+    mockPurchase?: {
+        id: string;
+        packageId: string | null;
+        packageName: string;
+        totalCredits: number;
+        usedCredits: number;
+        status: string;
+        expiresAt: string | null;
+        isPaid?: boolean;
+        amount?: number;
+    } | null;
+    isAgentClient?: boolean;
+    isVisitor?: boolean;
+    agentName?: string | null;
 };
 
 // Helper function to determine Ticket Status
@@ -296,6 +310,19 @@ export const columns: ColumnDef<ApplicantData>[] = [
         ),
     },
     {
+        accessorKey: "profession",
+        header: "المهنة",
+        cell: ({ row }) => {
+            const profession = row.original.profession;
+            if (!profession) return <span className="text-gray-300 text-xs">—</span>;
+            return (
+                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-xs font-bold font-mono">
+                    {profession}
+                </span>
+            );
+        }
+    },
+    {
         id: "mockExam",
         header: "الاختبارات",
         cell: ({ row }) => {
@@ -346,6 +373,17 @@ export const columns: ColumnDef<ApplicantData>[] = [
                 return <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 text-xs">زائر</Badge>;
             }
 
+            if (status === 'AGENT_CLIENT') {
+                return (
+                    <div className="flex flex-col items-center gap-1">
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-200 text-xs">عميل وكيل</Badge>
+                        {row.original.agentName && (
+                            <span className="text-[9px] text-slate-400 font-bold">({row.original.agentName})</span>
+                        )}
+                    </div>
+                );
+            }
+
             let display = { label: "غير محدد", class: "bg-gray-100 text-gray-500" };
             if (status === 'EXAM_SCHEDULED') display = { label: "تم حجز الموعد", class: "bg-blue-100 text-blue-700" };
             else if (status === 'PASSED') display = { label: "ناجح", class: "bg-green-100 text-green-700" };
@@ -353,7 +391,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
             else if (status === 'ABSENT') display = { label: "غائب", class: "bg-orange-100 text-orange-700" };
             else if (status === 'NEW_REGISTRATION') display = { label: "جديد", class: "bg-gray-100 text-gray-600" };
 
-            if (row.original.isVisitor) return null;
+            if (row.original.isVisitor || row.original.isAgentClient) return null;
 
             return (
                 <DropdownMenu>
@@ -385,7 +423,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
         id: "ticketStatus",
         header: "حالة التذكرة",
         cell: ({ row }) => {
-            if (row.original.isVisitor) return <span className="text-gray-300 text-xs">—</span>;
+            if (row.original.isVisitor || row.original.isAgentClient) return <span className="text-gray-300 text-xs">—</span>;
             const status = getTicketStatus(row.original);
             if (!status) return <span className="text-gray-300 text-xs">-</span>;
 
@@ -420,16 +458,29 @@ export const columns: ColumnDef<ApplicantData>[] = [
         id: "financials",
         header: "المالية",
         cell: ({ row }) => {
-            if (row.original.isVisitor) {
+            if (row.original.isVisitor || row.original.isAgentClient) {
                 const mp = row.original.mockPurchase;
-                return mp ? <span className="text-xs font-bold text-green-600">مدفوع</span> : <span className="text-gray-300 text-xs">—</span>;
+                if (!mp) return <span className="text-gray-300 text-xs">—</span>;
+                return mp.isPaid ? (
+                    <span className="text-xs font-bold text-green-600">مدفوع</span>
+                ) : (
+                    <span className="text-xs font-bold text-red-600">غير مدفوع ({Number(mp.amount || 0).toLocaleString()})</span>
+                );
             }
             const remaining = Number(row.original.remainingBalance);
+            const mp = row.original.mockPurchase;
+            const mockUnpaid = mp && !mp.isPaid ? Number(mp.amount || 0) : 0;
+            const totalRemaining = remaining + mockUnpaid;
             return (
                 <div className="flex flex-col items-end">
-                    <div className={cn("font-bold text-xs", remaining > 0 ? "text-red-600" : "text-green-600")}>
-                        {remaining > 0 ? remaining.toLocaleString() : "مدفوع"}
+                    <div className={cn("font-bold text-xs", totalRemaining > 0 ? "text-red-600" : "text-green-600")}>
+                        {totalRemaining > 0 ? totalRemaining.toLocaleString() : "مدفوع"}
                     </div>
+                    {mockUnpaid > 0 && (
+                        <div className="text-[10px] text-muted-foreground text-red-500 font-medium">
+                            (باقة غير مدفوعة: {mockUnpaid.toLocaleString()})
+                        </div>
+                    )}
                 </div>
             );
         },
@@ -451,7 +502,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
                         size="sm"
                         className={cn(
                             "h-8 px-3 text-white text-xs font-medium",
-                            app.isVisitor ? "bg-orange-600 hover:bg-orange-700" : "bg-blue-600 hover:bg-blue-700"
+                            app.isVisitor ? "bg-orange-600 hover:bg-orange-700" : app.isAgentClient ? "bg-indigo-600 hover:bg-indigo-700" : "bg-blue-600 hover:bg-blue-700"
                         )}
                         onClick={() => {
                             document.dispatchEvent(new CustomEvent('open-applicant-modal', { detail: app }));
@@ -461,7 +512,7 @@ export const columns: ColumnDef<ApplicantData>[] = [
                     </Button>
 
                     {/* More Options Dropdown */}
-                    {!app.isVisitor && (
+                    {!app.isVisitor && !app.isAgentClient && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-gray-100">

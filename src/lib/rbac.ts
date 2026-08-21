@@ -1,6 +1,6 @@
 // Role-Based Access Control (RBAC) Library
 
-export type UserRole = 'ADMIN' | 'REGISTRATION_STAFF' | 'ACCOUNTANT' | 'FOLLOW_UP_STAFF';
+export type UserRole = 'ADMIN' | 'REGISTRATION_STAFF' | 'ACCOUNTANT' | 'FOLLOW_UP_STAFF' | 'TRAVEL_AGENT';
 
 export interface CustomPermissions {
     dashboard?: boolean;
@@ -33,6 +33,11 @@ export interface CustomPermissions {
         services?: boolean;    // الخدمات
         policies?: boolean;    // السياسات
         mockPackages?: boolean; // باقات الاختبارات التجريبية
+    };
+    agents?: {
+        access?: boolean;
+        manage?: boolean;
+        credits?: boolean;
     };
     accounting?: boolean;
     vouchers?: boolean;
@@ -81,6 +86,7 @@ export function getRoleLabel(role: UserRole | string): string {
         REGISTRATION_STAFF: 'موظف تسجيل',
         ACCOUNTANT: 'محاسب',
         FOLLOW_UP_STAFF: 'موظف متابعة',
+        TRAVEL_AGENT: 'وكيل سفر',
     };
     return labels[role as UserRole] || role;
 }
@@ -94,6 +100,7 @@ export function getAllRoles(): { value: UserRole; label: string }[] {
         { value: 'REGISTRATION_STAFF', label: 'موظف تسجيل' },
         { value: 'ACCOUNTANT', label: 'محاسب' },
         { value: 'FOLLOW_UP_STAFF', label: 'موظف متابعة' },
+        { value: 'TRAVEL_AGENT', label: 'وكيل سفر' },
     ];
 }
 
@@ -108,6 +115,7 @@ export function getDefaultPermissions(role: UserRole): CustomPermissions {
             mockExams: { access: true, sessions: true, professions: true, questions: true, manageActions: true },
             transport: { access: true, schedule: true, destinations: true, routes: true, pricing: true, rules: true, templates: true },
             pricing: { access: true, locations: true, services: true, policies: true, mockPackages: true },
+            agents: { access: true, manage: true, credits: true },
             accounting: true,
             vouchers: true,
             messaging: true,
@@ -119,6 +127,7 @@ export function getDefaultPermissions(role: UserRole): CustomPermissions {
             mockExams: { access: true, sessions: true, professions: false, questions: false, manageActions: false },
             transport: { access: true, schedule: true, destinations: false, routes: false, pricing: false, rules: false, templates: false },
             pricing: { access: false, locations: false, services: false, policies: false, mockPackages: false },
+            agents: { access: false, manage: false, credits: false },
             accounting: false,
             vouchers: true,
             messaging: true,
@@ -130,6 +139,7 @@ export function getDefaultPermissions(role: UserRole): CustomPermissions {
             mockExams: { access: false, sessions: false, professions: false, questions: false, manageActions: false },
             transport: { access: false, schedule: false, destinations: false, routes: false, pricing: false, rules: false, templates: false },
             pricing: { access: true, locations: false, services: true, policies: false, mockPackages: true },
+            agents: { access: true, manage: false, credits: true },
             accounting: true,
             vouchers: true,
             messaging: false,
@@ -141,9 +151,22 @@ export function getDefaultPermissions(role: UserRole): CustomPermissions {
             mockExams: { access: true, sessions: true, professions: false, questions: false, manageActions: false },
             transport: { access: true, schedule: true, destinations: false, routes: false, pricing: false, rules: false, templates: false },
             pricing: { access: false, locations: false, services: false, policies: false, mockPackages: false },
+            agents: { access: false, manage: false, credits: false },
             accounting: false,
             vouchers: false,
             messaging: true,
+            settings: false,
+        },
+        TRAVEL_AGENT: {
+            dashboard: false,
+            applicants: { view: false, actions: false, adminView: false, create: false, delete: false },
+            mockExams: { access: false, sessions: false, professions: false, questions: false, manageActions: false },
+            transport: { access: false, schedule: false, destinations: false, routes: false, pricing: false, rules: false, templates: false },
+            pricing: { access: false, locations: false, services: false, policies: false, mockPackages: false },
+            agents: { access: false, manage: false, credits: false },
+            accounting: false,
+            vouchers: false,
+            messaging: false,
             settings: false,
         },
     };

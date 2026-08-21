@@ -23,12 +23,12 @@ function calculateSuspicion(group: {
     totalAttempts: number;
     maxAttempts?: number;
     isBanned: boolean;
-    sessions: any[];
     type?: string;
     hasPurchase?: boolean;
+    customerType?: string;
 }, defaultFreeCredits: number = 2): SuspicionResult {
-    // Exempt both registered applicants (PRIVATE) and paying mock customers from suspicion scoring
-    if (group.type === "PRIVATE" || group.hasPurchase) {
+    // Exempt both registered applicants (PRIVATE), paying mock customers, and agent clients from suspicion scoring
+    if (group.type === "PRIVATE" || group.hasPurchase || group.customerType === "AGENT_CLIENT") {
         return { score: 0, level: "CLEAN", reasons: [] };
     }
 
@@ -193,16 +193,47 @@ export async function GET(request: Request) {
             ];
         }
 
+        // Exclude agent client sessions that have NOT been started yet (status is NEW)
+        where.NOT = [
+            {
+                agentOrderId: { not: null },
+                status: "NEW"
+            }
+        ];
+
         const sessionsList = await prisma.examSession.findMany({
             where,
             include: {
                 profession: { select: { name: true, id: true, maxAttempts: true } },
                 applicant: { select: { fullName: true, whatsappNumber: true } },
-                purchase: { include: { package: true } }
+                purchase: { include: { package: true } },
+                agentOrder: {
+                    include: {
+                        agent: { select: { companyName: true } }
+                    }
+                }
             },
             orderBy: { createdAt: 'desc' },
             take: 1000
         });
+
+        // Fetch mock purchases for all session applicants/phones to resolve maxAttempts
+        const applicantIds = sessionsList.map((s: any) => s.applicantId).filter(Boolean);
+        const phones = sessionsList.map((s: any) => s.visitorPhone || s.applicant?.whatsappNumber).filter(Boolean);
+        const uniquePhones = [...new Set(phones)];
+        const cleanPhones = uniquePhones.map(p => p.replace(/\D/g, ""));
+        const allPhoneVariants = [...new Set([...uniquePhones, ...cleanPhones.map(p => `+${p}`), ...cleanPhones])];
+
+        const mockPurchases = (applicantIds.length > 0 || allPhoneVariants.length > 0) ? await prisma.mockExamPurchase.findMany({
+            where: {
+                OR: [
+                    { applicantId: { in: applicantIds } },
+                    { phone: { in: allPhoneVariants } }
+                ]
+            },
+            include: { package: true },
+            orderBy: { createdAt: 'desc' }
+        }) : [];
 
         // ========================================
         // INTELLIGENT GROUPING (Fingerprint-first)
@@ -228,6 +259,37 @@ export async function GET(request: Request) {
                 groupKey = `tok:${sess.token}`;
             }
 
+            // Find matched purchases for this session's phone or applicantId
+            const sPhone = sess.visitorPhone || sess.applicant?.whatsappNumber;
+            const userPurchases = mockPurchases.filter((p: any) =>
+                (sess.applicantId && p.applicantId === sess.applicantId) ||
+                (sPhone && (p.phone === sPhone || p.phone.replace(/\D/g, "") === sPhone.replace(/\D/g, "")))
+            );
+
+            // Exclude free package purchases if there is at least one purchased/paid package
+            const nonFreePurchases = userPurchases.filter((p: any) => p.package ? !p.package.isFree : Number(p.amount) > 0);
+            const purchasesToUse = nonFreePurchases.length > 0 ? nonFreePurchases : userPurchases;
+
+            // Sort purchases to prioritize active and paid ones
+            purchasesToUse.sort((x: any, y: any) => {
+                const xFree = (x.package?.isFree || Number(x.amount || 0) === 0) ? 1 : 0;
+                const yFree = (y.package?.isFree || Number(y.amount || 0) === 0) ? 1 : 0;
+                if (xFree !== yFree) return xFree - yFree;
+
+                const xPaid = x.isPaid ? 1 : 0;
+                const yPaid = y.isPaid ? 1 : 0;
+                if (xPaid !== yPaid) return yPaid - xPaid;
+
+                return new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime();
+            });
+
+            const matchedPurchase = purchasesToUse[0] || sess.purchase || null;
+            const resolvedMaxAttempts = matchedPurchase?.totalCredits ?? defaultFreeCredits;
+            const resolvedHasPurchase = !!matchedPurchase;
+            const resolvedCustomerType = sess.agentOrderId 
+                ? "AGENT_CLIENT" 
+                : (sess.type === "PRIVATE" ? "APPLICANT" : (matchedPurchase ? "CUSTOMER" : "VISITOR"));
+
             if (!groupedMap.has(groupKey)) {
                 groupedMap.set(groupKey, {
                     id: groupKey,
@@ -247,23 +309,28 @@ export async function GET(request: Request) {
                     hasSetLastScore: false,
                     isPassed: false,
                     totalAttempts: 0,
-                    maxAttempts: sess.purchase?.totalCredits ?? defaultFreeCredits,
+                    maxAttempts: resolvedMaxAttempts,
                     isBanned: false,
                     status: sess.status,
                     createdAt: sess.createdAt,
-                    hasPurchase: !!sess.purchaseId,
-                    customerType: sess.type === "PRIVATE" ? "APPLICANT" : (sess.purchaseId ? "CUSTOMER" : "VISITOR")
+                    hasPurchase: resolvedHasPurchase,
+                    customerType: resolvedCustomerType,
+                    agentName: sess.agentOrder?.agent?.companyName || null
                 });
             }
 
             const group = groupedMap.get(groupKey);
 
-            if (sess.purchase?.totalCredits) {
-                group.maxAttempts = sess.purchase.totalCredits;
+            if (resolvedMaxAttempts > group.maxAttempts) {
+                group.maxAttempts = resolvedMaxAttempts;
             }
-            if (sess.purchaseId) {
+            if (resolvedHasPurchase) {
                 group.hasPurchase = true;
-                if (group.type !== "PRIVATE") group.customerType = "CUSTOMER";
+                if (group.type !== "PRIVATE" && group.customerType !== "AGENT_CLIENT") group.customerType = "CUSTOMER";
+            }
+            if (resolvedCustomerType === "AGENT_CLIENT") {
+                group.customerType = "AGENT_CLIENT";
+                group.agentName = sess.agentOrder?.agent?.companyName || null;
             }
 
             // Collect identity data
@@ -317,6 +384,7 @@ export async function GET(request: Request) {
                 displayPhone: g.displayPhone,
                 type: g.type,
                 customerType: g.customerType,
+                agentName: g.agentName,
                 hasPurchase: g.hasPurchase,
                 profession: g.profession,
                 allNames: Array.from(g.allNames),
@@ -378,15 +446,15 @@ export async function POST(request: Request) {
             // Normalize phone for consistent matching
             const normalizedPhone = visitorPhone.replace(/[\s\-\(\)]/g, "");
 
-            // Count ALL consumed attempts (SUBMITTED, EXPIRED, TIMEOUT)
+            // Count ALL previous attempts for this visitor phone and profession
             const prevAttempts = await prisma.examSession.count({
                 where: { 
+                    professionId,
                     OR: [
                         { visitorPhone: normalizedPhone },
                         { visitorPhone: normalizedPhone.replace(/^\+/, "") },
                         { visitorPhone: visitorPhone }
-                    ],
-                    status: { in: ["SUBMITTED", "EXPIRED", "TIMEOUT"] } 
+                    ]
                 }
             });
 
@@ -424,7 +492,7 @@ export async function POST(request: Request) {
 
         // Count previous attempts for this applicant
         const prevAttempts = await prisma.examSession.count({
-            where: { professionId, applicantId, status: "SUBMITTED" }
+            where: { professionId, applicantId }
         });
 
         const newSession = await prisma.examSession.create({

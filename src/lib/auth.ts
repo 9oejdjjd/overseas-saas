@@ -23,6 +23,13 @@ export const authOptions: NextAuthOptions = {
 
                 const user = await prisma.user.findUnique({
                     where: { email: credentials.email },
+                    include: {
+                        travelAgent: {
+                            select: {
+                                companyName: true,
+                            }
+                        }
+                    }
                 });
 
                 if (!user) return null;
@@ -37,6 +44,9 @@ export const authOptions: NextAuthOptions = {
                     role: user.role,
                     requirePasswordChange: user.requirePasswordChange,
                     permissions: user.permissions || null,
+                    agentId: user.agentId,
+                    companyName: user.travelAgent?.companyName || null,
+                    isAgentOwner: user.isAgentOwner,
                 };
             },
         }),
@@ -48,6 +58,9 @@ export const authOptions: NextAuthOptions = {
                 session.user.role = token.role as string;
                 session.user.requirePasswordChange = token.requirePasswordChange as boolean;
                 session.user.permissions = token.permissions;
+                session.user.agentId = token.agentId;
+                session.user.companyName = token.companyName;
+                session.user.isAgentOwner = token.isAgentOwner;
             }
             return session;
         },
@@ -57,17 +70,30 @@ export const authOptions: NextAuthOptions = {
                 token.role = user.role;
                 token.requirePasswordChange = user.requirePasswordChange;
                 token.permissions = user.permissions;
-            } else if (token?.id && token.requirePasswordChange) {
+                token.agentId = user.agentId;
+                token.companyName = user.companyName;
+                token.isAgentOwner = user.isAgentOwner;
+            } else if (token?.id) {
                 try {
                     const dbUser = await prisma.user.findUnique({
                         where: { id: token.id },
-                        select: { requirePasswordChange: true }
+                        select: {
+                            requirePasswordChange: true,
+                            agentId: true,
+                            isAgentOwner: true,
+                            travelAgent: {
+                                select: { companyName: true }
+                            }
+                        }
                     });
                     if (dbUser) {
                         token.requirePasswordChange = dbUser.requirePasswordChange;
+                        token.agentId = dbUser.agentId;
+                        token.isAgentOwner = dbUser.isAgentOwner;
+                        token.companyName = dbUser.travelAgent?.companyName || null;
                     }
                 } catch (e) {
-                    console.error("Error fetching requirePasswordChange in jwt callback:", e);
+                    console.error("Error fetching user updates in jwt callback:", e);
                 }
             }
             return token;

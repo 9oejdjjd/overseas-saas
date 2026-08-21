@@ -477,10 +477,10 @@ export async function GET(request: NextRequest) {
             if (regDateTo) whereClause.createdAt.lte = new Date(regDateTo);
         }
 
-        // ── Fetch Applicants (skip if VISITORS only) ──
+        // ── Fetch Applicants (skip if VISITORS or AGENT_CLIENTS only) ──
         let applicantRows: any[] = [];
 
-        if (viewType !== 'VISITORS') {
+        if (viewType !== 'VISITORS' && viewType !== 'AGENT_CLIENTS' && status !== 'VISITOR' && status !== 'AGENT_CLIENT') {
             const apps = await prisma.applicant.findMany({
                 where: whereClause,
                 select: {
@@ -512,12 +512,18 @@ export async function GET(request: NextRequest) {
             }) : [];
 
             applicantRows = apps.map((a: any) => {
-                const userPurchases = mockPurchases.filter((p: any) =>
+                let userPurchases = mockPurchases.filter((p: any) =>
                     p.applicantId === a.id || p.phone === a.phone || p.phone === `+${a.phone}` || `+${p.phone}` === a.phone
                 );
 
                 if (userPurchases.length === 0) {
                     return { ...a, isVisitor: false, mockPurchase: null };
+                }
+
+                // Exclude free package purchases if there is at least one purchased/paid package
+                const nonFreePurchases = userPurchases.filter((p: any) => p.package ? !p.package.isFree : Number(p.amount) > 0);
+                if (nonFreePurchases.length > 0) {
+                    userPurchases = nonFreePurchases;
                 }
 
                 // Sort: Direct applicantId match > Non-free > Paid > Recent
@@ -567,6 +573,8 @@ export async function GET(request: NextRequest) {
                         usedCredits: finalUsedCredits,
                         status: primaryPurchase.status,
                         expiresAt: primaryPurchase.expiresAt?.toISOString() || null,
+                        isPaid: primaryPurchase.isPaid,
+                        amount: Number(primaryPurchase.amount || 0),
                     },
                 };
             });
@@ -574,7 +582,7 @@ export async function GET(request: NextRequest) {
 
         // ── Fetch Visitors (from MockExamPurchase) ──
         let visitorRows: any[] = [];
-        if (viewType !== 'APPLICANTS' && status !== 'PASSED' && status !== 'FAILED' && status !== 'ABSENT' && status !== 'EXAM_SCHEDULED' && status !== 'NEW_REGISTRATION') {
+        if (viewType !== 'APPLICANTS' && viewType !== 'AGENT_CLIENTS' && status !== 'AGENT_CLIENT' && status !== 'PASSED' && status !== 'FAILED' && status !== 'ABSENT' && status !== 'EXAM_SCHEDULED' && status !== 'NEW_REGISTRATION') {
             const visitorWhere: any = {};
             if (search) {
                 visitorWhere.OR = [
@@ -585,7 +593,7 @@ export async function GET(request: NextRequest) {
 
             const purchases = await prisma.mockExamPurchase.findMany({
                 where: visitorWhere,
-                include: { package: { select: { name: true } } },
+                include: { package: { select: { name: true, isFree: true } } },
                 orderBy: { createdAt: 'desc' },
             });
 
@@ -611,25 +619,29 @@ export async function GET(request: NextRequest) {
                 });
 
             visitorRows = Array.from(phoneGroups.entries()).map(([normalizedPhone, groupPurchases]) => {
+                // Exclude free package purchases if there is at least one purchased/paid package
+                const nonFreePurchases = groupPurchases.filter((p: any) => p.package ? !p.package.isFree : Number(p.amount) > 0);
+                const purchasesToUse = nonFreePurchases.length > 0 ? nonFreePurchases : groupPurchases;
+
                 // Sort by createdAt desc to get the latest first
-                groupPurchases.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                purchasesToUse.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 
                 // Pick the best name (first non-generic name found)
-                const bestName = groupPurchases.find((p: any) => 
+                const bestName = purchasesToUse.find((p: any) => 
                     p.buyerName && p.buyerName !== "تجديد" && p.buyerName !== "مشترك" && p.buyerName !== "زائر"
-                )?.buyerName || groupPurchases[0].buyerName || "زائر";
+                )?.buyerName || purchasesToUse[0].buyerName || "زائر";
                 
                 // Pick the most recent active purchase, or fallback to the latest one
-                const activePurchase = groupPurchases.find((p: any) => 
+                const activePurchase = purchasesToUse.find((p: any) => 
                     (p.status === "ACTIVE" || p.status === "PAID") && p.isPaid
-                ) || groupPurchases[0];
+                ) || purchasesToUse[0];
 
                 // Sum total credits and used credits across ALL purchases for this phone
-                const totalCreditsAll = groupPurchases.reduce((sum: number, p: any) => sum + (p.totalCredits === -1 ? 0 : p.totalCredits), 0);
-                const usedCreditsAll = groupPurchases.reduce((sum: number, p: any) => sum + p.usedCredits, 0);
-                const hasUnlimited = groupPurchases.some((p: any) => p.totalCredits === -1);
+                const totalCreditsAll = purchasesToUse.reduce((sum: number, p: any) => sum + (p.totalCredits === -1 ? 0 : p.totalCredits), 0);
+                const usedCreditsAll = purchasesToUse.reduce((sum: number, p: any) => sum + p.usedCredits, 0);
+                const hasUnlimited = purchasesToUse.some((p: any) => p.totalCredits === -1);
 
-                const latestEmail = groupPurchases.find((p: any) => p.email)?.email || null;
+                const latestEmail = purchasesToUse.find((p: any) => p.email)?.email || null;
 
                 return {
                     id: `visitor_${activePurchase.id}`,
@@ -644,12 +656,12 @@ export async function GET(request: NextRequest) {
                     remainingBalance: 0,
                     hasTransportation: false,
                     ticket: null,
-                    totalAmount: 0, discount: 0, amountPaid: groupPurchases.reduce((sum: number, p: any) => sum + Number(p.amount), 0),
-                    createdAt: groupPurchases[groupPurchases.length - 1].createdAt, // oldest creation date
+                    totalAmount: 0, discount: 0, amountPaid: purchasesToUse.reduce((sum: number, p: any) => sum + Number(p.amount), 0),
+                    createdAt: purchasesToUse[purchasesToUse.length - 1].createdAt, // oldest creation date
                     isVisitor: true,
                     visitorPurchaseId: activePurchase.id,
                     email: latestEmail,
-                    totalPurchases: groupPurchases.length,
+                    totalPurchases: purchasesToUse.length,
                     mockPurchase: {
                         id: activePurchase.id,
                         packageId: activePurchase.packageId,
@@ -659,12 +671,122 @@ export async function GET(request: NextRequest) {
                         status: activePurchase.status,
                         expiresAt: activePurchase.expiresAt?.toISOString() || null,
                         email: latestEmail,
+                        isPaid: activePurchase.isPaid,
+                        amount: Number(activePurchase.amount || 0),
                     }
                 };
             });
         }
 
-        const mergedData = [...applicantRows, ...visitorRows];
+        // ── Fetch Agent Clients (if viewType is ALL or AGENT_CLIENTS, or status is AGENT_CLIENT) ──
+        let agentClientRows: any[] = [];
+        if (
+            viewType !== 'APPLICANTS' &&
+            viewType !== 'VISITORS' &&
+            status !== 'VISITOR' &&
+            status !== 'NEW_REGISTRATION' &&
+            status !== 'ACCOUNT_CREATED' &&
+            status !== 'EXAM_SCHEDULED' &&
+            status !== 'AWAITING_EXAM' &&
+            status !== 'ATTENDED_EXAM' &&
+            status !== 'PASSED' &&
+            status !== 'FAILED' &&
+            status !== 'POSTPONED' &&
+            status !== 'CANCELLED' &&
+            status !== 'SERVICES_CONFIGURED' &&
+            status !== 'ABSENT'
+        ) {
+            const agentClientWhere: any = {};
+            if (search) {
+                agentClientWhere.OR = [
+                    { fullName: { contains: search, mode: 'insensitive' } },
+                    { phone: { contains: search } },
+                    { whatsappNumber: { contains: search } },
+                    { email: { contains: search, mode: 'insensitive' } },
+                ];
+            }
+
+            const agentClients = await prisma.agentClient.findMany({
+                where: agentClientWhere,
+                include: {
+                    agent: {
+                        select: { companyName: true, ownerName: true, phone: true }
+                    },
+                    examOrders: {
+                        include: {
+                            session: {
+                                select: { token: true, status: true, score: true, isPassed: true }
+                            },
+                            profession: {
+                                select: { name: true }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            agentClientRows = agentClients.map((ac: any) => {
+                const latestOrder = ac.examOrders[0];
+                let mockPurchaseData = null;
+
+                if (latestOrder) {
+                    mockPurchaseData = {
+                        id: latestOrder.id,
+                        packageId: null,
+                        packageName: latestOrder.profession?.name || "اختبار تجريبي للوكيل",
+                        totalCredits: ac.examOrders.length,
+                        usedCredits: ac.examOrders.filter((o: any) => o.status === "COMPLETED").length,
+                        status: latestOrder.status,
+                        expiresAt: null,
+                        isPaid: true,
+                        amount: Number(latestOrder.examPrice || 0)
+                    };
+                }
+
+                return {
+                    id: ac.id,
+                    fullName: ac.fullName,
+                    phone: ac.phone,
+                    whatsappNumber: ac.whatsappNumber || ac.phone,
+                    applicantCode: null,
+                    profession: ac.profession || (latestOrder?.profession?.name) || null,
+                    examDate: latestOrder?.sentAt || null,
+                    examTime: null,
+                    location: null,
+                    examCenter: null,
+                    examLocation: "",
+                    status: "AGENT_CLIENT",
+                    remainingBalance: 0,
+                    hasTransportation: false,
+                    ticket: null,
+                    totalAmount: latestOrder ? Number(latestOrder.examPrice) : 0,
+                    discount: 0,
+                    amountPaid: latestOrder ? Number(latestOrder.examPrice) : 0,
+                    createdAt: ac.createdAt,
+                    isVisitor: false,
+                    isAgentClient: true,
+                    agentName: ac.agent?.companyName || "وكيل غير معروف",
+                    agentOwner: ac.agent?.ownerName || "",
+                    agentPhone: ac.agent?.phone || "",
+                    agentEmail: ac.agent?.email || "",
+                    examOrders: ac.examOrders.map((order: any) => ({
+                        id: order.id,
+                        professionName: order.profession?.name,
+                        status: order.status,
+                        score: order.score ? Number(order.score) : null,
+                        isPassed: order.isPassed,
+                        examLink: order.examLink,
+                        sentAt: order.sentAt,
+                        completedAt: order.completedAt
+                    })),
+                    mockPurchase: mockPurchaseData
+                };
+            });
+        }
+
+        const mergedData = [...applicantRows, ...visitorRows, ...agentClientRows];
 
         // Global Sort
         const sort = searchParams.get("sort") || "createdAt";

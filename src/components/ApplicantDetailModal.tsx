@@ -7,6 +7,7 @@ import { ExtendedApplicant } from "@/types/applicant";
 import { useApplicantData } from "@/hooks/useApplicantData";
 import { ApplicantSetupWizard } from "./ApplicantSetupWizard";
 import { VisitorDetailView } from "./applicants/VisitorDetailView";
+import { AgentClientDetailView } from "./applicants/AgentClientDetailView";
 
 interface Props {
     applicant: ExtendedApplicant | null;
@@ -17,6 +18,7 @@ interface Props {
 
 export function ApplicantDetailModal({ applicant: initialApplicant, open, onClose, onUpdate }: Props) {
     const isVisitor = !!(initialApplicant as any)?.isVisitor;
+    const isAgentClient = !!(initialApplicant as any)?.isAgentClient;
 
     const {
         applicant,
@@ -26,7 +28,7 @@ export function ApplicantDetailModal({ applicant: initialApplicant, open, onClos
         transportRoute,
         cancellationPolicies,
         refresh
-    } = useApplicantData(open && !isVisitor ? initialApplicant : null);
+    } = useApplicantData(open && !isVisitor && !isAgentClient ? initialApplicant : null);
 
     const handleUpdate = () => {
         if (!isVisitor) refresh();
@@ -75,6 +77,12 @@ export function ApplicantDetailModal({ applicant: initialApplicant, open, onClos
                 {isVisitor ? (
                     <VisitorDetailView
                         visitor={initialApplicant}
+                        onUpdate={handleUpdate}
+                        onClose={onClose}
+                    />
+                ) : isAgentClient ? (
+                    <AgentClientDetailView
+                        agentClient={initialApplicant}
                         onUpdate={handleUpdate}
                         onClose={onClose}
                     />

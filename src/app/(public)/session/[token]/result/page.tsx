@@ -466,20 +466,74 @@ export default function ExamResultPage() {
                                 </p>
                             </div>
                         ) : result.packageFeatures?.showResultQuestions === false ? (
-                            <div className="bg-gradient-to-b from-blue-900/20 to-transparent border border-blue-500/20 rounded-[2.5rem] p-10 md:p-14 text-center flex flex-col items-center relative overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.1)]">
-                                <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-6 border border-blue-500/30 relative z-10 shadow-[0_0_30px_rgba(37,99,235,0.2)]">
-                                    <Lock size={36} className="text-blue-400" />
+                            <div className="bg-gradient-to-br from-[#0c152b] via-[#080e1c] to-[#0a1226] border border-blue-500/20 rounded-[2.5rem] p-6 md:p-14 text-center flex flex-col items-center relative overflow-hidden shadow-[0_0_80px_rgba(37,99,235,0.15)] w-full mx-auto">
+                                <div className="absolute top-0 right-0 w-60 h-60 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+                                <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+                                
+                                <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 border border-blue-400/30 relative z-10 shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+                                    <Lock size={32} className="text-white animate-pulse" />
                                 </div>
-                                <h3 className="text-2xl md:text-3xl font-black text-white mb-4 relative z-10">اكتشف أخطاءك وتعلم منها!</h3>
-                                <p className="text-slate-300 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8 relative z-10">
-                                    المحاولة المجانية منحتك لمحة سريعة عن مستواك. لكن للاستفادة الحقيقية، تحتاج لمعرفة إجاباتك الخاطئة والشروحات التفصيلية لكل سؤال لضمان عدم تكرارها في الاختبار الفعلي للهيئة.
+                                
+                                <h3 className="text-2xl md:text-4xl font-black text-white mb-4 relative z-10">
+                                    اكتشف أخطاءك وتعلم منها واضمن نجاحك! 🚀
+                                </h3>
+                                
+                                <p className="text-slate-300 text-sm md:text-lg max-w-2xl mx-auto leading-relaxed mb-10 relative z-10 font-medium">
+                                    المحاولة المجانية منحتك لمحة سريعة عن مستواك، ولكن للاستعداد الحقيقي لاجتياز فحص الهيئة، تحتاج إلى الاستفادة من الميزات الكاملة للاشتراك المدفوع:
                                 </p>
-                                <Link href="/pricing" className="relative z-10 inline-flex flex-col items-center gap-2 group">
-                                    <div className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black text-lg transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)] hover:shadow-[0_0_40px_rgba(37,99,235,0.6)] hover:-translate-y-1 flex items-center gap-3">
+
+                                {/* شبكة الميزات الاحترافية */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-right mb-12 relative z-10">
+                                    {[
+                                        {
+                                            title: "جميع أنواع الأسئلة التقنية والعملية",
+                                            desc: "ستحصل على إمكانية اختبار مهاراتك عبر خيارات متعددة، وصح/خطأ، وإكمال فراغات، بالإضافة للأسئلة القائمة على الصور التوضيحية لرموز الطبلون واللوحات الفنية.",
+                                            icon: <Sparkles className="w-5 h-5 text-indigo-400" />
+                                        },
+                                        {
+                                            title: "أسئلة متنوعة وشاملة تغطي كل جوانب المهنة",
+                                            desc: "بنك الأسئلة مصمم ليغطي 100% من محاور الفحص المهني (السلامة المهنية، تشخيص الأعطال، المهارات العامة، والصحة والسلامة في بيئة العمل).",
+                                            icon: <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                                        },
+                                        {
+                                            title: "مراجعة إجاباتك مع شرح دقيق لأخطائك",
+                                            desc: "لا تكتفِ بمعرفة الدرجة؛ استعرض كل سؤال أخطأت فيه مع قراءة تحليل وتبرير فني وعلمي مفصل يوضح لك السبب ويصحح مفهومك فوراً.",
+                                            icon: <BookOpen className="w-5 h-5 text-blue-400" />
+                                        },
+                                        {
+                                            title: "محاكاة كاملة ودقيقة لبيئة الاختبار الرسمي",
+                                            desc: "اختبر نفسك تحت ضغط الوقت الحقيقي وبنفس وزن المحاور المعتمد رسمياً في فحص الاعتماد المهني السعودي لتبديد الخوف والرهبة.",
+                                            icon: <Target className="w-5 h-5 text-red-400" />
+                                        },
+                                        {
+                                            title: "تحديثات دورية متزامنة مع تعديلات الهيئة",
+                                            desc: "نحدث بنك الأسئلة باستمرار لنواكب التغييرات الدورية الصادرة رسمياً لنضمن لك التدرب على أحدث النماذج المعتمدة.",
+                                            icon: <RefreshCw className="w-5 h-5 text-amber-400" />
+                                        },
+                                        {
+                                            title: "تقارير تشخيصية تفصيلية وموجهة",
+                                            desc: "تحليل ذكي يكشف عن نقاط الضعف والمحاور المهنية التي تحتاج لمزيد من التركيز والتقوية، مما يوفر نصف وقت المذاكرة المعتاد.",
+                                            icon: <BarChart3 className="w-5 h-5 text-purple-400" />
+                                        }
+                                    ].map((feat, i) => (
+                                        <div key={i} className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-blue-500/10 hover:bg-white/[0.04] transition-all">
+                                            <div className="shrink-0 w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
+                                                {feat.icon}
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h4 className="font-black text-slate-100 text-sm md:text-base">{feat.title}</h4>
+                                                <p className="text-slate-400 text-xs md:text-sm leading-relaxed font-semibold">{feat.desc}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <Link href="/pricing" className="relative z-10 inline-flex flex-col items-center gap-2 group w-full sm:w-auto">
+                                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-10 py-5 rounded-2xl font-black text-lg transition-all shadow-[0_8px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_12px_40px_rgba(37,99,235,0.5)] hover:-translate-y-1 flex items-center justify-center gap-3 w-full">
                                         <Award size={24} />
-                                        <span>ترقية الباقة وفتح الشروحات</span>
+                                        <span>ترقية الباقة وفتح الميزات والشروحات فوراً</span>
                                     </div>
-                                    <span className="text-slate-400 text-xs font-bold mt-2">افتح جميع الأسئلة والشروحات فوراً</span>
+                                    <span className="text-slate-400 text-xs font-bold mt-2">انضم لأكثر من 2000 متقدم اجتازوا الاختبار بنجاح</span>
                                 </Link>
                             </div>
                         ) : (

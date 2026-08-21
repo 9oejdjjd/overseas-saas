@@ -5,7 +5,7 @@ import { Plus, Settings, RefreshCw, Loader2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { ApplicantDetailModal } from "@/components/ApplicantDetailModal";
 import { ApplicantsDataTable } from "@/components/applicants/table/ApplicantsDataTable";
-import { columns } from "@/components/applicants/table/columns";
+import { columns, ApplicantData } from "@/components/applicants/table/columns";
 import { ActionCenter } from "@/components/applicants/ActionCenter";
 import { Applicant } from "@/types/applicant";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ function AccessDenied() {
 export default function ApplicantsPage() {
   const { data: session, status } = useSession();
   // --- State for Server-Side Data ---
-  const [data, setData] = useState<Applicant[]>([]);
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -56,7 +56,7 @@ export default function ApplicantsPage() {
   const [locations, setLocations] = useState<{ id: string, name: string }[]>([]);
 
   // Modal State
-  const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
+  const [selectedApplicant, setSelectedApplicant] = useState<any | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   // --- Fetch Data ---
@@ -90,7 +90,7 @@ export default function ApplicantsPage() {
 
       // Update modal data if open
       if (selectedApplicant) {
-        const fresh = result.data?.find((a: Applicant) => a.id === selectedApplicant.id);
+        const fresh = result.data?.find((a: any) => a.id === selectedApplicant.id);
         if (fresh) setSelectedApplicant(fresh);
       }
     } catch (error) {
@@ -134,7 +134,7 @@ export default function ApplicantsPage() {
 
 
   // --- Handlers ---
-  const handleOpenModal = (applicant: Applicant) => {
+  const handleOpenModal = (applicant: any) => {
     setSelectedApplicant(applicant);
     setModalOpen(true);
   };

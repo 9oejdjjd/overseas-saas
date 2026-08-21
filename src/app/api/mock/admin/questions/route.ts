@@ -24,7 +24,18 @@ export async function GET(request: Request) {
         if (professionId && professionId !== "ALL") where.professionId = professionId;
         if (isActive !== null) where.isActive = isActive === "true";
         if (axis && axis !== "ALL") where.axis = axis;
-        if (type && type !== "ALL") where.type = type;
+        if (type && type !== "ALL") {
+            if (type === "IMAGE") {
+                where.imageUrl = { not: null, notIn: ["", "null"] };
+            } else {
+                where.type = type;
+                where.OR = [
+                    { imageUrl: null },
+                    { imageUrl: "" },
+                    { imageUrl: "null" }
+                ];
+            }
+        }
         if (cognitiveLevel && cognitiveLevel !== "ALL") where.cognitiveLevel = cognitiveLevel;
         if (difficulty && difficulty !== "ALL") where.difficulty = difficulty;
 

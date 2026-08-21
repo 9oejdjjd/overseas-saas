@@ -19,7 +19,7 @@ const formatArabicTime = (timeStr: string | null | undefined) => {
     return `${h}:${minutes} ${ampm}`;
 };
 
-// Helper: Smart Profession Lookup with Fallback
+// Helper: Smart Profession Lookup (no fallback to prevent wrong profession)
 async function findActiveProfession(professionQuery: string | null | undefined) {
     if (professionQuery && professionQuery.trim()) {
         const trimmed = professionQuery.trim();
@@ -48,12 +48,8 @@ async function findActiveProfession(professionQuery: string | null | undefined) 
         if (matchedProf) return matchedProf;
     }
 
-    // 5. Fallback: First active profession so session creation never fails
-    const fallbackProf = await prisma.profession.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' }
-    });
-    return fallbackProf;
+    // No fallback - return null to prevent creating sessions for wrong profession
+    return null;
 }
 
 export async function POST(request: Request) {
@@ -89,6 +85,27 @@ export async function POST(request: Request) {
                     transportFrom: true,
                 }
             });
+            if (!applicantData) {
+                // Check if it's an AgentClient
+                const agentClient = await prisma.agentClient.findUnique({
+                    where: { id: applicantId },
+                    include: {
+                        agent: { select: { companyName: true } }
+                    }
+                });
+
+                if (agentClient) {
+                    applicantData = {
+                        id: agentClient.id,
+                        fullName: agentClient.fullName,
+                        phone: agentClient.phone,
+                        whatsappNumber: agentClient.whatsappNumber || agentClient.phone,
+                        profession: agentClient.profession || null,
+                        isAgentClient: true,
+                        agentName: agentClient.agent?.companyName || "وكيل معتمد"
+                    };
+                }
+            }
             if (!applicantData) {
                 return NextResponse.json({ error: "المتقدم غير موجود" }, { status: 404 });
             }
@@ -170,11 +187,24 @@ export async function POST(request: Request) {
         if (text.includes("{examLink}") || text.includes("{mockLink}")) {
             let activeSession = null;
             
-            if (applicantId) {
+            if (applicantId && applicantData && !applicantData.isAgentClient) {
                 activeSession = await prisma.examSession.findFirst({
                     where: { applicantId: applicantId, status: { in: ["NEW", "STARTED", "RESUMED"] } },
                     orderBy: { createdAt: "desc" }
                 });
+            } else if (applicantId && applicantData && applicantData.isAgentClient) {
+                const orders = await prisma.agentExamOrder.findMany({
+                    where: { clientId: applicantId, sessionId: { not: null } },
+                    select: { sessionId: true }
+                });
+                const sessionIds = orders.map(o => o.sessionId as string).filter(Boolean);
+                
+                if (sessionIds.length > 0) {
+                    activeSession = await prisma.examSession.findFirst({
+                        where: { id: { in: sessionIds }, status: { in: ["NEW", "STARTED", "RESUMED"] } },
+                        orderBy: { createdAt: "desc" }
+                    });
+                }
             } else if (mockPurchase) {
                 activeSession = await prisma.examSession.findFirst({
                     where: { purchaseId: mockPurchase.id, status: { in: ["NEW", "STARTED", "RESUMED"] } },
@@ -183,9 +213,34 @@ export async function POST(request: Request) {
             }
 
             // Auto-create session if none exists
-            if (!activeSession) {
+            if (!activeSession && applicantData && !applicantData.isAgentClient) {
                 try {
-                    const profession = await findActiveProfession(applicantData.profession);
+                    // Try applicant's profession first
+                    let profession = await findActiveProfession(applicantData.profession);
+
+                    // For registered applicants: if profession not found, check their MockExamPurchase profession
+                    if (!profession && applicantId) {
+                        const reqPhone = applicantData.phone || applicantData.whatsappNumber || "";
+                        const phoneVariants = reqPhone ? [reqPhone, reqPhone.replace(/^\+/, ""), reqPhone.startsWith('+') ? reqPhone.slice(1) : `+${reqPhone}`] : [];
+                        const purchaseWithProfession = await prisma.mockExamPurchase.findFirst({
+                            where: {
+                                OR: [
+                                    { applicantId: applicantId },
+                                    ...(phoneVariants.length > 0 ? [{ phone: { in: phoneVariants } }] : [])
+                                ],
+                                profession: { not: null }
+                            },
+                            orderBy: { updatedAt: 'desc' }
+                        });
+                        if (purchaseWithProfession?.profession) {
+                            profession = await findActiveProfession(purchaseWithProfession.profession);
+                            if (profession) {
+                                applicantData.profession = profession.name;
+                                text = text.replace(/{profession}/g, profession.name);
+                            }
+                        }
+                    }
+
                     if (profession) {
                         // Fill profession name if applicant's profession text was empty
                         if (!applicantData.profession) {
@@ -198,7 +253,7 @@ export async function POST(request: Request) {
                         const phoneWithoutPlus = reqPhoneNum ? reqPhoneNum.replace(/^\+/, "") : "";
                         const uniquePhones = reqPhoneNum ? [reqPhoneNum, phoneWithoutPlus, reqPhoneNum.startsWith('+') ? reqPhoneNum.slice(1) : `+${reqPhoneNum}`] : [];
 
-                        let activePurchase = await prisma.mockExamPurchase.findFirst({
+                        const activePurchase = await prisma.mockExamPurchase.findFirst({
                             where: {
                                 OR: [
                                     ...(applicantId ? [{ applicantId: applicantId }] : []),
@@ -209,71 +264,43 @@ export async function POST(request: Request) {
                             orderBy: { createdAt: "desc" }
                         });
 
-                        if (activePurchase) {
-                            if (activePurchase.totalCredits !== -1 && activePurchase.usedCredits >= activePurchase.totalCredits) {
-                                activePurchase = null;
-                            }
-                            if (activePurchase?.expiresAt && activePurchase.expiresAt < new Date()) {
-                                activePurchase = null;
-                            }
-                        }
+                        // Verify credits availability
+                        const hasCredits = activePurchase && (activePurchase.totalCredits === -1 || activePurchase.usedCredits < activePurchase.totalCredits) && !(activePurchase.expiresAt && activePurchase.expiresAt < new Date());
 
-                        // Auto-assign free package if none active and trigger is exam link
-                        if (!activePurchase && trigger === "ON_MOCK_EXAM_LINK") {
-                            const freePackage = await prisma.mockExamPackage.findFirst({
-                                where: { isFree: true, isActive: true },
-                                orderBy: { sortOrder: "asc" }
-                            });
-
-                            if (freePackage) {
-                                activePurchase = await prisma.mockExamPurchase.create({
-                                    data: {
-                                        phone: reqPhoneNum || "000000000",
-                                        buyerName: applicantData.fullName,
-                                        applicantId: applicantId || null,
-                                        packageId: freePackage.id,
-                                        totalCredits: freePackage.examCredits,
-                                        amount: 0,
-                                        isPaid: true,
-                                        status: "ACTIVE",
-                                        activatedAt: new Date(),
-                                        expiresAt: freePackage.validityDays ? new Date(Date.now() + freePackage.validityDays * 24 * 60 * 60 * 1000) : null
-                                    }
+                        if (activePurchase && hasCredits) {
+                            // Deduct a credit if applicable
+                            if (activePurchase.totalCredits !== -1) {
+                                await prisma.mockExamPurchase.update({
+                                    where: { id: activePurchase.id },
+                                    data: { usedCredits: { increment: 1 } }
                                 });
                             }
-                        }
 
-                        // Deduct a credit if applicable
-                        if (activePurchase && activePurchase.totalCredits !== -1) {
-                            await prisma.mockExamPurchase.update({
-                                where: { id: activePurchase.id },
-                                data: { usedCredits: { increment: 1 } }
+                            const prevSessionsCount = await prisma.examSession.count({
+                                where: {
+                                    professionId: profession.id,
+                                    OR: [
+                                        ...(applicantId ? [{ applicantId }] : []),
+                                        { visitorPhone: activePurchase.phone },
+                                        { visitorPhone: activePurchase.phone.replace(/^\+/, "") }
+                                    ]
+                                }
+                            });
+
+                            activeSession = await prisma.examSession.create({
+                                data: {
+                                    type: applicantId ? "PRIVATE" : "PUBLIC",
+                                    status: "NEW",
+                                    professionId: profession.id,
+                                    passingScore: profession.passingScore,
+                                    attemptNumber: prevSessionsCount + 1,
+                                    applicantId: applicantId || null,
+                                    purchaseId: activePurchase.id,
+                                    visitorPhone: activePurchase.phone,
+                                    visitorName: activePurchase.buyerName
+                                }
                             });
                         }
-
-                        const sessionData: any = {
-                            type: applicantId ? "PRIVATE" : "PUBLIC",
-                            status: "NEW",
-                            professionId: profession.id,
-                            passingScore: profession.passingScore,
-                            attemptNumber: activePurchase ? (activePurchase.usedCredits + 1) : 1
-                        };
-                        
-                        if (applicantId) {
-                            sessionData.applicantId = applicantId;
-                        }
-                        if (activePurchase) {
-                            sessionData.purchaseId = activePurchase.id;
-                            sessionData.visitorPhone = activePurchase.phone;
-                            sessionData.visitorName = activePurchase.buyerName;
-                        } else {
-                            sessionData.visitorPhone = applicantData.phone;
-                            sessionData.visitorName = applicantData.fullName;
-                        }
-
-                        activeSession = await prisma.examSession.create({
-                            data: sessionData
-                        });
                     }
                 } catch (err) {
                     console.error("[Generate] Failed to auto-create exam session:", err);

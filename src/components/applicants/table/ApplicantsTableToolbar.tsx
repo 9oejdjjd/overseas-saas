@@ -71,6 +71,7 @@ export function ApplicantsTableToolbar<TData>({
                         <SelectItem value="POSTPONED">مؤجل</SelectItem>
                         <SelectItem value="CANCELLED">ملغي</SelectItem>
                         <SelectItem value="SERVICES_CONFIGURED">تم تكوين الخدمات</SelectItem>
+                        <SelectItem value="AGENT_CLIENT">عميل وكيل</SelectItem>
                     </SelectContent>
                 </Select>
 
@@ -102,6 +103,7 @@ export function ApplicantsTableToolbar<TData>({
                         <SelectItem value="ALL">الكل</SelectItem>
                         <SelectItem value="APPLICANTS">مسجلي النظام</SelectItem>
                         <SelectItem value="VISITORS">الزوار</SelectItem>
+                        <SelectItem value="AGENT_CLIENTS">عملاء الوكلاء</SelectItem>
                     </SelectContent>
                 </Select>
 

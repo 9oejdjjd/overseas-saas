@@ -115,9 +115,49 @@ export async function PATCH(
           data: visitorDataToUpdate
         });
 
+        // 1. Sync all MockExamPurchases of this visitor to maintain data integrity
+        const syncData: any = {};
+        if (body.profession !== undefined) syncData.profession = body.profession;
+        if (body.email !== undefined) syncData.email = body.email;
+        if (body.buyerName !== undefined) syncData.buyerName = body.buyerName;
+
+        if (Object.keys(syncData).length > 0) {
+          await prisma.mockExamPurchase.updateMany({
+            where: { phone: purchase.phone },
+            data: syncData
+          });
+        }
+
+        // 2. Sync ExamSessions if profession changed
+        if (body.profession) {
+          const dbProfession = await prisma.profession.findFirst({
+            where: { name: body.profession }
+          });
+
+          if (dbProfession) {
+            // Find all purchase IDs of this visitor to update their sessions
+            const visitorPurchases = await prisma.mockExamPurchase.findMany({
+              where: { phone: purchase.phone },
+              select: { id: true }
+            });
+            const purchaseIds = visitorPurchases.map(p => p.id);
+
+            await prisma.examSession.updateMany({
+              where: {
+                purchaseId: { in: purchaseIds },
+                status: "NEW"
+              },
+              data: {
+                professionId: dbProfession.id,
+                passingScore: dbProfession.passingScore
+              }
+            });
+          }
+        }
+
         return NextResponse.json({
           success: true,
-          message: "تم تحديث بيانات الزائر بنجاح",
+          message: "تم تحديث بيانات الزائر وجلساته بنجاح",
           visitor: updatedPurchase
         });
       }
@@ -316,6 +356,31 @@ export async function PATCH(
         ...(newStatus ? { status: newStatus } : {}),
       },
     });
+
+    // Sync profession and update sessions for registered applicant
+    if (body.profession) {
+      // 1. Sync MockExamPurchase records for this applicant
+      await prisma.mockExamPurchase.updateMany({
+        where: { applicantId: id },
+        data: { profession: body.profession }
+      });
+
+      // 2. Find Profession record in DB
+      const dbProfession = await prisma.profession.findFirst({
+        where: { name: body.profession }
+      });
+
+      if (dbProfession) {
+        // 3. Update all NEW exam sessions for this applicant
+        await prisma.examSession.updateMany({
+          where: { applicantId: id, status: "NEW" },
+          data: {
+            professionId: dbProfession.id,
+            passingScore: dbProfession.passingScore
+          }
+        });
+      }
+    }
 
     // 2. Create Log (Fire and Forget or await)
     if (newStatus) {

@@ -44,6 +44,7 @@ export function SessionsFilters({
         { key: "APPLICANT" as const, label: "المسجلين", color: "text-indigo-600 hover:bg-indigo-50/50" },
         { key: "CUSTOMER" as const, label: "عملاء الباقات", color: "text-green-600 hover:bg-green-50/50" },
         { key: "VISITOR" as const, label: "الزوار (عام)", color: "text-blue-600 hover:bg-blue-50/50" },
+        { key: "AGENT_CLIENT" as const, label: "عملاء الوكلاء", color: "text-purple-600 hover:bg-purple-50/50" },
     ];
 
     return (

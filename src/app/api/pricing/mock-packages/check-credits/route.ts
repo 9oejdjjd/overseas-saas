@@ -27,6 +27,28 @@ export async function GET(request: NextRequest) {
             if (applicant?.phone) {
                 phoneVariants.push(applicant.phone);
                 phoneVariants.push(applicant.phone.startsWith('+') ? applicant.phone.slice(1) : `+${applicant.phone}`);
+            } else {
+                // Check if it is an AgentClient
+                const agentClient = await prisma.agentClient.findUnique({
+                    where: { id: applicantId },
+                    include: {
+                        examOrders: {
+                            where: { status: { in: ["PENDING", "SENT", "STARTED"] } }
+                        }
+                    }
+                });
+
+                if (agentClient) {
+                    const hasActiveOrder = agentClient.examOrders.length > 0;
+                    return NextResponse.json({
+                        hasCredits: hasActiveOrder,
+                        remaining: agentClient.examOrders.length,
+                        total: agentClient.examOrders.length,
+                        used: 0,
+                        packageName: "حساب وكيل معتمد",
+                        purchases: []
+                    });
+                }
             }
         }
 

@@ -54,7 +54,7 @@ export function useQuickSale() {
 
                 if (configRes.ok) setConfig(await configRes.json());
                 if (profRes.ok) setProfessions(await profRes.json());
-                if (pkgRes.ok) setMockPackages((await pkgRes.json()).filter((p: any) => p.isActive));
+                if (pkgRes.ok) setMockPackages((await pkgRes.json()).filter((p: any) => p.isActive && !p.isFree));
             } catch (e) {
                 console.error("Failed to fetch initial data", e);
             } finally {

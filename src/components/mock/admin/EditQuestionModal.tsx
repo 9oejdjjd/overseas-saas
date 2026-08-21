@@ -189,6 +189,8 @@ export function EditQuestionModal({ isOpen, setIsOpen, question, professions, on
                                     <SelectItem value="K1">K1 تذكر</SelectItem>
                                     <SelectItem value="K2">K2 تطبيق</SelectItem>
                                     <SelectItem value="K3">K3 تقييم</SelectItem>
+                                    <SelectItem value="K4">K4 سهل/متوسط</SelectItem>
+                                    <SelectItem value="K5">K5 متوسط/صعب</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

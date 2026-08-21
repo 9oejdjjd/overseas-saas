@@ -21,6 +21,8 @@ export interface CognitiveQuota {
     K1: number;
     K2: number;
     K3: number;
+    K4: number;
+    K5: number;
 }
 
 export interface AlgorithmConfig {
@@ -34,7 +36,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
     
     const [axes, setAxes] = useState<AxisConfig[]>([]);
     const [typeQuota, setTypeQuota] = useState<TypeQuota>({ MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 });
-    const [cognitiveQuota, setCognitiveQuota] = useState<CognitiveQuota>({ K1: 0, K2: 0, K3: 0 });
+    const [cognitiveQuota, setCognitiveQuota] = useState<CognitiveQuota>({ K1: 0, K2: 0, K3: 0, K4: 0, K5: 0 });
 
     const totalQuestions = profession?.questionCount || 0;
     
@@ -50,13 +52,21 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                 setAxes(config.axes || []);
                 setTypeQuota(config.typeQuota || { MCQ: totalQuestions, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 });
                 if (config.cognitiveQuota) {
-                    setCognitiveQuota(config.cognitiveQuota);
+                    setCognitiveQuota({
+                        K1: config.cognitiveQuota.K1 || 0,
+                        K2: config.cognitiveQuota.K2 || 0,
+                        K3: config.cognitiveQuota.K3 || 0,
+                        K4: config.cognitiveQuota.K4 || 0,
+                        K5: config.cognitiveQuota.K5 || 0,
+                    });
                 } else {
                     const k3Default = Math.ceil(totalQuestions * 0.5);
                     setCognitiveQuota({
                         K1: 0,
                         K2: totalQuestions - k3Default,
-                        K3: k3Default
+                        K3: k3Default,
+                        K4: 0,
+                        K5: 0
                     });
                 }
             } else {
@@ -92,7 +102,9 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                 setCognitiveQuota({
                     K1: 0,
                     K2: totalQuestions - k3Default,
-                    K3: k3Default
+                    K3: k3Default,
+                    K4: 0,
+                    K5: 0
                 });
             }
         }
@@ -114,7 +126,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
         // Validation
         const axesSum = axes.reduce((sum, a) => sum + (Number(a.quota) || 0), 0);
         const typesSum = (Number(typeQuota.MCQ) || 0) + (Number(typeQuota.TRUE_FALSE) || 0) + (Number(typeQuota.FILL_BLANK) || 0) + (Number(typeQuota.IMAGE) || 0);
-        const cognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0);
+        const cognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0) + (Number(cognitiveQuota.K4) || 0) + (Number(cognitiveQuota.K5) || 0);
 
         if (axesSum !== totalQuestions) {
             alert(`إجمالي حصص المحاور (${axesSum}) لا يساوي عدد أسئلة الاختبار (${totalQuestions})!`);
@@ -158,7 +170,7 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
 
     const currentAxesSum = axes.reduce((sum, a) => sum + (Number(a.quota) || 0), 0);
     const currentTypesSum = (Number(typeQuota.MCQ) || 0) + (Number(typeQuota.TRUE_FALSE) || 0) + (Number(typeQuota.FILL_BLANK) || 0) + (Number(typeQuota.IMAGE) || 0);
-    const currentCognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0);
+    const currentCognitiveSum = (Number(cognitiveQuota.K1) || 0) + (Number(cognitiveQuota.K2) || 0) + (Number(cognitiveQuota.K3) || 0) + (Number(cognitiveQuota.K4) || 0) + (Number(cognitiveQuota.K5) || 0);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -211,18 +223,26 @@ export function ProfessionAlgorithmModal({ profession, isOpen, onClose, onSaved 
                                 المجموع: {currentCognitiveSum} / {totalQuestions}
                             </span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                             <div>
-                                <label className="text-xs text-gray-500 mb-1 block">مستوى K1 (معرفة وتذكر - افتراضي: 0)</label>
-                                <Input type="number" min="0" value={cognitiveQuota.K1} onChange={e => setCognitiveQuota({...cognitiveQuota, K1: parseInt(e.target.value) || 0})} className="text-center bg-white" />
+                                <label className="text-[10px] text-gray-500 mb-1 block">K1 (تذكر - افتراضي: 0)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K1} onChange={e => setCognitiveQuota({...cognitiveQuota, K1: parseInt(e.target.value) || 0})} className="text-center bg-white h-8 text-xs px-2" />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500 mb-1 block">مستوى K2 (فهم وتطبيق - افتراضي: 15)</label>
-                                <Input type="number" min="0" value={cognitiveQuota.K2} onChange={e => setCognitiveQuota({...cognitiveQuota, K2: parseInt(e.target.value) || 0})} className="text-center bg-white" />
+                                <label className="text-[10px] text-gray-500 mb-1 block">K2 (تطبيق - افتراضي: 15)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K2} onChange={e => setCognitiveQuota({...cognitiveQuota, K2: parseInt(e.target.value) || 0})} className="text-center bg-white h-8 text-xs px-2" />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500 mb-1 block">مستوى K3 (تحليل وتقييم - افتراضي: 15)</label>
-                                <Input type="number" min="0" value={cognitiveQuota.K3} onChange={e => setCognitiveQuota({...cognitiveQuota, K3: parseInt(e.target.value) || 0})} className="text-center bg-white" />
+                                <label className="text-[10px] text-gray-500 mb-1 block">K3 (تقييم - افتراضي: 15)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K3} onChange={e => setCognitiveQuota({...cognitiveQuota, K3: parseInt(e.target.value) || 0})} className="text-center bg-white h-8 text-xs px-2" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 mb-1 block">K4 (سهل/متوسط - افتراضي: 0)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K4 || 0} onChange={e => setCognitiveQuota({...cognitiveQuota, K4: parseInt(e.target.value) || 0})} className="text-center bg-white h-8 text-xs px-2" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 mb-1 block">K5 (متوسط/صعب - افتراضي: 0)</label>
+                                <Input type="number" min="0" value={cognitiveQuota.K5 || 0} onChange={e => setCognitiveQuota({...cognitiveQuota, K5: parseInt(e.target.value) || 0})} className="text-center bg-white h-8 text-xs px-2" />
                             </div>
                         </div>
                     </div>

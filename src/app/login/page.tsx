@@ -28,7 +28,11 @@ export default function LoginPage() {
             if (res?.error) {
                 setError("بيانات الدخول غير صحيحة. يرجى التحقق وإعادة المحاولة.");
             } else {
-                router.push("/dashboard");
+                // Fetch session to determine role-based redirect
+                const sessionRes = await fetch("/api/auth/session");
+                const session = await sessionRes.json();
+                const targetPath = session?.user?.role === "TRAVEL_AGENT" ? "/agent" : "/dashboard";
+                router.push(targetPath);
                 router.refresh();
             }
         } catch (err) {

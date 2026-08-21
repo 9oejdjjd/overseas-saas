@@ -51,7 +51,7 @@ export function HeroSearchSection({ professions }: { professions: Profession[] }
                             setSelectedSlug("");
                         }}
                         onFocus={() => setShowResults(true)}
-                        onBlur={() => setShowResults(false)}
+                        onBlur={() => setTimeout(() => setShowResults(false), 200)}
                         placeholder="ابحث عن مهنتك..."
                         className="w-full h-[60px] bg-white border border-slate-200 focus:border-[#074388] rounded-2xl pl-6 pr-16 text-lg text-slate-800 placeholder-slate-400 shadow-sm transition-all focus:outline-none focus:ring-4 focus:ring-[#074388]/5 focus:bg-white"
                     />

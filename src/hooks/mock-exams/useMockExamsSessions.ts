@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo } from "react";
 
 export type SuspicionFilterType = "ALL" | "ANY" | "WATCH" | "SUSPICIOUS" | "CRITICAL";
-export type CustomerTypeFilter = "ALL" | "APPLICANT" | "CUSTOMER" | "VISITOR";
+export type CustomerTypeFilter = "ALL" | "APPLICANT" | "CUSTOMER" | "VISITOR" | "AGENT_CLIENT";
 
 export function useMockExamsSessions() {
     const [sessions, setSessions] = useState<any[]>([]);

@@ -67,10 +67,10 @@ export function useSettingsManagement() {
     }, [toast]);
 
     useEffect(() => {
-        if (session?.user.role === "ADMIN") {
+        if (session?.user.role === "ADMIN" && users.length === 0) {
             fetchUsers();
         }
-    }, [session, fetchUsers]);
+    }, [session, fetchUsers, users.length]);
 
     // Handle adding a user trigger
     const handleAdd = useCallback(() => {

@@ -25,22 +25,28 @@ export async function GET(
             return NextResponse.json({ error: "Profession not found" }, { status: 404 });
         }
 
-        // Aggregate questions count by axis and type
-        const axisGroup = await prisma.question.groupBy({
-            by: ['axis', 'type'],
+        // Aggregate questions count by axis and type (In-memory grouping to support IMAGE questions as a distinct type)
+        const questions = await prisma.question.findMany({
             where: { professionId },
-            _count: {
-                _all: true
-            }
+            select: { axis: true, type: true, imageUrl: true }
         });
 
         // Format into a friendly dictionary: { "HEALTH_SAFETY": { "MCQ": 10, "TRUE_FALSE": 5, ... }, ... }
         const stats: Record<string, Record<string, number>> = {};
-        axisGroup.forEach(group => {
-            if (!stats[group.axis]) {
-                stats[group.axis] = { MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 };
+        questions.forEach(q => {
+            const axis = q.axis;
+            if (!stats[axis]) {
+                stats[axis] = { MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0, IMAGE: 0 };
             }
-            stats[group.axis][group.type] = group._count._all;
+            
+            const isImage = q.imageUrl && q.imageUrl.trim() !== "" && q.imageUrl !== "null";
+            const effectiveType = isImage ? "IMAGE" : q.type;
+            
+            if (stats[axis][effectiveType] !== undefined) {
+                stats[axis][effectiveType]++;
+            } else {
+                stats[axis][effectiveType] = 1;
+            }
         });
 
         return NextResponse.json({ success: true, stats });

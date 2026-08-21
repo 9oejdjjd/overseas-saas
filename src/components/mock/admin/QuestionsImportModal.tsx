@@ -1,27 +1,38 @@
 /**
  * @file QuestionsImportModal.tsx
- * @description مكون استيراد وتوليد الأسئلة المطور (QuestionsImportModal) بعد إعادة هيكلته.
- * يستعمل هذا المكون الخطاف المخصص (useQuestionsImport) لعزل التوجيهات الطويلة والمدققات وحالات المعاينة.
+ * @description المكون الإداري الخاص بتوليد واستيراد الأسئلة (بدون صور) دفعة واحدة وبضغطة زر واحدة.
+ * يدعم إضافة الأنماط المخصصة وعرضها لكل مهنة على حدة. خالي تماماً من الرموز التعبيرية.
  * 
  * @author Senior Software Engineer & Systems Architect
  */
 
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { UploadCloud, AlertCircle, FileJson, CheckCircle2, Copy, Search, Sparkles, Loader2, Check } from "lucide-react";
+import { 
+    UploadCloud, 
+    AlertCircle, 
+    FileJson, 
+    CheckCircle2, 
+    Copy, 
+    Search, 
+    Sparkles, 
+    Loader2, 
+    Check 
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useQuestionsImport } from "@/hooks/mock-exams/useQuestionsImport";
+import { QUESTION_STYLES } from "@/lib/mock-exams/promptBuilder";
 
 interface Props {
     professions: any[];
-    questions: any[]; // Left for compatibility
+    questions?: any[];
     onSuccess: () => void;
 }
 
@@ -40,14 +51,18 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
         setDropdownOpen,
         axis,
         setAxis,
-        questionType,
-        setQuestionType,
-        difficulty,
-        setDifficulty,
+        questionTypes,
+        toggleQuestionType,
+        difficulties,
+        toggleDifficulty,
         focusTopic,
         setFocusTopic,
         questionCount,
         setQuestionCount,
+        questionStyle,
+        setQuestionStyle,
+        customStyleText,
+        setCustomStyleText,
         mode,
         setMode,
         jsonText,
@@ -60,263 +75,345 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
         aiLoading,
         axisStats,
         dynamicAxes,
+        selectedProfessionData,
         previewStats,
         handleFileUpload,
         copyPrompt,
         generatePartialAI,
         validateAndPreview,
-        handleImport,
+        handleImportDirect,
         resetForm
     } = importHook;
 
+    // استخراج أنماط الصياغة المخصصة للمهنة الحالية
+    const currentProfessionCustomStyles = React.useMemo(() => {
+        if (!selectedProfessionData) return [];
+        const config = selectedProfessionData.algorithmConfig as any;
+        return config?.customStyles || [];
+    }, [selectedProfessionData]);
+
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => {
-            setIsOpen(open);
-            if (!open) setTimeout(resetForm, 300);
-        }}>
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
-                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-md font-bold text-xs h-9">
-                    <Sparkles className="h-4 w-4" />
-                    استيراد وتوليد الأسئلة بـ الذكاء الاصطناعي
+                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md rounded-xl font-bold h-9 text-xs">
+                    <FileJson className="h-4 w-4" />
+                    توليد واستيراد أسئلة (بدون صور)
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-full max-h-[95vh] overflow-y-auto p-0 rounded-2xl shadow-2xl border border-gray-100" dir="rtl">
-                <div className="bg-white rounded-2xl">
-                    <DialogHeader className="p-6 border-b bg-slate-50/50">
-                        <DialogTitle className="flex flex-col gap-1 text-right">
-                            <span className="text-xl font-black flex items-center gap-2 text-gray-900">
-                                <Sparkles className="h-5.5 w-5.5 text-purple-600 animate-pulse" />
-                                استيراد وتوليد بنك الأسئلة المتقدم
-                            </span>
-                            <span className="text-xs font-medium text-gray-400">
-                                استعن بـ Gemini AI لتوليد أسئلة عالية الدقة والواقعية، أو استورد الأسئلة المصاغة مسبقاً بصيغة JSON.
-                            </span>
-                        </DialogTitle>
-                    </DialogHeader>
+            <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto" dir="rtl">
+                <DialogHeader className="border-b pb-3 mb-2">
+                    <DialogTitle className="text-lg font-black text-slate-800 flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-indigo-600" />
+                        توليد وتغذية الأسئلة بدون صور
+                    </DialogTitle>
+                </DialogHeader>
 
+                <div className="w-full">
+                    {/* خطوة إدخال المعطيات وتوليد البرومبت */}
                     {step === "input" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse">
-                            {/* لوحة توليد الذكاء الاصطناعي وهندسة البرومبت */}
-                            <div className="p-6 space-y-6 bg-slate-50/40">
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4">
-                                        <span className="bg-purple-100 text-purple-600 p-1.5 rounded-lg text-xs font-black">1</span>
-                                        هندسة الذكاء الاصطناعي (Prompt Engineering)
-                                    </h3>
-                                    
-                                    <div className="space-y-4">
-                                        {/* اختيار التخصص */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2 relative">
-                                                <Label className="font-bold text-gray-700 text-xs">المهنة المستهدفة <span className="text-red-500">*</span></Label>
-                                                <div className="relative">
-                                                    <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-                                                    <Input
-                                                        className="pr-9 focus:bg-white transition-colors bg-white shadow-sm h-9 text-xs placeholder-gray-400 font-semibold border-gray-200"
-                                                        placeholder="ابحث واختر المهنة..."
-                                                        value={searchProfession}
-                                                        onChange={(e) => {
-                                                            setSearchProfession(e.target.value);
-                                                            setDropdownOpen(true);
-                                                        }}
-                                                        onFocus={() => setDropdownOpen(true)}
-                                                        onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
-                                                    />
-                                                </div>
-                                                {dropdownOpen && (
-                                                    <div className="absolute top-full right-0 left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
-                                                        {professions.filter(p => p.name.includes(searchProfession)).map(p => (
-                                                            <div
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
+                            {/* الجانب الأيمن: تحديد المعطيات والإعدادات */}
+                            <div className="lg:col-span-7 space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* اختيار المهنة */}
+                                    <div className="space-y-2 relative">
+                                        <Label className="font-bold text-gray-700 text-xs">المهنة المستهدفة</Label>
+                                        <div className="relative">
+                                            <Button 
+                                                variant="outline" 
+                                                role="combobox" 
+                                                onClick={() => setDropdownOpen(!dropdownOpen)}
+                                                className="w-full justify-between h-9 text-xs font-bold border-gray-200 rounded-xl shadow-sm text-right bg-white"
+                                            >
+                                                {selectedProfessionData ? selectedProfessionData.name : "ابحث عن المهنة..."}
+                                            </Button>
+                                            
+                                            {dropdownOpen && (
+                                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto p-2 space-y-1">
+                                                    <div className="flex items-center gap-1.5 px-2 border-b pb-1.5 mb-1 bg-slate-50 rounded-lg">
+                                                        <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                                        <input 
+                                                            type="text"
+                                                            placeholder="ابحث هنا..."
+                                                            value={searchProfession}
+                                                            onChange={e => setSearchProfession(e.target.value)}
+                                                            className="w-full text-xs bg-transparent border-0 outline-none p-1 focus:ring-0 font-bold"
+                                                        />
+                                                    </div>
+                                                    {professions
+                                                        .filter(p => p.name.toLowerCase().includes(searchProfession.toLowerCase()))
+                                                        .map(p => (
+                                                            <button
                                                                 key={p.id}
-                                                                className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-xs font-bold border-b last:border-0 border-gray-50 text-gray-700"
                                                                 onClick={() => {
                                                                     setProfessionId(p.id);
-                                                                    setSearchProfession(p.name);
                                                                     setDropdownOpen(false);
+                                                                    setSearchProfession("");
+                                                                    setAxis("");
                                                                 }}
+                                                                className={`w-full text-right px-3 py-2 rounded-lg text-xs font-semibold hover:bg-indigo-50/50 flex justify-between items-center ${p.id === professionId ? "bg-indigo-50 text-indigo-700" : "text-gray-700"}`}
                                                             >
-                                                                {p.name}
-                                                            </div>
+                                                                <span>{p.name}</span>
+                                                                {p.id === professionId && <Check className="h-3.5 w-3.5" />}
+                                                            </button>
                                                         ))}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* اختيار المحور */}
-                                            <div className="space-y-2">
-                                                <Label className="font-bold text-gray-700 text-xs">المحور المهني <span className="text-red-500">*</span></Label>
-                                                <Select value={axis} onValueChange={setAxis}>
-                                                    <SelectTrigger className="bg-white shadow-sm h-9 text-xs font-bold border-gray-200">
-                                                        <SelectValue placeholder="اختر المحور المهني" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {dynamicAxes.map((opt: any) => (
-                                                            <SelectItem key={opt.value} value={opt.value}>
-                                                                <div className="flex flex-col gap-1 py-1 text-right">
-                                                                    <span className="text-xs font-bold">{opt.label}</span>
-                                                                    {professionId && axisStats[opt.value] && (
-                                                                        <div className="flex gap-2 text-[9px] text-gray-400 font-bold" dir="rtl">
-                                                                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">متعدد: {axisStats[opt.value].MCQ || 0}</span>
-                                                                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">صح/خطأ: {axisStats[opt.value].TRUE_FALSE || 0}</span>
-                                                                            <span className="bg-slate-100 px-1.5 py-0.5 rounded">فراغات: {axisStats[opt.value].FILL_BLANK || 0}</span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                                </div>
+                                            )}
                                         </div>
+                                    </div>
 
-                                        {/* نوع الأسئلة ومستوى الصعوبة */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="font-bold text-gray-700 text-xs">نوع الأسئلة <span className="text-red-500">*</span></Label>
-                                                <Select value={questionType} onValueChange={setQuestionType}>
-                                                    <SelectTrigger className="bg-white shadow-sm h-9 text-xs font-bold border-gray-200">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="text-right">
-                                                        <SelectItem value="MCQ" className="text-xs">اختيار من متعدد (MCQ)</SelectItem>
-                                                        <SelectItem value="TRUE_FALSE" className="text-xs">صح أو خطأ (True/False)</SelectItem>
-                                                        <SelectItem value="FILL_BLANK" className="text-xs">إكمال الفراغات (Fill Blank)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                    {/* اختيار المحور ديناميكياً */}
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-gray-700 text-xs">المحور الفني للاختبار</Label>
+                                        <Select value={axis} onValueChange={setAxis} disabled={!professionId}>
+                                            <SelectTrigger className="bg-white shadow-sm h-9 text-xs font-bold border-gray-200 rounded-xl">
+                                                <SelectValue placeholder={professionId ? "اختر المحور..." : "يجب اختيار المهنة أولاً"} />
+                                            </SelectTrigger>
+                                            <SelectContent className="text-right">
+                                                {dynamicAxes.map((ax: any) => {
+                                                    const statsObj = axisStats[ax.value];
+                                                    const mcqCount = statsObj?.MCQ || 0;
+                                                    const tfCount = statsObj?.TRUE_FALSE || 0;
+                                                    const fbCount = statsObj?.FILL_BLANK || 0;
+                                                    const imgCount = statsObj?.IMAGE || 0;
+                                                    const totalCount = mcqCount + tfCount + fbCount + imgCount;
 
-                                            <div className="space-y-2">
-                                                <Label className="font-bold text-gray-700 text-xs">مستوى الصعوبة <span className="text-red-500">*</span></Label>
-                                                <Select value={difficulty} onValueChange={setDifficulty}>
-                                                    <SelectTrigger className="bg-white shadow-sm h-9 text-xs font-bold border-gray-200">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="text-right">
-                                                        <SelectItem value="HARD" className="text-xs"> HARD — صعب وواقعي (K2)</SelectItem>
-                                                        <SelectItem value="EXPERT" className="text-xs"> EXPERT — معقد للخبراء (K3)</SelectItem>
-                                                        <SelectItem value="K1" className="text-xs"> K1 — معرفة تشغيلية مباشرة (K1)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                                    const parts = [];
+                                                    if (mcqCount > 0) parts.push(`${mcqCount} اختيار`);
+                                                    if (tfCount > 0) parts.push(`${tfCount} صح/خطأ`);
+                                                    if (fbCount > 0) parts.push(`${fbCount} فراغات`);
+                                                    if (imgCount > 0) parts.push(`${imgCount} صور`);
+                                                    const breakdown = parts.length > 0 ? ` : ${parts.join(" | ")}` : "";
+
+                                                    return (
+                                                        <SelectItem key={ax.value} value={ax.value} className="text-xs">
+                                                            <span>{ax.label}</span>
+                                                            {totalCount > 0 && (
+                                                                <span className="text-[9px] text-indigo-600 font-extrabold bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-md mr-2 inline-block">
+                                                                    ({totalCount} سؤال{breakdown})
+                                                                </span>
+                                                            )}
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                {/* اختيار الصعوبات والأنواع بالتوازي */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* نوع الأسئلة المتعددة */}
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-gray-700 text-xs">النوع المطلوب (اختيار متعدد)</Label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {["MCQ", "TRUE_FALSE", "FILL_BLANK"].map(type => {
+                                                const isSelected = questionTypes.includes(type);
+                                                const label: Record<string, string> = { MCQ: "اختيار من متعدد", TRUE_FALSE: "صح وخطأ", FILL_BLANK: "إكمال فراغ" };
+                                                return (
+                                                    <Button
+                                                        key={type}
+                                                        type="button"
+                                                        variant={isSelected ? "default" : "outline"}
+                                                        onClick={() => toggleQuestionType(type)}
+                                                        className={`h-8 text-[11px] font-black rounded-lg transition-all ${
+                                                            isSelected 
+                                                                ? "bg-indigo-650 hover:bg-indigo-755 text-white shadow-sm" 
+                                                                : "bg-white border-gray-250 text-slate-655 hover:bg-slate-50"
+                                                        }`}
+                                                    >
+                                                        {label[type]}
+                                                    </Button>
+                                                );
+                                            })}
                                         </div>
+                                    </div>
 
-                                        {/* موضوع التركيز وعدد الأسئلة */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="font-bold text-gray-700 text-xs">موضوع التركيز الدقيق <span className="text-gray-400 font-normal text-[10px]">(اختياري لتوجيه الـ AI)</span></Label>
-                                                <Input 
-                                                    placeholder="مثال: الوقاية من الحرائق والماس الكهربائي..." 
-                                                    value={focusTopic} 
-                                                    onChange={e => setFocusTopic(e.target.value)}
-                                                    className="bg-white shadow-sm h-9 text-xs placeholder-gray-400 border-gray-200"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label className="font-bold text-gray-700 text-xs">عدد الأسئلة المطلوب توليدها <span className="text-red-500">*</span></Label>
-                                                <Input 
-                                                    type="number" 
-                                                    min={1} 
-                                                    max={30} 
-                                                    value={questionCount} 
-                                                    onChange={e => setQuestionCount(Number(e.target.value))}
-                                                    className="bg-white shadow-sm h-9 text-xs border-gray-200 font-bold"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* أزرار نسخ البرومبت والتوليد */}
-                                        <div className="pt-6 flex flex-col gap-3">
-                                            <Button 
-                                                onClick={copyPrompt} 
-                                                className="w-full bg-slate-900 hover:bg-slate-800 text-white gap-2 font-black py-5 text-sm shadow-md rounded-xl"
-                                            >
-                                                {promptCopied ? <Check className="h-4.5 w-4.5 text-emerald-400" /> : <Copy className="h-4.5 w-4.5" />}
-                                                {promptCopied ? "تم نسخ البرومبت! الصقه الآن في متصفح Gemini" : "📋 نسخ برومبت التوجيه لنسخه في Gemini"}
-                                            </Button>
-
-                                            <Button 
-                                                onClick={generatePartialAI} 
-                                                disabled={aiLoading}
-                                                className="w-full bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 border border-indigo-150 gap-2 font-black py-5 text-sm rounded-xl"
-                                            >
-                                                {aiLoading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Sparkles className="h-4.5 w-4.5" />}
-                                                {aiLoading ? "جاري استدعاء السيرفر وتخزين الأسئلة..." : "⚡ توليد وحفظ تلقائي فوري (عبر API)"}
-                                            </Button>
+                                    {/* مستوى الصعوبة المتعددة */}
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-gray-700 text-xs">الصعوبة المطلوبة (اختيار متعدد)</Label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {["K1", "HARD", "EXPERT", "K4", "K5"].map(diff => {
+                                                const isSelected = difficulties.includes(diff);
+                                                const label: Record<string, string> = { 
+                                                    K1: "تذكر K1", 
+                                                    HARD: "تطبيق K2", 
+                                                    EXPERT: "تحليل K3",
+                                                    K4: "K4 سهل/متوسط",
+                                                    K5: "K5 متوسط/صعب"
+                                                };
+                                                return (
+                                                    <Button
+                                                        key={diff}
+                                                        type="button"
+                                                        variant={isSelected ? "default" : "outline"}
+                                                        onClick={() => toggleDifficulty(diff)}
+                                                        className={`h-8 text-[11px] font-black rounded-lg transition-all ${
+                                                            isSelected 
+                                                                ? "bg-indigo-650 hover:bg-indigo-755 text-white shadow-sm" 
+                                                                : "bg-white border-gray-250 text-slate-655 hover:bg-slate-50"
+                                                        }`}
+                                                    >
+                                                        {label[diff]}
+                                                    </Button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* لوحة استيراد وفحص وتأكيد ملفات JSON */}
-                            <div className="p-6 space-y-6 bg-white">
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4">
-                                        <span className="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg text-xs font-black">2</span>
-                                        استيراد الأسئلة وتدقيق الجودة (JSON)
-                                    </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* عدد الأسئلة */}
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-gray-700 text-xs">عدد الأسئلة المطلوب</Label>
+                                        <Input 
+                                            type="number" 
+                                            min={1} 
+                                            max={30} 
+                                            value={questionCount} 
+                                            onChange={e => setQuestionCount(parseInt(e.target.value) || 1)}
+                                            className="bg-white shadow-sm h-9 text-xs font-bold border-gray-250 rounded-xl"
+                                        />
+                                    </div>
 
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label className="font-bold text-gray-700 text-xs">ألصق مخرجات الـ JSON التي ولدها Gemini هنا <span className="text-red-500">*</span></Label>
-                                            <Textarea
-                                                placeholder='[{ "text": "...", "explanation": "...", "options": [...] }]'
-                                                className="font-mono text-left w-full h-[220px] resize-none bg-slate-50 border-gray-200 focus:bg-white shadow-inner rounded-xl p-3 text-xs"
-                                                dir="ltr"
-                                                value={jsonText}
-                                                onChange={(e) => setJsonText(e.target.value)}
-                                            />
-                                            
-                                            <div className="flex items-center gap-3 mt-2">
-                                                <div className="relative overflow-hidden">
-                                                    <input 
-                                                        type="file" 
-                                                        accept=".json" 
-                                                        className="absolute inset-0 opacity-0 cursor-pointer"
-                                                        onChange={handleFileUpload}
-                                                    />
-                                                    <Button type="button" variant="outline" size="sm" className="gap-2 text-gray-600 bg-white border-gray-250 shadow-sm pointer-events-none rounded-lg text-xs h-8">
-                                                        <UploadCloud className="h-3.5 w-3.5 text-gray-500" />
-                                                        أو قم برفع ملف JSON المولد
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* خيار التعامل مع التكرار */}
-                                        <div className="space-y-2 p-3.5 bg-orange-50/50 border border-orange-100 rounded-xl">
-                                            <Label className="font-black text-orange-850 flex items-center gap-1.5 text-xs">
-                                                <AlertCircle className="h-4 w-4 text-orange-600" />
-                                                آلية التحكم في تكرار الأسئلة
-                                            </Label>
-                                            <Select value={mode} onValueChange={setMode}>
-                                                <SelectTrigger className="bg-white h-8 text-xs font-bold border-orange-200">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="text-right">
-                                                    <SelectItem value="skip_duplicates" className="text-xs">تخطي الأسئلة الفنية المتطابقة مسبقاً (آمن)</SelectItem>
-                                                    <SelectItem value="append" className="text-xs">إدراج الأسئلة مباشرةً بدون مطابقة التكرار</SelectItem>
-                                                    <SelectItem value="replace_axis_questions" className="text-xs">مسح جميع الأسئلة السابقة لهذا المحور بالكامل ثم الاستيراد (خطر)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {/* التنبيهات في حال الأخطاء */}
-                                        {error && (
-                                            <div className="p-3.5 bg-red-50 text-red-700 border border-red-150 rounded-xl flex gap-2 text-xs font-bold shadow-sm">
-                                                <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-500" />
-                                                <p>{error}</p>
+                                    {/* حقل نمط الصياغة */}
+                                    <div className="md:col-span-2 space-y-2">
+                                        <Label className="font-bold text-gray-700 text-xs">نمط الصياغة (التنويع)</Label>
+                                        <Select value={questionStyle} onValueChange={setQuestionStyle}>
+                                            <SelectTrigger className="bg-white shadow-sm h-9 text-xs font-bold border-gray-250 rounded-xl">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="text-right">
+                                                {QUESTION_STYLES.map(style => (
+                                                    <SelectItem key={style.value} value={style.value} className="text-xs">
+                                                        {style.label}
+                                                    </SelectItem>
+                                                ))}
+                                                {/* عرض الأنماط المحفوظة للمهنة ديناميكياً */}
+                                                {currentProfessionCustomStyles.map((style: string, idx: number) => (
+                                                    <SelectItem key={`saved-${idx}`} value={style} className="text-xs text-indigo-700 font-bold">
+                                                        {style} (نمط محفوظ)
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        
+                                        {/* حقل نصي مخصص ديناميكي */}
+                                        {questionStyle === "CUSTOM" && (
+                                            <div className="space-y-1 mt-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <Label className="font-bold text-indigo-700 text-[10px]">اكتب نمط الصياغة المخصص:</Label>
+                                                <Input 
+                                                    placeholder="مثال: إشارات المرور للتقاطعات..." 
+                                                    value={customStyleText} 
+                                                    onChange={e => setCustomStyleText(e.target.value)}
+                                                    className="h-8 text-xs bg-indigo-50/20 border-indigo-200 focus-visible:ring-indigo-500 font-bold rounded-lg"
+                                                />
                                             </div>
                                         )}
-
-                                        <Button 
-                                            onClick={validateAndPreview} 
-                                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 text-sm shadow-md gap-2 rounded-xl"
-                                        >
-                                            <FileJson className="h-4.5 w-4.5" />
-                                            معاينة الأسئلة ومطابقة الجودة
-                                        </Button>
                                     </div>
+                                </div>
+
+                                {/* موضوع التركيز الدقيق */}
+                                <div className="space-y-2">
+                                    <Label className="font-bold text-gray-700 text-xs flex justify-between items-center">
+                                        <span>موضوع التركيز الدقيق (اختياري)</span>
+                                        <span className="text-[10px] text-gray-400 font-medium">سيركز النظام الأسئلة بالكامل على هذا الموضوع</span>
+                                    </Label>
+                                    <Input 
+                                        placeholder="مثال: لحام القوس الكهربائي، صيانة المكابح..." 
+                                        value={focusTopic} 
+                                        onChange={e => setFocusTopic(e.target.value)}
+                                        className="bg-white shadow-sm h-9 text-xs font-bold border-gray-250 rounded-xl"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* الجانب الأيسر: منشئ البرومبت ورفع ملف الـ JSON المولد */}
+                            <div className="lg:col-span-5 space-y-4">
+                                {/* كادر البرومبت المولد */}
+                                <div className="bg-indigo-50/50 p-4 border border-indigo-150 rounded-2xl flex flex-col justify-between h-[180px]">
+                                    <div className="space-y-1">
+                                        <span className="font-black text-indigo-700 text-xs flex items-center gap-1.5">
+                                            <Sparkles className="h-4.5 w-4.5 text-indigo-500" />
+                                            برومبت التوليد المهني المطور:
+                                        </span>
+                                        <p className="text-[11px] text-indigo-900 leading-normal font-bold">
+                                            يقوم النظام بصياغة التوجيه لجميع الأنواع والصعوبات والأنماط بالتساوي ليقوم الذكاء الاصطناعي ببناء JSON احترافي كامل.
+                                        </p>
+                                    </div>
+                                    <Button 
+                                        onClick={copyPrompt} 
+                                        disabled={!professionId || !axis}
+                                        className="w-full bg-indigo-650 hover:bg-indigo-700 text-white font-black py-4 text-xs shadow-md gap-2 rounded-xl"
+                                    >
+                                        {promptCopied ? (
+                                            <>
+                                                <Check className="h-4 w-4" />
+                                                تم نسخ البرومبت للحافظة!
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="h-4 w-4" />
+                                                نسخ البرومبت وإرساله للـ AI
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+
+                                {/* مساحة رفع ولصق ملف الـ JSON المولد */}
+                                <div className="space-y-3 bg-slate-50/50 p-4 border border-slate-150 rounded-2xl">
+                                    <div className="flex justify-between items-center">
+                                        <Label className="font-bold text-gray-700 text-xs flex items-center gap-1.5">
+                                            <FileJson className="h-4 w-4 text-emerald-600" />
+                                            تغذية ملف JSON المولد:
+                                        </Label>
+                                        <label className="text-[10px] text-indigo-650 hover:underline cursor-pointer font-black">
+                                            تصفح الملف...
+                                            <input 
+                                                type="file" 
+                                                accept=".json" 
+                                                onChange={handleFileUpload} 
+                                                className="hidden" 
+                                            />
+                                        </label>
+                                    </div>
+
+                                    <Textarea 
+                                        placeholder="ألصق كود الـ JSON المولد هنا..." 
+                                        className="h-28 text-left text-xs font-mono bg-white border-slate-200 focus-visible:ring-emerald-555 rounded-xl"
+                                        value={jsonText}
+                                        onChange={e => setJsonText(e.target.value)}
+                                    />
+
+                                    <div className="space-y-1">
+                                        <Label className="font-black text-slate-650 text-[10px]">آلية التحكم في تكرار الأسئلة:</Label>
+                                        <Select value={mode} onValueChange={setMode}>
+                                            <SelectTrigger className="bg-white h-8 text-[10px] font-bold border-gray-200 rounded-lg">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="text-right">
+                                                <SelectItem value="skip_duplicates" className="text-xs">تخطي الأسئلة الفنية المتطابقة مسبقاً (آمن)</SelectItem>
+                                                <SelectItem value="append" className="text-xs">إدراج الأسئلة مباشرةً بدون مطابقة التكرار</SelectItem>
+                                                <SelectItem value="replace_axis_questions" className="text-xs">مسح جميع الأسئلة السابقة لهذا المحور بالكامل ثم الاستيراد (خطر)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {error && (
+                                        <div className="p-2.5 bg-red-50 text-red-700 border border-red-150 rounded-xl flex gap-1.5 text-[10px] font-bold shadow-sm">
+                                            <AlertCircle className="h-4 w-4 shrink-0 text-red-555" />
+                                            <p>{error}</p>
+                                        </div>
+                                    )}
+
+                                    <Button 
+                                        onClick={validateAndPreview} 
+                                        disabled={!jsonText.trim()}
+                                        className="w-full bg-emerald-650 hover:bg-emerald-700 text-white font-black py-4.5 text-xs shadow-sm gap-1.5 rounded-xl"
+                                    >
+                                        <FileJson className="h-4 w-4" />
+                                        معاينة الأسئلة ومطابقة الجودة
+                                    </Button>
                                 </div>
                             </div>
                         </div>
@@ -324,11 +421,11 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
 
                     {/* خطوة المعاينة قبل الاستيراد الفعلي */}
                     {step === "preview" && (
-                        <div className="p-6 space-y-6">
+                        <div className="p-4 space-y-6">
                             <div className="flex items-center justify-between border-b pb-4">
                                 <div className="text-right">
-                                    <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                                        <CheckCircle2 className="h-5.5 w-5.5 text-green-500" />
+                                    <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
                                         تم التدقيق بنجاح: تم التحقق من {parsedData.length} أسئلة
                                     </h3>
                                     <p className="text-xs text-gray-400 mt-1 font-bold">يرجى تأكيد توزيع وصعوبة الأسئلة قبل حفظها في الخادم.</p>
@@ -337,31 +434,39 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
                             </div>
 
                             {/* الإحصائيات الخاصة بالأسئلة المعاينة */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-                                <div className="p-3.5 rounded-xl bg-slate-50 border text-center">
-                                    <p className="text-[10px] text-gray-400 mb-0.5 font-bold">الأسئلة الصعبة (HARD)</p>
-                                    <p className="text-xl font-black text-slate-700">{previewStats?.hard}</p>
+                            <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                                <div className="p-2 rounded-xl bg-slate-50 border text-center">
+                                    <p className="text-[9px] text-gray-400 mb-0.5 font-bold">الأسئلة الصعبة</p>
+                                    <p className="text-lg font-black text-slate-700">{previewStats?.hard}</p>
                                 </div>
-                                <div className="p-3.5 rounded-xl bg-purple-50/50 border border-purple-100 text-center">
-                                    <p className="text-[10px] text-purple-600 mb-0.5 font-bold">الخبراء (EXPERT)</p>
-                                    <p className="text-xl font-black text-purple-700">{previewStats?.expert}</p>
+                                <div className="p-2 rounded-xl bg-purple-50/50 border border-purple-100 text-center">
+                                    <p className="text-[9px] text-purple-650 mb-0.5 font-bold">الخبراء</p>
+                                    <p className="text-lg font-black text-purple-700">{previewStats?.expert}</p>
                                 </div>
-                                <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-100 text-center">
-                                    <p className="text-[10px] text-amber-600 mb-0.5 font-bold">تذكر (K1)</p>
-                                    <p className="text-xl font-black text-amber-700">{previewStats?.k1}</p>
+                                <div className="p-2 rounded-xl bg-amber-50/50 border border-amber-100 text-center">
+                                    <p className="text-[9px] text-amber-650 mb-0.5 font-bold">تذكر K1</p>
+                                    <p className="text-lg font-black text-amber-700">{previewStats?.k1}</p>
                                 </div>
-                                <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-100 text-center">
-                                    <p className="text-[10px] text-blue-600 mb-0.5 font-bold">تطبيق (K2)</p>
-                                    <p className="text-xl font-black text-blue-700">{previewStats?.k2}</p>
+                                <div className="p-2 rounded-xl bg-blue-50/50 border border-blue-100 text-center">
+                                    <p className="text-[9px] text-blue-650 mb-0.5 font-bold">تطبيق K2</p>
+                                    <p className="text-lg font-black text-blue-700">{previewStats?.k2}</p>
                                 </div>
-                                <div className="p-3.5 rounded-xl bg-indigo-50/50 border border-indigo-100 text-center">
-                                    <p className="text-[10px] text-indigo-600 mb-0.5 font-bold">تحليل (K3)</p>
-                                    <p className="text-xl font-black text-indigo-700">{previewStats?.k3}</p>
+                                <div className="p-2 rounded-xl bg-indigo-50/50 border border-indigo-100 text-center">
+                                    <p className="text-[9px] text-indigo-650 mb-0.5 font-bold">تحليل K3</p>
+                                    <p className="text-lg font-black text-indigo-700">{previewStats?.k3}</p>
+                                </div>
+                                <div className="p-2 rounded-xl bg-emerald-50/50 border border-emerald-100 text-center">
+                                    <p className="text-[9px] text-emerald-650 mb-0.5 font-bold">سهل/متوسط K4</p>
+                                    <p className="text-lg font-black text-emerald-700">{previewStats?.k4 || 0}</p>
+                                </div>
+                                <div className="p-2 rounded-xl bg-rose-50/50 border border-rose-100 text-center">
+                                    <p className="text-[9px] text-rose-650 mb-0.5 font-bold">متوسط/صعب K5</p>
+                                    <p className="text-lg font-black text-rose-700">{previewStats?.k5 || 0}</p>
                                 </div>
                             </div>
 
                             {/* قائمة معاينة للأسئلة الخمسة الأولى */}
-                            <div className="bg-slate-50 border border-gray-150 rounded-xl p-4 max-h-[350px] overflow-y-auto space-y-4">
+                            <div className="bg-slate-50 border border-gray-150 rounded-xl p-4 max-h-[300px] overflow-y-auto space-y-4">
                                 {parsedData.slice(0, 5).map((q, idx) => (
                                     <div key={idx} className="bg-white border border-gray-100 p-4 rounded-xl shadow-sm text-right">
                                         <div className="flex justify-between items-start mb-2.5">
@@ -379,9 +484,9 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
                                             {q.options?.map((opt: any, oidx: number) => (
                                                 <div 
                                                     key={oidx} 
-                                                    className={`p-2.5 rounded-xl border text-[11px] flex items-center gap-2 ${
+                                                    className={`p-2 rounded-xl border text-[11px] flex items-center gap-2 ${
                                                         opt.isCorrect 
-                                                            ? "bg-green-50/50 border-green-200 text-green-800 font-bold" 
+                                                            ? "bg-green-50 border-green-200 text-green-800 font-bold" 
                                                             : "bg-gray-50 border-gray-100 text-gray-500"
                                                     }`}
                                                 >
@@ -398,7 +503,7 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
                             </div>
 
                             {error && (
-                                <div className="p-3.5 bg-red-50 text-red-700 border border-red-150 rounded-xl flex gap-2 text-xs font-bold text-right shadow-sm">
+                                <div className="p-3.5 bg-red-50 text-red-700 border border-red-155 rounded-xl flex gap-2 text-xs font-bold text-right shadow-sm">
                                     <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-500" />
                                     <p>{error}</p>
                                 </div>
@@ -408,9 +513,9 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
                             <div className="flex justify-end gap-3 pt-4 border-t">
                                 <Button variant="outline" size="sm" onClick={() => setStep("input")} className="h-9 font-bold text-xs">تراجع وتعديل</Button>
                                 <Button 
-                                    onClick={handleImport} 
+                                    onClick={handleImportDirect} 
                                     disabled={isLoading}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 h-9 rounded-xl shadow-sm text-xs"
+                                    className="bg-emerald-650 hover:bg-emerald-700 text-white font-black px-6 h-9 rounded-xl shadow-sm text-xs"
                                 >
                                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : `حفظ وتنزيل الأسئلة (${parsedData.length})`}
                                 </Button>
@@ -421,8 +526,8 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
                     {/* خطوة التقرير النهائي للرفع */}
                     {step === "report" && report && (
                         <div className="p-8 text-center space-y-6" dir="rtl">
-                            <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                                <CheckCircle2 className="w-10 h-10" />
+                            <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto border border-green-150">
+                                <CheckCircle2 className="w-10 h-10 animate-bounce" />
                             </div>
                             <div className="space-y-1.5">
                                 <h3 className="text-xl font-black text-gray-900">اكتمل استيراد الأسئلة بنجاح!</h3>
@@ -431,12 +536,12 @@ export function QuestionsImportModal({ professions, onSuccess }: Props) {
 
                             <div className="bg-slate-50 border border-gray-150 p-5 rounded-2xl max-w-md mx-auto grid grid-cols-2 gap-4 text-right shadow-sm">
                                 <div>
-                                    <span className="text-gray-400 block text-[10px] font-bold mb-0.5">الأسئلة المدخلة حديثاً</span>
-                                    <span className="text-2xl font-black text-green-600">{report.imported || report.count || parsedData.length}</span>
+                                    <span className="text-gray-400 block text-[10px] font-bold mb-0.5">الأسئلة التي تم حفظها</span>
+                                    <span className="text-2xl font-black text-green-650">{report.imported || parsedData.length}</span>
                                 </div>
                                 <div>
                                     <span className="text-gray-400 block text-[10px] font-bold mb-0.5">الأسئلة المتخطاة (المكررة)</span>
-                                    <span className="text-2xl font-black text-orange-500">{report.skipped || 0}</span>
+                                    <span className="text-2xl font-black text-orange-500">{report.skippedDuplicates || 0}</span>
                                 </div>
                             </div>
 

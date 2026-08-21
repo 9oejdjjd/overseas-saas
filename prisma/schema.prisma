@@ -22,6 +22,9 @@ model User {
   activityLogs          ActivityLog[]
   reviewedPurchases     MockExamPurchase[] @relation("PurchaseReviewer")
   author                Author?
+  agentId               String?
+  travelAgent           TravelAgent?  @relation(fields: [agentId], references: [id])
+  isAgentOwner          Boolean       @default(false)
 }
 
 model Location {
@@ -53,6 +56,7 @@ model ServiceConfig {
   enableMockExamNewQuestions Boolean  @default(false)
   mockExamPackagesEnabled    Boolean  @default(true)
   mockExamSinglePrice        Decimal  @default(0) @db.Decimal(10, 2)
+  agentMockExamSinglePrice   Decimal  @default(0) @db.Decimal(10, 2) // سعر الاختبار المفرد الأساسي للوكلاء
 }
 
 model MockExamPackage {
@@ -87,7 +91,10 @@ model MockExamPackage {
   firstAttemptFullFeatures Boolean            @default(false)
   allowedQuestionTypes     String             @default("MCQ,TRUE_FALSE,FILL_BLANK,IMAGE")
   attemptsConfig           Json?              @default("[]")
+  examQuestionsCount       Int?
+  agentPrice               Decimal            @default(0) @db.Decimal(10, 2) // السعر الأساسي للوكلاء
   purchases                MockExamPurchase[]
+  agentConfigs             AgentPackageConfig[]
 }
 
 model MockExamPurchase {
@@ -530,6 +537,7 @@ model Profession {
   aiJobs               AIGenerationJob[]
   examSessions         ExamSession[]
   questions            Question[]
+  agentOrders          AgentExamOrder[]
 }
 
 model Question {
@@ -545,6 +553,7 @@ model Question {
   cognitiveLevel String?               @default("K2")
   imageUrl       String?
   type           QuestionType          @default(MCQ)
+  questionStyle  String                @default("SCENARIO")
   sessionAnswers ExamSessionQuestion[]
   profession     Profession            @relation(fields: [professionId], references: [id], onDelete: Cascade)
   options        QuestionOption[]
@@ -585,6 +594,8 @@ model ExamSession {
   profession        Profession            @relation(fields: [professionId], references: [id], onDelete: Cascade)
   purchase          MockExamPurchase?     @relation(fields: [purchaseId], references: [id])
   questions         ExamSessionQuestion[]
+  agentOrderId      String?               @unique
+  agentOrder        AgentExamOrder?
 
   @@index([token])
   @@index([professionId])
@@ -693,6 +704,7 @@ enum UserRole {
   REGISTRATION_STAFF
   ACCOUNTANT
   FOLLOW_UP_STAFF
+  TRAVEL_AGENT
 }
 
 enum TransactionType {
@@ -885,4 +897,160 @@ model SystemCurrency {
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model SmtpConfig {
+  id         String   @id @default(uuid())
+  host       String
+  port       Int
+  user       String   @unique
+  pass       String
+  senderName String   @default("بوابة الاعتماد المهني")
+  secure     Boolean  @default(true)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TravelAgent {
+  id                String              @id @default(uuid())
+  companyName       String              // اسم المكتب/الوكالة
+  companyNameEn     String?
+  ownerName         String              // اسم المالك/المسؤول
+  phone             String              @unique
+  whatsappNumber    String?
+  email             String?             @unique
+  address           String?
+  city              String?
+  logo              String?
+  licenseNumber     String?
+  commissionRate    Decimal             @default(0) @db.Decimal(5, 2) // نسبة الخصم (قديم - تم استبداله بالتسعير المخصص)
+  customSingleExamPrice Decimal?        @db.Decimal(10, 2) // سعر مخصص للاختبار المفرد (null = استخدام السعر الأساسي)
+  walletBalance     Decimal             @default(0) @db.Decimal(10, 2) // الرصيد المالي
+  totalDeposited    Decimal             @default(0) @db.Decimal(10, 2) // إجمالي الإيداعات
+  totalSpent        Decimal             @default(0) @db.Decimal(10, 2) // إجمالي المصروف
+  currency          String              @default("YER")
+  allowDebt         Boolean             @default(false)
+  debtLimit         Decimal             @default(0) @db.Decimal(10, 2)
+  status            AgentStatus         @default(ACTIVE)
+  notes             String?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // العلاقات
+  users             User[]              // عدة مستخدمين لكل وكالة
+  clients           AgentClient[]
+  walletTransactions AgentWalletTransaction[]
+  examOrders        AgentExamOrder[]
+  packageConfigs    AgentPackageConfig[]
+
+  @@index([phone])
+  @@index([status])
+}
+
+enum AgentStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_APPROVAL
+}
+
+model AgentClient {
+  id                String              @id @default(uuid())
+  agentId           String
+  fullName          String
+  phone             String
+  whatsappNumber    String?
+  email             String?
+  profession        String?
+  nationalId        String?
+  passportNumber    String?
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  agent             TravelAgent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  examOrders        AgentExamOrder[]
+
+  @@index([agentId])
+  @@index([phone])
+}
+
+model AgentExamOrder {
+  id                String              @id @default(uuid())
+  agentId           String
+  clientId          String
+  professionId      String
+  sessionId         String?             @unique
+  status            AgentOrderStatus    @default(PENDING)
+  examLink          String?
+  examPrice         Decimal             @db.Decimal(10, 2) // سعر الاختبار وقت الشراء
+  sentAt            DateTime?
+  completedAt       DateTime?
+  score             Decimal?            @db.Decimal(5, 2)
+  isPassed          Boolean?
+  notificationSent  Boolean             @default(false)
+  createdByUserId   String?             // المستخدم الذي أنشأ الطلب
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  agent             TravelAgent         @relation(fields: [agentId], references: [id])
+  client            AgentClient         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  profession        Profession          @relation(fields: [professionId], references: [id])
+  session           ExamSession?        @relation(fields: [sessionId], references: [id])
+
+  @@index([agentId])
+  @@index([clientId])
+  @@index([status])
+}
+
+enum AgentOrderStatus {
+  PENDING
+  SENT
+  STARTED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+model AgentWalletTransaction {
+  id              String                    @id @default(uuid())
+  agentId         String
+  type            WalletTransactionType
+  amount          Decimal                   @db.Decimal(10, 2) // المبلغ
+  balanceBefore   Decimal                   @db.Decimal(10, 2)
+  balanceAfter    Decimal                   @db.Decimal(10, 2)
+  description     String?
+  orderId         String?                   // ربط بطلب الاختبار (عند الخصم)
+  approvedById    String?
+  createdAt       DateTime                  @default(now())
+
+  agent           TravelAgent               @relation(fields: [agentId], references: [id])
+
+  @@index([agentId])
+  @@index([type])
+}
+
+enum WalletTransactionType {
+  DEPOSIT         // إيداع/شحن رصيد
+  EXAM_PURCHASE   // شراء اختبار (خصم)
+  REFUND          // استرجاع
+  BONUS           // مكافأة
+  ADJUSTMENT      // تعديل يدوي
+}
+
+model AgentPackageConfig {
+  id          String           @id @default(uuid())
+  agentId     String
+  packageId   String
+  isEnabled   Boolean          @default(true)
+  customPrice Decimal          @db.Decimal(10, 2)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  agent       TravelAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  package     MockExamPackage  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, packageId])
+  @@index([agentId])
 }

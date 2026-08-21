@@ -52,7 +52,7 @@ export function MockExamRenewalCard({ phone, buyerName, applicantId, currentPurc
                     fetch("/api/pricing/mock-packages"),
                     fetch("/api/pricing/config")
                 ]);
-                if (pkgRes.ok) setPackages((await pkgRes.json()).filter((p: any) => p.isActive && !p.includesRegistration && !p.includesTransport));
+                if (pkgRes.ok) setPackages((await pkgRes.json()).filter((p: any) => p.isActive && !p.includesRegistration && !p.includesTransport && !p.isFree));
                 if (cfgRes.ok) setConfig(await cfgRes.json());
             } catch { /* ignore */ }
             setLoading(false);

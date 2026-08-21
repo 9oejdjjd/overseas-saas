@@ -39,6 +39,25 @@ export function QuestionCard({
         EMERGENCIES_FIRST_AID: "الطوارئ والإسعافات"
     };
 
+    const styleLabels: Record<string, string> = {
+        MIXED: "مختلط",
+        SCENARIO_SHORT: "سيناريو قصير",
+        SCENARIO_COMPLEX: "سيناريو مركب",
+        DEFINITION: "تعريف مصطلح",
+        VALUES_NUMBERS: "قيم وأرقام",
+        STANDARDS: "معايير ومواصفات",
+        TOOL_IDENTIFICATION: "تحديد أداة",
+        SAFETY: "سلامة مهنية",
+        STEP_ORDER: "ترتيب خطوات",
+        COMPARISON: "مقارنة وتمييز",
+        ERROR_IDENTIFICATION: "تحديد خطأ",
+        BEST_PRACTICE: "أفضل ممارسة",
+        CALCULATION: "حساب فني",
+        REGULATION: "تشريع مهني",
+        CAUSE_EFFECT: "سبب ونتيجة",
+        SCENARIO: "سيناريو"
+    };
+
     const diffColors: Record<string, string> = {
         HARD: "bg-red-100/60 text-red-700 border-red-200/80",
         EXPERT: "bg-purple-100/60 text-purple-700 border-purple-200/80",
@@ -87,13 +106,29 @@ export function QuestionCard({
                                 ? "bg-amber-50/50 text-amber-700 border-amber-200/60"
                                 : q.cognitiveLevel === "K3"
                                     ? "bg-purple-50/50 text-purple-700 border-purple-200/60"
-                                    : "bg-blue-50/50 text-blue-700 border-blue-200/60"
+                                    : q.cognitiveLevel === "K4"
+                                        ? "bg-emerald-50/50 text-emerald-700 border-emerald-200/60"
+                                        : q.cognitiveLevel === "K5"
+                                            ? "bg-rose-50/50 text-rose-700 border-rose-200/60"
+                                            : "bg-blue-50/50 text-blue-700 border-blue-200/60"
                         } font-black text-[10px] px-2 py-0.5 rounded-md`}>
-                            {q.cognitiveLevel === "K1" ? "K1 تذكر" : q.cognitiveLevel === "K3" ? "K3 تحليل" : "K2 تطبيق"}
+                            {q.cognitiveLevel === "K1" 
+                                ? "K1 تذكر" 
+                                : q.cognitiveLevel === "K3" 
+                                    ? "K3 تحليل" 
+                                    : q.cognitiveLevel === "K4" 
+                                        ? "K4 سهل/متوسط" 
+                                        : q.cognitiveLevel === "K5" 
+                                            ? "K5 متوسط/صعب" 
+                                            : "K2 تطبيق"}
                         </Badge>
                         {/* وسم نوع السؤال */}
                         <Badge variant="outline" className="bg-slate-100/60 text-slate-700 border-slate-300/60 font-black text-[10px] px-2 py-0.5 rounded-md">
-                            {q.type === "TRUE_FALSE" ? "صح أو خطأ" : q.type === "FILL_BLANK" ? "إكمال الفراغ" : "اختيار من متعدد"}
+                            {q.imageUrl ? "سؤال بصورة" : q.type === "TRUE_FALSE" ? "صح أو خطأ" : q.type === "FILL_BLANK" ? "إكمال الفراغ" : "اختيار من متعدد"}
+                        </Badge>
+                        {/* وسم نمط الصياغة */}
+                        <Badge variant="outline" className="bg-teal-50/50 text-teal-700 border-teal-200/60 font-black text-[10px] px-2 py-0.5 rounded-md">
+                            {styleLabels[q.questionStyle] || q.questionStyle || "سيناريو"}
                         </Badge>
                     </div>
                     

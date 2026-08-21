@@ -18,6 +18,18 @@ export async function POST(request: Request) {
         if (action === "REQUEST") {
             console.log("[OTP] REQUEST received:", { visitorPhone, email, visitorName, deliveryMethod });
             
+            // Validate email if provided
+            if (email) {
+                const { validateEmail } = await import("@/lib/email-validator");
+                const validationResult = await validateEmail(email);
+                if (!validationResult.isValid) {
+                    return NextResponse.json({ 
+                        error: validationResult.error,
+                        suggestion: validationResult.suggestion
+                    }, { status: 400 });
+                }
+            }
+
             // 1. Check if the phone belongs to a Registered Applicant
             const applicant = await prisma.applicant.findFirst({
                 where: {

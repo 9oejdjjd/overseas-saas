@@ -14,6 +14,7 @@ export type MockConfig = {
     mockExamSinglePrice: number;
     mockExamPackagesEnabled: boolean;
     registrationPrice: number;
+    agentMockExamSinglePrice: number;
 };
 
 export type AttemptConfig = {
@@ -53,6 +54,8 @@ export type MockPackage = {
     features?: string[] | any;
     actualCost?: number;
     attemptsConfig?: AttemptConfig[];
+    agentPrice?: number;
+    examQuestionsCount?: number | null;
 };
 
 const REGISTRATION_FEATURES = [
@@ -87,7 +90,8 @@ export function useMockExamPackages() {
     const [config, setConfig] = useState<MockConfig>({
         mockExamSinglePrice: 0,
         mockExamPackagesEnabled: true,
-        registrationPrice: 0
+        registrationPrice: 0,
+        agentMockExamSinglePrice: 0
     });
     const [loading, setLoading] = useState(true);
     const [isConfigEditing, setIsConfigEditing] = useState(false);
@@ -124,7 +128,8 @@ export function useMockExamPackages() {
                 setConfig({
                     mockExamSinglePrice: c.mockExamSinglePrice ?? 0,
                     mockExamPackagesEnabled: c.mockExamPackagesEnabled ?? true,
-                    registrationPrice: Number(c.registrationPrice ?? 0)
+                    registrationPrice: Number(c.registrationPrice ?? 0),
+                    agentMockExamSinglePrice: c.agentMockExamSinglePrice ?? 0
                 });
             } else {
                 toast("فشل جلب إعدادات الاختبارات العامة", "error");
@@ -181,16 +186,18 @@ export function useMockExamPackages() {
                 ...currentPackage,
                 examPrice: Number(currentPackage.examPrice || 0),
                 price: Number(currentPackage.examPrice || 0),
+                priceSAR: Number(currentPackage.priceSAR || 0),
+                agentPrice: Number(currentPackage.agentPrice || 0),
                 actualCost: Number(currentPackage.actualCost || 0),
                 registrationDiscount: Number(currentPackage.registrationDiscount || 0),
                 transportDiscount: Number(currentPackage.transportDiscount || 0),
                 examCredits: Number(currentPackage.examCredits || 0),
                 sortOrder: Number(currentPackage.sortOrder || 0),
                 validityDays: currentPackage.validityDays ? Number(currentPackage.validityDays) : null,
-                priceSAR: Number(currentPackage.priceSAR || 0),
                 badge: currentPackage.isFeatured ? (currentPackage.badge || null) : null,
                 color: currentPackage.isFeatured ? (currentPackage.color || "#16539a") : "#16539a",
-                attemptsConfig: currentPackage.attemptsConfig || []
+                attemptsConfig: currentPackage.attemptsConfig || [],
+                examQuestionsCount: currentPackage.examQuestionsCount !== undefined && currentPackage.examQuestionsCount !== null ? Number(currentPackage.examQuestionsCount) : null
             };
 
             const res = await fetch(url, {
@@ -310,7 +317,9 @@ export function useMockExamPackages() {
             validityDays: null,
             features: [],
             actualCost: 0,
-            attemptsConfig: generateDefaultAttemptsConfig(defaultCredits)
+            agentPrice: 0,
+            attemptsConfig: generateDefaultAttemptsConfig(defaultCredits),
+            examQuestionsCount: null
         });
         setIsFreePackageModalOpen(true);
     }, [packages.length, generateDefaultAttemptsConfig]);
@@ -344,7 +353,9 @@ export function useMockExamPackages() {
             validityDays: null,
             features: [],
             actualCost: 0,
-            attemptsConfig: []
+            agentPrice: 0,
+            attemptsConfig: [],
+            examQuestionsCount: null
         });
         setIsPackageModalOpen(true);
     }, [packages.length]);
@@ -363,7 +374,9 @@ export function useMockExamPackages() {
             validityDays: pkg.validityDays ?? null,
             features: Array.isArray(pkg.features) ? pkg.features : [],
             actualCost: Number(pkg.actualCost || 0),
-            attemptsConfig: Array.isArray(pkg.attemptsConfig) ? pkg.attemptsConfig : []
+            agentPrice: Number(pkg.agentPrice || 0),
+            attemptsConfig: Array.isArray(pkg.attemptsConfig) ? pkg.attemptsConfig : [],
+            examQuestionsCount: pkg.examQuestionsCount ?? null
         };
         setCurrentPackage(editPkg);
 
@@ -398,6 +411,7 @@ export function useMockExamPackages() {
             if (field === "isFree" && value === true) {
                 updated.examPrice = 0;
                 updated.priceSAR = 0;
+                updated.agentPrice = 0;
             }
 
             // When examCredits changes on a free package, adjust attemptsConfig

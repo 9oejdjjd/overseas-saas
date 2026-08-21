@@ -78,7 +78,7 @@ export function ProfessionSearchSection() {
                                             setSelectedSlug("");
                                         }}
                                         onFocus={() => setShowResults(true)}
-                                        onBlur={() => setShowResults(false)}
+                                        onBlur={() => setTimeout(() => setShowResults(false), 200)}
                                         placeholder="ابحث عن مهنتك..."
                                         className="w-full h-14 bg-white border border-slate-200 focus:border-[#16539a] focus:ring-4 focus:ring-brand-blue/5 rounded-xl pl-4 pr-11 text-base text-slate-800 placeholder-slate-450 shadow-sm transition-all focus:outline-none"
                                     />

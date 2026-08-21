@@ -76,7 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         const passed = roundedScore >= session.passingScore;
 
         // Execute ALL updates atomically in a single transaction
-        await prisma.$transaction([
+        const transactionOps = [
             // Update all question answers
             ...updates.map(update => 
                 prisma.examSessionQuestion.update({
@@ -94,7 +94,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     isPassed: passed
                 }
             })
-        ]);
+        ];
+
+        await prisma.$transaction(transactionOps);
+
+        // If this session is linked to an agent order, update the order with results
+        if (session.agentOrderId) {
+            await prisma.agentExamOrder.update({
+                where: { id: session.agentOrderId },
+                data: {
+                    status: "COMPLETED",
+                    completedAt: new Date(),
+                    score: roundedScore,
+                    isPassed: passed,
+                }
+            });
+        }
 
         // Send result via WhatsApp in the background using Next.js after() to prevent UI hanging AND avoid serverless freeze
         after(async () => {

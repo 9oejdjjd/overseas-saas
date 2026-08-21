@@ -144,6 +144,7 @@ export function QuestionsFilters({
                         <option value="MCQ">اختيار من متعدد</option>
                         <option value="TRUE_FALSE">صح أو خطأ</option>
                         <option value="FILL_BLANK">إكمال الفراغ</option>
+                        <option value="IMAGE">أسئلة الصور (مصورة)</option>
                     </select>
                 </div>
 
@@ -152,7 +153,7 @@ export function QuestionsFilters({
                     <label className="text-[11px] font-bold text-gray-500 mb-2 block">مستوى الصعوبة / المعرفة</label>
                     <select
                         className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:outline-none focus:border-slate-400 text-xs transition-all font-bold text-gray-700 cursor-pointer"
-                        value={filterCognitiveLevel !== "ALL" ? filterCognitiveLevel : filterDifficulty !== "ALL" ? filterDifficulty : "ALL"}
+                        value={filterCognitiveLevel}
                         onChange={(e) => {
                             const val = e.target.value;
                             if (val === "ALL") {
@@ -161,19 +162,27 @@ export function QuestionsFilters({
                             } else if (val === "K1") {
                                 setFilterCognitiveLevel("K1");
                                 setFilterDifficulty("ALL");
-                            } else if (val === "HARD") {
+                            } else if (val === "K2") {
                                 setFilterCognitiveLevel("K2");
                                 setFilterDifficulty("HARD");
-                            } else if (val === "EXPERT") {
+                            } else if (val === "K3") {
                                 setFilterCognitiveLevel("K3");
                                 setFilterDifficulty("EXPERT");
+                            } else if (val === "K4") {
+                                setFilterCognitiveLevel("K4");
+                                setFilterDifficulty("HARD");
+                            } else if (val === "K5") {
+                                setFilterCognitiveLevel("K5");
+                                setFilterDifficulty("HARD");
                             }
                         }}
                     >
                         <option value="ALL">جميع المستويات</option>
                         <option value="K1">K1 — تذكر (المعرفة الأساسية)</option>
-                        <option value="HARD">HARD — صعب وواقعي (K2)</option>
-                        <option value="EXPERT">EXPERT — معقد للخبراء (K3)</option>
+                        <option value="K2">K2 — تطبيق (صعب وواقعي)</option>
+                        <option value="K3">K3 — تحليل وتقييم (معقد للخبراء)</option>
+                        <option value="K4">K4 — فهم وتطبيق أساسي (سهل/متوسط)</option>
+                        <option value="K5">K5 — حل مشكلات تشغيلية (متوسط/صعب)</option>
                     </select>
                 </div>
 

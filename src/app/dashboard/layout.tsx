@@ -45,7 +45,7 @@ export default function DashboardLayout({
     children: React.ReactNode;
 }) {
     return (
-        <SessionProvider>
+        <SessionProvider refetchOnWindowFocus={false}>
             <DashboardContent>{children}</DashboardContent>
         </SessionProvider>
     );

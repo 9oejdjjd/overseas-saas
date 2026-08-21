@@ -7,6 +7,9 @@ declare module "next-auth" {
             role: string;
             requirePasswordChange: boolean;
             permissions: any;
+            agentId?: string | null;
+            companyName?: string | null;
+            isAgentOwner?: boolean;
         } & DefaultSession["user"];
     }
 
@@ -15,6 +18,9 @@ declare module "next-auth" {
         role: string;
         requirePasswordChange: boolean;
         permissions: any;
+        agentId?: string | null;
+        companyName?: string | null;
+        isAgentOwner?: boolean;
     }
 }
 
@@ -24,5 +30,8 @@ declare module "next-auth/jwt" {
         role: string;
         requirePasswordChange: boolean;
         permissions: any;
+        agentId?: string | null;
+        companyName?: string | null;
+        isAgentOwner?: boolean;
     }
 }

@@ -169,8 +169,13 @@ export function SessionsTable({
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex gap-2 items-center">
-                                                <Badge variant="secondary" className="text-[9px] font-bold scale-90">
-                                                    {group.customerType === "APPLICANT" ? "مسجل" : (group.customerType === "CUSTOMER" ? "عميل باقة" : "زائر عام")}
+                                                <Badge 
+                                                    variant="secondary" 
+                                                    className={`text-[9px] font-bold scale-90 ${group.customerType === "AGENT_CLIENT" ? "bg-purple-100 text-purple-700 hover:bg-purple-100 border border-purple-200" : ""}`}
+                                                >
+                                                    {group.customerType === "AGENT_CLIENT" 
+                                                        ? `عميل وكيل (${group.agentName || 'معتمد'})` 
+                                                        : (group.customerType === "APPLICANT" ? "مسجل" : (group.customerType === "CUSTOMER" ? "عميل باقة" : "زائر عام"))}
                                                 </Badge>
                                                 <span className="text-[10px] font-extrabold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
                                                     {group.totalAttempts} / {group.maxAttempts === -1 ? '∞' : (group.maxAttempts ?? 3)}
@@ -294,7 +299,12 @@ export function SessionsTable({
                                                             ) : <span className="text-gray-300 font-medium">-</span>}
                                                         </td>
                                                         <td className="px-6 py-3 text-xs text-gray-500 font-bold">
-                                                            <Badge variant="secondary" className="text-[9px] ml-2 font-black scale-90 origin-right">{session.type === "PUBLIC" ? "عام" : "خاص"}</Badge>
+                                                            <Badge 
+                                                                variant="secondary" 
+                                                                className={`text-[9px] ml-2 font-black scale-90 origin-right ${session.agentOrderId ? "bg-purple-50 text-purple-700 border-purple-200" : ""}`}
+                                                            >
+                                                                {session.agentOrderId ? "عميل وكيل" : (session.type === "PUBLIC" ? "عام" : "خاص")}
+                                                            </Badge>
                                                             محاولة رقم: {session.attemptNumber}
                                                         </td>
                                                         <td className="px-6 py-3 text-left text-xs text-gray-400 font-medium" dir="ltr">

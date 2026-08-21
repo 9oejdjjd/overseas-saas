@@ -185,7 +185,17 @@ export async function POST(request: Request) {
                 });
             }
             purchaseIdToLink = activePurchase.id;
-            attemptNum = activePurchase.usedCredits + 1;
+            
+            const prevSessionsCount = await prisma.examSession.count({
+                where: {
+                    professionId: profession.id,
+                    OR: [
+                        { visitorPhone: visitorPhone },
+                        { visitorPhone: phoneWithoutPlus }
+                    ]
+                }
+            });
+            attemptNum = prevSessionsCount + 1;
 
         } else {
             // Dynamic Global Attempts Fallback Logic
@@ -213,7 +223,17 @@ export async function POST(request: Request) {
             if (previousAttempts >= MAX_GLOBAL_ATTEMPTS) {
                 return NextResponse.json({ error: "لقد استنفذت جميع محاولاتك المجانية المتاحة." }, { status: 403 });
             }
-            attemptNum = previousAttempts + 1;
+            
+            const totalPreviousSessions = await prisma.examSession.count({
+                where: {
+                    professionId: profession.id,
+                    OR: [
+                        { visitorPhone: visitorPhone },
+                        { visitorPhone: phoneWithoutPlus }
+                    ]
+                }
+            });
+            attemptNum = totalPreviousSessions + 1;
         }
 
         // --- 3.5. IP Abuse Detection ---

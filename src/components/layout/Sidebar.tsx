@@ -66,6 +66,12 @@ const navigation = [
         permission: "VIEW_ACCOUNTING" as const
     },
     {
+        name: "إدارة الوكلاء",
+        href: "/dashboard/agents",
+        icon: Briefcase,
+        permission: "VIEW_APPLICANTS" as const // Using VIEW_APPLICANTS for now as per instructions or we can use another. The prompt says permission: "VIEW_APPLICANTS" as const
+    },
+    {
         name: "الإعدادات",
         href: "/dashboard/settings",
         icon: Settings,

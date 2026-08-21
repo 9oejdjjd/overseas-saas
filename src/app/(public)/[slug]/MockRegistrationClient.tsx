@@ -13,6 +13,44 @@ import { getDeviceFingerprint } from "@/lib/fingerprint";
 import { countries } from "@/constants/countries";
 import { CountryCodeSelector } from "@/components/ui/CountryCodeSelector";
 
+const emailTypoSuggestions: Record<string, string> = {
+    "gamil.com": "gmail.com",
+    "gamil.co": "gmail.com",
+    "gamil.con": "gmail.com",
+    "gmial.com": "gmail.com",
+    "gmal.com": "gmail.com",
+    "gamil": "gmail.com",
+    "hotmial.com": "hotmail.com",
+    "hotamil.com": "hotmail.com",
+    "yaho.com": "yahoo.com",
+    "yahu.com": "yahoo.com",
+};
+
+function getEmailSuggestion(email: string): string | null {
+    if (!email) return null;
+    const trimmed = email.trim().toLowerCase();
+    const parts = trimmed.split("@");
+    if (parts.length !== 2) return null;
+    
+    const [local, domain] = parts;
+    if (!domain) return null;
+
+    if (emailTypoSuggestions[domain]) {
+        return `${local}@${emailTypoSuggestions[domain]}`;
+    }
+
+    if (domain.endsWith(".con")) {
+        return `${local}@${domain.slice(0, -4)}.com`;
+    }
+    if (domain.endsWith(".cpm")) {
+        return `${local}@${domain.slice(0, -4)}.com`;
+    }
+    if (domain === "gmail.co" || domain === "hotmail.co" || domain === "yahoo.co") {
+        return `${local}@${domain}m`;
+    }
+
+    return null;
+}
 
 export default function MockRegistrationPage() {
     const router = useRouter();
@@ -42,6 +80,7 @@ export default function MockRegistrationPage() {
         deliveryMethod: "WHATSAPP", // "WHATSAPP" or "EMAIL"
         termsAccepted: false,
     });
+    const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
 
     const getNextTimer = (count: number) => {
         if (count === 0) return 30; // First request: 30 seconds
@@ -96,6 +135,7 @@ export default function MockRegistrationPage() {
     }, [slug]);
 
     const handleNext = async () => {
+        if (loading) return;
         if (step === 1) {
             setStep(2);
         } else if (step === 2) {
@@ -131,6 +171,9 @@ export default function MockRegistrationPage() {
                     setStep(3); // Already requested recently, go to OTP step
                     setTimeLeft(data.cooldown);
                     setCanResend(false);
+                    setTimeout(() => {
+                        inputRefs.current[0]?.focus();
+                    }, 100);
                     return;
                 }
 
@@ -142,6 +185,9 @@ export default function MockRegistrationPage() {
                     setTimeLeft(getNextTimer(0));
                     setCanResend(false);
                     setOtp(["", "", "", "", "", ""]);
+                    setTimeout(() => {
+                        inputRefs.current[0]?.focus();
+                    }, 100);
                 } else if (data.isVerified) {
                     setStep(4); // Skip OTP, go to Terms
                 }
@@ -154,7 +200,7 @@ export default function MockRegistrationPage() {
     };
 
     const handleVerifyOtp = async (code: string) => {
-        if (code.length !== 6) return;
+        if (code.length !== 6 || loading) return;
         setLoading(true);
         setError("");
         try {
@@ -181,6 +227,7 @@ export default function MockRegistrationPage() {
     };
 
     const handleResendOtp = async () => {
+        if (loading) return;
         setLoading(true);
         setError("");
         try {
@@ -211,6 +258,9 @@ export default function MockRegistrationPage() {
             setTimeLeft(getNextTimer(nextCount));
             setCanResend(false);
             setOtp(["", "", "", "", "", ""]);
+            setTimeout(() => {
+                inputRefs.current[0]?.focus();
+            }, 100);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -219,7 +269,8 @@ export default function MockRegistrationPage() {
     };
 
     const handleEmailFallbackSubmit = async () => {
-        if (!formData.email || !/^\S+@\S+\.\S+$/.test(formData.email)) {
+        if (loading) return;
+        if (!formData.email || !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email)) {
             setError("الرجاء إدخال بريد إلكتروني صحيح.");
             return;
         }
@@ -651,7 +702,11 @@ export default function MockRegistrationPage() {
                                                             placeholder="أدخل بريدك الإلكتروني"
                                                             dir="ltr"
                                                             value={formData.email}
-                                                            onChange={e => setFormData({...formData, email: e.target.value})}
+                                                            onChange={e => {
+                                                                const val = e.target.value;
+                                                                setFormData({...formData, email: val});
+                                                                setEmailSuggestion(getEmailSuggestion(val));
+                                                            }}
                                                             onKeyDown={(e) => {
                                                                 if (e.key === "Enter" && formData.email) {
                                                                     handleEmailFallbackSubmit();
@@ -659,6 +714,28 @@ export default function MockRegistrationPage() {
                                                             }}
                                                         />
                                                     </div>
+                                                    {emailSuggestion && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: -5 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            className="w-full max-w-[320px] text-right mt-1 px-1"
+                                                        >
+                                                            <span className="text-xs text-orange-600 font-bold block leading-relaxed">
+                                                                هل تقصد: {" "}
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setFormData(prev => ({ ...prev, email: emailSuggestion }));
+                                                                        setEmailSuggestion(null);
+                                                                    }}
+                                                                    className="underline hover:text-orange-700 font-mono focus:outline-none cursor-pointer"
+                                                                >
+                                                                    {emailSuggestion}
+                                                                </button>{" "}
+                                                                ؟ (اضغط للتصحيح)
+                                                            </span>
+                                                        </motion.div>
+                                                    )}
                                                     <div className="flex gap-2 w-full max-w-[320px]">
                                                         <Button 
                                                             variant="ghost" 
@@ -670,7 +747,7 @@ export default function MockRegistrationPage() {
                                                         </Button>
                                                         <Button 
                                                             onClick={handleEmailFallbackSubmit} 
-                                                            disabled={loading || !formData.email || !/^\S+@\S+\.\S+$/.test(formData.email)}
+                                                            disabled={loading || !formData.email || !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email)}
                                                             className="flex-1 bg-[#16539a] hover:bg-[#1e66b8] text-white"
                                                         >
                                                             {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : "إرسال الرمز"}

@@ -244,7 +244,7 @@ export function MockExamPackages() {
                     </div>
                 </CardHeader>
                 <CardContent className="pt-2 pb-5">
-                    <div className="grid md:grid-cols-3 gap-6 items-center p-5 bg-white rounded-2xl border border-slate-200/80">
+                    <div className="grid md:grid-cols-4 gap-6 items-center p-5 bg-white rounded-2xl border border-slate-200/80">
                         {/* Single Mock price */}
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-600 block">سعر الاختبار التجريبي المفرد (بدون باقة)</label>
@@ -254,6 +254,27 @@ export function MockExamPackages() {
                                     value={config.mockExamSinglePrice} 
                                     disabled={!isConfigEditing} 
                                     onChange={e => updateConfigField("mockExamSinglePrice", Number(e.target.value))}
+                                    className={cn(
+                                        "pl-14 text-left font-black text-slate-800 rounded-xl transition-all shadow-inner",
+                                        isConfigEditing 
+                                            ? "border-indigo-300 focus-visible:ring-indigo-500 bg-white" 
+                                            : "border-transparent bg-slate-100 cursor-not-allowed select-none"
+                                    )}
+                                    lang="en"
+                                />
+                                <span className="absolute left-4 top-2.5 text-xs font-bold text-slate-400">ر.ي</span>
+                            </div>
+                        </div>
+
+                        {/* Agent Single Mock price */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-600 block">سعر الاختبار المفرد للوكلاء</label>
+                            <div className="relative max-w-xs">
+                                <Input 
+                                    type="number" 
+                                    value={config.agentMockExamSinglePrice} 
+                                    disabled={!isConfigEditing} 
+                                    onChange={e => updateConfigField("agentMockExamSinglePrice", Number(e.target.value))}
                                     className={cn(
                                         "pl-14 text-left font-black text-slate-800 rounded-xl transition-all shadow-inner",
                                         isConfigEditing 
@@ -404,9 +425,14 @@ export function MockExamPackages() {
                                                 </TableCell>
                                                 <TableCell className="px-5 py-4">
                                                     <div className="space-y-0.5">
-                                                        <span className="font-black text-slate-800 text-sm">
-                                                            {Number(pkg.examPrice).toLocaleString()} ر.ي
+                                                        <span className="font-black text-slate-800 text-sm block">
+                                                            {Number(pkg.examPrice).toLocaleString()} ر.ي (عام)
                                                         </span>
+                                                        {!pkg.isFree && (
+                                                            <span className="font-bold text-indigo-600 text-xs block">
+                                                                {Number(pkg.agentPrice || 0).toLocaleString()} ر.ي (وكلاء)
+                                                            </span>
+                                                        )}
                                                         {pkg.priceSAR > 0 && (
                                                             <span className="text-[10px] text-emerald-600 font-bold block">
                                                                 🇸🇦 {Number(pkg.priceSAR).toLocaleString()} ر.س
@@ -556,14 +582,14 @@ export function MockExamPackages() {
                                         </div>
                                     </div>
 
-                                    {/* YER & SAR pricing inputs */}
-                                    <div className="grid grid-cols-2 gap-4 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100/50">
+                                    {/* YER, Agent & SAR pricing inputs */}
+                                    <div className="grid grid-cols-3 gap-4 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100/50">
                                         <div className="space-y-1">
-                                            <label className="text-xs font-bold text-indigo-900">سعر الحزمة الرسمي (بالريال اليمني)</label>
+                                            <label className="text-[10px] font-bold text-indigo-900">سعر الحزمة الرسمي (بالريال اليمني)</label>
                                             <div className="relative">
                                                 <Input 
                                                     type="number" 
-                                                    className="rounded-xl border-indigo-200 bg-white font-extrabold text-indigo-950 pl-14" 
+                                                    className="rounded-xl border-indigo-200 bg-white font-extrabold text-indigo-950 pl-14 text-xs h-9" 
                                                     value={currentPackage.examPrice} 
                                                     onChange={e => updatePackageField("examPrice", Number(e.target.value))} 
                                                 />
@@ -571,11 +597,23 @@ export function MockExamPackages() {
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-xs font-bold text-emerald-900">سعر الحزمة الرسمي (بالريال السعودي)🇸🇦</label>
+                                            <label className="text-[10px] font-bold text-purple-900">سعر الحزمة للوكلاء (بالريال اليمني)</label>
                                             <div className="relative">
                                                 <Input 
                                                     type="number" 
-                                                    className="rounded-xl border-emerald-200 bg-white font-extrabold text-emerald-950 pl-14" 
+                                                    className="rounded-xl border-purple-200 bg-white font-extrabold text-purple-950 pl-14 text-xs h-9" 
+                                                    value={currentPackage.agentPrice || 0} 
+                                                    onChange={e => updatePackageField("agentPrice", Number(e.target.value))} 
+                                                />
+                                                <span className="absolute left-4 top-2.5 text-xs font-bold text-purple-400">ر.ي</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-emerald-900">سعر الحزمة الرسمي (بالريال السعودي)🇸🇦</label>
+                                            <div className="relative">
+                                                <Input 
+                                                    type="number" 
+                                                    className="rounded-xl border-emerald-200 bg-white font-extrabold text-emerald-950 pl-14 text-xs h-9" 
                                                     value={currentPackage.priceSAR} 
                                                     onChange={e => updatePackageField("priceSAR", Number(e.target.value))} 
                                                 />
@@ -1039,7 +1077,7 @@ export function MockExamPackages() {
                             <div className="space-y-4">
                                 <h3 className="text-xs font-black text-emerald-700 block border-r-2 border-emerald-500 pr-2">رصيد الاختبارات والصلاحية</h3>
                                 <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50/35">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-3 gap-4">
                                         <div className="space-y-1">
                                             <label className="text-xs font-bold text-slate-600">عدد المحاولات المجانية</label>
                                             <Input 
@@ -1047,6 +1085,17 @@ export function MockExamPackages() {
                                                 min="1"
                                                 value={currentPackage.examCredits} 
                                                 onChange={e => updatePackageField("examCredits", Math.max(1, Number(e.target.value)))} 
+                                                className="rounded-xl border-slate-200 font-bold focus:border-emerald-500 focus:ring-emerald-500"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-600">عدد أسئلة الاختبار</label>
+                                            <Input 
+                                                type="number" 
+                                                min="1"
+                                                placeholder="الافتراضي للمهنة"
+                                                value={currentPackage.examQuestionsCount || ''} 
+                                                onChange={e => updatePackageField("examQuestionsCount", e.target.value ? Number(e.target.value) : null)} 
                                                 className="rounded-xl border-slate-200 font-bold focus:border-emerald-500 focus:ring-emerald-500"
                                             />
                                         </div>

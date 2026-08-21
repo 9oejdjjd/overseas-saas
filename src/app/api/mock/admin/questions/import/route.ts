@@ -16,6 +16,8 @@ interface QuestionInput {
     difficulty?: any;
     cognitiveLevel?: string;
     imageUrl?: string;
+    questionStyle?: string;
+    type?: string;
     options: OptionInput[];
 }
 
@@ -172,10 +174,11 @@ export async function POST(request: Request) {
             const q: QuestionInput = questions[i];
             const qText = q.text?.trim() || "";
 
-            const expectedOptionsCount = questionType === "TRUE_FALSE" ? 2 : 4;
+            const currentQType = q.type || questionType || "MCQ";
+            const expectedOptionsCount = currentQType === "TRUE_FALSE" ? 2 : 4;
             if (!q.options || !Array.isArray(q.options) || q.options.length !== expectedOptionsCount) {
                 report.failed++;
-                report.errors.push({ index: i, text: qText, reason: `Must have exactly ${expectedOptionsCount} options.` });
+                report.errors.push({ index: i, text: qText, reason: `Must have exactly ${expectedOptionsCount} options for type ${currentQType}.` });
                 continue;
             }
 
@@ -248,9 +251,17 @@ export async function POST(request: Request) {
                 }
             }
 
-            // Map VERY_HARD or K1 difficulty to HARD for database schema compatibility
-            const finalDifficulty = (q.difficulty === "VERY_HARD" || q.difficulty === "K1" || (q.difficulty as string) === "VERY_HARD" || (q.difficulty as string) === "K1") ? "HARD" : (q.difficulty || "HARD");
-            const finalCognitiveLevel = (q.cognitiveLevel === "K1" || q.difficulty === "VERY_HARD" || q.difficulty === "K1" || (q.difficulty as string) === "VERY_HARD" || (q.difficulty as string) === "K1") ? "K1" : (q.cognitiveLevel || "K2");
+            // Map VERY_HARD or K1 difficulty to HARD for database schema compatibility, EXPERT/K3 to EXPERT, others to HARD
+            const isExpert = q.difficulty === "EXPERT" || q.cognitiveLevel === "K3";
+            const finalDifficulty = isExpert ? "EXPERT" : "HARD";
+            
+            // Map and validate cognitiveLevel (supporting K1, K2, K3, K4, K5)
+            const finalCognitiveLevel = (q.difficulty === "VERY_HARD" || q.difficulty === "K1" || q.cognitiveLevel === "K1" || (q.difficulty as string) === "VERY_HARD" || (q.difficulty as string) === "K1") 
+                ? "K1" 
+                : (q.cognitiveLevel && ["K1", "K2", "K3", "K4", "K5"].includes(q.cognitiveLevel))
+                    ? q.cognitiveLevel
+                    : "K2";
+            const finalStyle = q.questionStyle || "SCENARIO";
 
             // Valid payload to insert
             validQuestionsToInsert.push({
@@ -258,7 +269,9 @@ export async function POST(request: Request) {
                 explanation: q.explanation || null,
                 difficulty: finalDifficulty,
                 cognitiveLevel: finalCognitiveLevel,
+                questionStyle: finalStyle,
                 imageUrl: q.imageUrl || null,
+                type: q.type || questionType, // Map type dynamically
                 options: q.options.map(opt => ({
                     text: opt.text.trim(),
                     isCorrect: !!opt.isCorrect
@@ -296,12 +309,13 @@ export async function POST(request: Request) {
                         data: {
                             professionId,
                             axis,
-                            type: questionType,
+                            type: q.type as any,
                             text: q.text,
                             imageUrl: q.imageUrl,
                             explanation: q.explanation,
                             difficulty: q.difficulty,
                             cognitiveLevel: q.cognitiveLevel,
+                            questionStyle: q.questionStyle,
                             options: {
                                 create: q.options
                             }

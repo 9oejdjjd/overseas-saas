@@ -12,7 +12,7 @@ import React from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuestionsImportModal } from "./QuestionsImportModal";
-import { SingleQuestionImportModal } from "./SingleQuestionImportModal";
+import { ImageQuestionsImportModal } from "./ImageQuestionsImportModal";
 import { DuplicateScannerModal } from "./DuplicateScannerModal";
 import { EditQuestionModal } from "./EditQuestionModal";
 import { useQuestionsManager } from "@/hooks/mock-exams/useQuestionsManager";
@@ -77,8 +77,8 @@ export function QuestionsManager() {
                         <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
                         تحديث
                     </Button>
-                    <SingleQuestionImportModal professions={professions} onSuccess={() => fetchQuestions(pagination.page)} />
-                    <QuestionsImportModal professions={professions} questions={questions} onSuccess={() => fetchQuestions(pagination.page)} />
+                    <QuestionsImportModal professions={professions} onSuccess={() => fetchQuestions(pagination.page)} />
+                    <ImageQuestionsImportModal professions={professions} onSuccess={() => fetchQuestions(pagination.page)} />
                     <DuplicateScannerModal professions={professions} onSuccess={() => fetchQuestions(pagination.page)} />
                 </div>
             </div>
