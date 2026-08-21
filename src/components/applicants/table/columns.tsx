@@ -84,24 +84,24 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
     const [creditInfo, setCreditInfo] = useState<{ hasCredits: boolean; remaining: number } | null>(null);
     const [checked, setChecked] = useState(false);
 
+    const checkCredits = async () => {
+        try {
+            const params = new URLSearchParams();
+            if (applicant.isVisitor) {
+                params.set("phone", applicant.phone);
+            } else {
+                params.set("applicantId", applicant.id);
+            }
+            const res = await fetch(`/api/pricing/mock-packages/check-credits?${params}`);
+            if (res.ok) {
+                const data = await res.json();
+                setCreditInfo(data);
+            }
+        } catch { /* ignore */ }
+        setChecked(true);
+    };
+
     useEffect(() => {
-        // Check credits on mount
-        const checkCredits = async () => {
-            try {
-                const params = new URLSearchParams();
-                if (applicant.isVisitor) {
-                    params.set("phone", applicant.phone);
-                } else {
-                    params.set("applicantId", applicant.id);
-                }
-                const res = await fetch(`/api/pricing/mock-packages/check-credits?${params}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setCreditInfo(data);
-                }
-            } catch { /* ignore */ }
-            setChecked(true);
-        };
         checkCredits();
     }, [applicant.id, applicant.phone]);
 
@@ -165,6 +165,9 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
 
             setTimeout(() => setSent(false), 5000);
             
+            // Re-fetch credits info
+            await checkCredits();
+            
         } catch (e) {
             console.error("Mock exam link send error:", e);
             setHasError(true);
@@ -193,6 +196,9 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
             const { message } = await genRes.json();
             await navigator.clipboard.writeText(message);
             toast("تم نسخ قالب الرسالة إلى الحافظة.", "success");
+            
+            // Re-fetch credits info
+            await checkCredits();
         } catch (e) {
             console.error("Copy error:", e);
             toast("تعذر إنشاء قالب الرسالة للنسخ.", "error");

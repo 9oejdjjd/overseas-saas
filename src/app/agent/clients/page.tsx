@@ -111,11 +111,18 @@ ${link}
         }
     };
 
-    // Initial load
+    // Initial load & background refresh interval every 12 seconds to keep stats synchronized
     useEffect(() => {
         if (status === "authenticated") {
             fetchClientsList();
             fetchExamsList();
+
+            const interval = setInterval(() => {
+                fetchClientsList();
+                fetchExamsList();
+            }, 12000);
+
+            return () => clearInterval(interval);
         }
     }, [status, examStatusFilter, examSearch]);
 

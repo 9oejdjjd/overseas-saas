@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Eye, Check, Copy, Send } from "lucide-react";
+import { Plus, Eye, Check, Copy, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentClient } from "@/types/agent";
 import Link from "next/link";
@@ -60,8 +60,8 @@ export function ClientsTable({
                                 </thead>
                                 <tbody className="divide-y divide-slate-150 dark:divide-slate-700/50 text-xs text-slate-700 dark:text-slate-200">
                                     {filteredClients.map((client) => {
-                                        const activeOrder = client.examOrders?.find(o => o.status === 'SENT' || o.status === 'STARTED');
-                                        const hasActiveExams = !!activeOrder;
+                                        const sentOrder = client.examOrders?.find(o => o.status === 'SENT');
+                                        const startedOrder = client.examOrders?.find(o => o.status === 'STARTED');
 
                                         return (
                                             <tr key={client.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/10 transition-all font-semibold">
@@ -85,10 +85,10 @@ export function ClientsTable({
                                                 </td>
                                                 <td className="py-4 px-5">
                                                     <div className="flex items-center justify-center gap-2">
-                                                        {hasActiveExams ? (
+                                                        {sentOrder ? (
                                                             <Button
                                                                 size="sm"
-                                                                onClick={() => onCopyActiveExamLink(activeOrder.examLink || "", client.fullName, client.profession || "", client.id)}
+                                                                onClick={() => onCopyActiveExamLink(sentOrder.examLink || "", client.fullName, client.profession || "", client.id)}
                                                                 className="bg-[#55943b] hover:bg-[#55943b]/90 text-white gap-1.5 rounded-lg shadow-sm h-8"
                                                             >
                                                                 {copiedClientId === client.id ? (
@@ -103,6 +103,11 @@ export function ClientsTable({
                                                                     </>
                                                                 )}
                                                             </Button>
+                                                        ) : startedOrder ? (
+                                                            <div className="flex items-center gap-1.5 text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/20 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/40 h-8">
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                <span className="text-[10px]">قيد الاختبار حالياً...</span>
+                                                            </div>
                                                         ) : (
                                                             <Button
                                                                 size="sm"

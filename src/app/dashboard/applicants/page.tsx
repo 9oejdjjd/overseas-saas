@@ -100,6 +100,39 @@ export default function ApplicantsPage() {
     }
   };
 
+  const fetchApplicantsSilent = async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set("page", (pagination.pageIndex + 1).toString());
+      params.set("limit", pagination.pageSize.toString());
+
+      if (searchTerm) params.set("search", searchTerm);
+      if (filters.status !== 'ALL') params.set("status", filters.status);
+      if (filters.locationId !== 'ALL') params.set("locationId", filters.locationId);
+      if (filters.viewType !== 'ALL') params.set("viewType", filters.viewType);
+
+      if (sorting.length > 0) {
+        params.set("sort", sorting[0].id);
+        params.set("order", sorting[0].desc ? "desc" : "asc");
+      }
+
+      const res = await fetch(`/api/applicants?${params.toString()}`);
+      const result = await res.json();
+
+      if (result.data) {
+        setData(result.data);
+        setPageCount(result.pagination.totalPages);
+      }
+
+      if (selectedApplicant) {
+        const fresh = result.data?.find((a: any) => a.id === selectedApplicant.id);
+        if (fresh) setSelectedApplicant(fresh);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   // --- Fetch Locations ---
   useEffect(() => {
     fetch("/api/locations")
@@ -123,13 +156,21 @@ export default function ApplicantsPage() {
       });
   }, []);
 
-  // --- Effect: Fetch on change ---
+  // --- Effect: Fetch on change & background polling interval ---
   useEffect(() => {
     // Debounce search
     const timer = setTimeout(() => {
       fetchApplicants();
     }, 300);
-    return () => clearTimeout(timer);
+
+    const interval = setInterval(() => {
+      fetchApplicantsSilent();
+    }, 12000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [pagination.pageIndex, pagination.pageSize, sorting, searchTerm, filters]);
 
 
