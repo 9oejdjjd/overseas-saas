@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// Helper: Robust Phone Variants Generator
+const getPhoneVariants = (phone: string | null | undefined) => {
+    if (!phone) return [];
+    const clean = phone.replace(/\D/g, "");
+    const variants = [phone, clean];
+    if (phone.startsWith("+")) {
+        variants.push(phone.slice(1));
+    } else {
+        variants.push(`+${phone}`);
+    }
+    const local = clean.replace(/^967/, "");
+    if (local !== clean) {
+        variants.push(local);
+        variants.push(`0${local}`);
+    } else {
+        variants.push(`967${clean}`);
+        variants.push(`+967${clean}`);
+    }
+    return [...new Set(variants)];
+};
+
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
@@ -14,8 +35,7 @@ export async function GET(request: NextRequest) {
         // Build phone variants for matching
         const phoneVariants: string[] = [];
         if (phone) {
-            phoneVariants.push(phone);
-            phoneVariants.push(phone.startsWith('+') ? phone.slice(1) : `+${phone}`);
+            phoneVariants.push(...getPhoneVariants(phone));
         }
 
         // If applicantId provided, get phone from applicant
@@ -25,8 +45,7 @@ export async function GET(request: NextRequest) {
                 select: { phone: true }
             });
             if (applicant?.phone) {
-                phoneVariants.push(applicant.phone);
-                phoneVariants.push(applicant.phone.startsWith('+') ? applicant.phone.slice(1) : `+${applicant.phone}`);
+                phoneVariants.push(...getPhoneVariants(applicant.phone));
             } else {
                 // Check if it is an AgentClient
                 const agentClient = await prisma.agentClient.findUnique({
@@ -54,10 +73,13 @@ export async function GET(request: NextRequest) {
 
         const uniquePhones = [...new Set(phoneVariants)];
 
-        // Find all active purchases for this phone
+        // Find all active purchases for this phone or applicantId
         const purchases = await prisma.mockExamPurchase.findMany({
             where: {
-                phone: { in: uniquePhones },
+                OR: [
+                    ...(applicantId ? [{ applicantId: applicantId }] : []),
+                    ...(uniquePhones.length > 0 ? [{ phone: { in: uniquePhones } }] : [])
+                ],
                 status: { in: ["ACTIVE", "PENDING", "PAID", "AWAITING_VERIFICATION", "UNDER_REVIEW"] },
             },
             include: { package: { select: { name: true } } },

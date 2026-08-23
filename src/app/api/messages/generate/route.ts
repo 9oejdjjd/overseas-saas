@@ -19,6 +19,27 @@ const formatArabicTime = (timeStr: string | null | undefined) => {
     return `${h}:${minutes} ${ampm}`;
 };
 
+// Helper: Robust Phone Variants Generator
+const getPhoneVariants = (phone: string | null | undefined) => {
+    if (!phone) return [];
+    const clean = phone.replace(/\D/g, "");
+    const variants = [phone, clean];
+    if (phone.startsWith("+")) {
+        variants.push(phone.slice(1));
+    } else {
+        variants.push(`+${phone}`);
+    }
+    const local = clean.replace(/^967/, "");
+    if (local !== clean) {
+        variants.push(local);
+        variants.push(`0${local}`);
+    } else {
+        variants.push(`967${clean}`);
+        variants.push(`+967${clean}`);
+    }
+    return [...new Set(variants)];
+};
+
 // Helper: Smart Profession Lookup (no fallback to prevent wrong profession)
 async function findActiveProfession(professionQuery: string | null | undefined) {
     if (professionQuery && professionQuery.trim()) {
@@ -127,13 +148,7 @@ export async function POST(request: Request) {
             };
         } else if (phone) {
             // Visitor Case with robust phone variants matching
-            const phoneVariants = [
-                phone,
-                phone.startsWith('+') ? phone.slice(1) : `+${phone}`,
-                phone.replace(/^\+?967/, ''),
-                phone.startsWith('0') ? phone.slice(1) : `0${phone}`
-            ];
-            const uniquePhones = [...new Set(phoneVariants)];
+            const uniquePhones = getPhoneVariants(phone);
 
             mockPurchase = await prisma.mockExamPurchase.findFirst({
                 where: {
@@ -221,7 +236,7 @@ export async function POST(request: Request) {
                     // For registered applicants: if profession not found, check their MockExamPurchase profession
                     if (!profession && applicantId) {
                         const reqPhone = applicantData.phone || applicantData.whatsappNumber || "";
-                        const phoneVariants = reqPhone ? [reqPhone, reqPhone.replace(/^\+/, ""), reqPhone.startsWith('+') ? reqPhone.slice(1) : `+${reqPhone}`] : [];
+                        const phoneVariants = getPhoneVariants(reqPhone);
                         const purchaseWithProfession = await prisma.mockExamPurchase.findFirst({
                             where: {
                                 OR: [
@@ -248,12 +263,11 @@ export async function POST(request: Request) {
                             text = text.replace(/{profession}/g, profession.name);
                         }
 
-                        // Find active purchase to link and check credits
+                        // Find active purchases to link and check credits
                         const reqPhoneNum = applicantData.phone || applicantData.whatsappNumber || "";
-                        const phoneWithoutPlus = reqPhoneNum ? reqPhoneNum.replace(/^\+/, "") : "";
-                        const uniquePhones = reqPhoneNum ? [reqPhoneNum, phoneWithoutPlus, reqPhoneNum.startsWith('+') ? reqPhoneNum.slice(1) : `+${reqPhoneNum}`] : [];
+                        const uniquePhones = getPhoneVariants(reqPhoneNum);
 
-                        const activePurchase = await prisma.mockExamPurchase.findFirst({
+                        const purchases = await prisma.mockExamPurchase.findMany({
                             where: {
                                 OR: [
                                     ...(applicantId ? [{ applicantId: applicantId }] : []),
@@ -264,10 +278,13 @@ export async function POST(request: Request) {
                             orderBy: { createdAt: "desc" }
                         });
 
-                        // Verify credits availability
-                        const hasCredits = activePurchase && (activePurchase.totalCredits === -1 || activePurchase.usedCredits < activePurchase.totalCredits) && !(activePurchase.expiresAt && activePurchase.expiresAt < new Date());
+                        const activePurchase = purchases.find(p => {
+                            const isExpired = p.expiresAt && p.expiresAt < new Date();
+                            const hasAvailableCredits = p.totalCredits === -1 || p.usedCredits < p.totalCredits;
+                            return !isExpired && hasAvailableCredits;
+                        });
 
-                        if (activePurchase && hasCredits) {
+                        if (activePurchase) {
                             // Deduct a credit if applicable
                             if (activePurchase.totalCredits !== -1) {
                                 await prisma.mockExamPurchase.update({

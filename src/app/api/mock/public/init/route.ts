@@ -4,6 +4,27 @@ import { ExamSessionStatus } from "@prisma/client";
 import { normalizePhone } from "@/lib/phone-utils";
 
 
+// Helper: Robust Phone Variants Generator
+const getPhoneVariants = (phone: string | null | undefined) => {
+    if (!phone) return [];
+    const clean = phone.replace(/\D/g, "");
+    const variants = [phone, clean];
+    if (phone.startsWith("+")) {
+        variants.push(phone.slice(1));
+    } else {
+        variants.push(`+${phone}`);
+    }
+    const local = clean.replace(/^967/, "");
+    if (local !== clean) {
+        variants.push(local);
+        variants.push(`0${local}`);
+    } else {
+        variants.push(`967${clean}`);
+        variants.push(`+967${clean}`);
+    }
+    return [...new Set(variants)];
+};
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -114,14 +135,12 @@ export async function POST(request: Request) {
         let attemptNum = 1;
 
         if (packagesEnabled) {
-            const activePurchaseConditions: any[] = [
-                { phone: visitorPhone },
-                { phone: phoneWithoutPlus }
-            ];
+            const uniquePhones = getPhoneVariants(visitorPhone);
+            const activePurchaseConditions: any[] = uniquePhones.map(ph => ({ phone: ph }));
             if (visitorEmail) activePurchaseConditions.push({ email: visitorEmail });
 
-            // Find active purchase
-            let activePurchase = await prisma.mockExamPurchase.findFirst({
+            // Find all active purchases
+            const purchases = await prisma.mockExamPurchase.findMany({
                 where: {
                     OR: activePurchaseConditions,
                     status: { in: ["ACTIVE", "PAID"] },
@@ -130,24 +149,17 @@ export async function POST(request: Request) {
                 orderBy: { createdAt: "desc" }
             });
 
-            // Filter out purchases that are fully consumed or expired (doing it in JS for flexibility)
-            if (activePurchase) {
-                if (activePurchase.totalCredits !== -1 && activePurchase.usedCredits >= activePurchase.totalCredits) activePurchase = null;
-                if (activePurchase?.expiresAt && activePurchase.expiresAt < new Date()) activePurchase = null;
-            }
+            // Find the first valid one in memory
+            let activePurchase = purchases.find(p => {
+                const isExpired = p.expiresAt && p.expiresAt < new Date();
+                const hasCreditsLeft = p.totalCredits === -1 || p.usedCredits < p.totalCredits;
+                return !isExpired && hasCreditsLeft;
+            }) || null;
 
             if (!activePurchase) {
-                // Check if they ever had a purchase (Free or Paid) that was exhausted
-                const pastPurchase = await prisma.mockExamPurchase.findFirst({
-                    where: {
-                        OR: activePurchaseConditions,
-                        status: { in: ["ACTIVE", "PAID"] },
-                        isPaid: true,
-                    },
-                    orderBy: { createdAt: "desc" }
-                });
-
-                if (pastPurchase) {
+                // If they have past purchases but none are valid/active, they are exhausted
+                const hasPastPurchases = purchases.length > 0;
+                if (hasPastPurchases) {
                     return NextResponse.json({ error: "لقد استنفذت جميع محاولات باقاتك السابقة. يرجى الاشتراك في إحدى الباقات المتاحة للاستمرار." }, { status: 403 });
                 }
 
