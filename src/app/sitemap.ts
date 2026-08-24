@@ -1,8 +1,9 @@
 import { MetadataRoute } from "next";
 import prisma from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/baseUrl";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://local-pacc.sa";
+    const baseUrl = getBaseUrl();
 
     // Static pages
     const staticPages: MetadataRoute.Sitemap = [

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { getBaseUrl } from "@/lib/baseUrl";
 
 // Helper for date formatting with Arabic Output
 const formatDate = (date: string | Date | null | undefined) => {
@@ -40,33 +41,72 @@ const getPhoneVariants = (phone: string | null | undefined) => {
     return [...new Set(variants)];
 };
 
-// Helper: Smart Profession Lookup (no fallback to prevent wrong profession)
+// Helper: Normalize Arabic spelling variants for robust matching
+const normalizeArabicText = (text: string | null | undefined): string => {
+    if (!text) return "";
+    return text
+        .trim()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+};
+
+// Helper: Smart Profession Lookup (with robust normalization and token matching)
 async function findActiveProfession(professionQuery: string | null | undefined) {
     if (professionQuery && professionQuery.trim()) {
-        const trimmed = professionQuery.trim();
-        // 1. Exact match
-        let prof = await prisma.profession.findFirst({
-            where: { name: trimmed, isActive: true }
-        });
-        if (prof) return prof;
+        const queryNormalized = normalizeArabicText(professionQuery);
 
-        // 2. Insensitive / Contains match
-        prof = await prisma.profession.findFirst({
-            where: { name: { contains: trimmed, mode: 'insensitive' }, isActive: true }
-        });
-        if (prof) return prof;
+        // Fetch all active professions to do smart normalized matching in memory
+        let allProfessions = await prisma.profession.findMany({ where: { isActive: true } });
 
-        // 3. Slug match
-        const slugified = trimmed.toLowerCase().replace(/\s+/g, '-');
-        prof = await prisma.profession.findFirst({
-            where: { slug: { contains: slugified }, isActive: true }
-        });
-        if (prof) return prof;
+        const performMatch = (profList: typeof allProfessions) => {
+            // 1. Exact normalized match (trimming both sides)
+            let matched = profList.find(p => normalizeArabicText(p.name.trim()) === queryNormalized);
+            if (matched) return matched;
 
-        // 4. Reverse contains match
-        const allProfessions = await prisma.profession.findMany({ where: { isActive: true } });
-        const matchedProf = allProfessions.find(p => trimmed.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(trimmed.toLowerCase()));
-        if (matchedProf) return matchedProf;
+            // 2. Normalized contains match
+            matched = profList.find(p => {
+                const pNorm = normalizeArabicText(p.name.trim());
+                return pNorm.includes(queryNormalized) || queryNormalized.includes(pNorm);
+            });
+            if (matched) return matched;
+
+            // 3. Normalized tokens overlap match
+            const queryTokens = queryNormalized.split(/\s+/).filter(t => t.length > 2);
+            if (queryTokens.length > 0) {
+                matched = profList.find(p => {
+                    const pNorm = normalizeArabicText(p.name.trim());
+                    const matchingTokens = queryTokens.filter(t => pNorm.includes(t));
+                    return matchingTokens.length >= Math.min(2, queryTokens.length);
+                });
+                if (matched) return matched;
+            }
+
+            // 4. Slug match
+            const slugified = professionQuery.trim().toLowerCase().replace(/\s+/g, '-');
+            const matchedSlug = profList.find(p => p.slug && p.slug.toLowerCase().includes(slugified));
+            if (matchedSlug) return matchedSlug;
+
+            // 5. Collapsed (no‑space) match
+            const collapsedQuery = queryNormalized.replace(/\s+/g, '');
+            const matchedCollapsed = profList.find(p => {
+              const pNorm = normalizeArabicText(p.name).replace(/\s+/g, '');
+              return pNorm.includes(collapsedQuery) || collapsedQuery.includes(pNorm);
+            });
+            if (matchedCollapsed) return matchedCollapsed;
+
+            return null;
+        };
+
+        let resultMatch = performMatch(allProfessions);
+        if (resultMatch) return resultMatch;
+
+        // Fallback: If no match found in active professions, search ALL professions (including inactive ones like "محاسب")
+        const allProfsFallback = await prisma.profession.findMany({});
+        resultMatch = performMatch(allProfsFallback);
+        if (resultMatch) return resultMatch;
     }
 
     // No fallback - return null to prevent creating sessions for wrong profession
@@ -263,7 +303,7 @@ export async function POST(request: Request) {
                             text = text.replace(/{profession}/g, profession.name);
                         }
 
-                        // Find active purchases to link and check credits
+                        // Find active purchases to link and check credits if available
                         const reqPhoneNum = applicantData.phone || applicantData.whatsappNumber || "";
                         const uniquePhones = getPhoneVariants(reqPhoneNum);
 
@@ -317,6 +357,27 @@ export async function POST(request: Request) {
                                     visitorName: activePurchase.buyerName
                                 }
                             });
+                        } else if (applicantId) {
+                            // Registered applicant in system without a separate MockExamPurchase record
+                            const prevSessionsCount = await prisma.examSession.count({
+                                where: {
+                                    professionId: profession.id,
+                                    applicantId: applicantId
+                                }
+                            });
+
+                            activeSession = await prisma.examSession.create({
+                                data: {
+                                    type: "PRIVATE",
+                                    status: "NEW",
+                                    professionId: profession.id,
+                                    passingScore: profession.passingScore,
+                                    attemptNumber: prevSessionsCount + 1,
+                                    applicantId: applicantId,
+                                    visitorPhone: applicantData.phone || applicantData.whatsappNumber || null,
+                                    visitorName: applicantData.fullName || null
+                                }
+                            });
                         }
                     }
                 } catch (err) {
@@ -325,7 +386,7 @@ export async function POST(request: Request) {
             }
 
             if (activeSession) {
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"));
+                const baseUrl = getBaseUrl(request);
                 const fullUrl = `${baseUrl}/session/${activeSession.token}`;
                 text = text.replace(/{examLink}|{mockLink}/g, fullUrl);
             } else {

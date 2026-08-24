@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import prisma from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/baseUrl";
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
     try {
@@ -150,7 +151,7 @@ async function sendMockResultNotification(session: any, profession: any, passed:
 
         if (!updatedSession) return;
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXTAUTH_URL || "http://localhost:3000")));
+        const baseUrl = getBaseUrl();
         const resultPageUrl = `${baseUrl}/session/${updatedSession.token}/result`;
 
         // Determine destination email and recipient name

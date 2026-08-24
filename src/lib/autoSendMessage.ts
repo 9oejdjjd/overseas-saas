@@ -2,6 +2,68 @@ import prisma from "@/lib/prisma";
 import { sendWhatsAppMessage, simulateHumanTyping, sleepRandom, parseSpintax, onWhatsApp } from "@/lib/openwa";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { getBaseUrl } from "@/lib/baseUrl";
+
+// Helper: Normalize Arabic spelling variants for robust matching
+const normalizeArabicText = (text: string | null | undefined): string => {
+    if (!text) return "";
+    return text
+        .trim()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+};
+
+// Helper: Smart Profession Lookup
+async function findActiveProfession(professionQuery: string | null | undefined) {
+    if (professionQuery && professionQuery.trim()) {
+        const queryNormalized = normalizeArabicText(professionQuery);
+
+        const allProfessions = await prisma.profession.findMany({ where: { isActive: true } });
+
+        const performMatch = (profList: typeof allProfessions) => {
+            // 1. Exact normalized match (trimming both sides)
+            let matched = profList.find(p => normalizeArabicText(p.name.trim()) === queryNormalized);
+            if (matched) return matched;
+
+            // 2. Normalized contains match
+            matched = profList.find(p => {
+                const pNorm = normalizeArabicText(p.name.trim());
+                return pNorm.includes(queryNormalized) || queryNormalized.includes(pNorm);
+            });
+            if (matched) return matched;
+
+            // 3. Normalized tokens overlap match
+            const queryTokens = queryNormalized.split(/\s+/).filter(t => t.length > 2);
+            if (queryTokens.length > 0) {
+                matched = profList.find(p => {
+                    const pNorm = normalizeArabicText(p.name.trim());
+                    const matchingTokens = queryTokens.filter(t => pNorm.includes(t));
+                    return matchingTokens.length >= Math.min(2, queryTokens.length);
+                });
+                if (matched) return matched;
+            }
+
+            // 4. Slug match
+            const slugified = professionQuery.trim().toLowerCase().replace(/\s+/g, '-');
+            const matchedSlug = profList.find(p => p.slug && p.slug.toLowerCase().includes(slugified));
+            if (matchedSlug) return matchedSlug;
+
+            return null;
+        };
+
+        let resultMatch = performMatch(allProfessions);
+        if (resultMatch) return resultMatch;
+
+        // Fallback: If no match found in active professions, search ALL professions (including inactive ones)
+        const allProfsFallback = await prisma.profession.findMany({});
+        resultMatch = performMatch(allProfsFallback);
+        if (resultMatch) return resultMatch;
+    }
+    return null;
+}
 
 /**
  * Server-side auto-send: generates a message from a template and sends it via Evolution API.
@@ -272,9 +334,7 @@ async function replaceVariables(
         // If no active session, try to auto-create one based on applicant's profession
         if (!activeSession && applicant.profession) {
             try {
-                const profession = await prisma.profession.findFirst({
-                    where: { name: applicant.profession, isActive: true }
-                });
+                const profession = await findActiveProfession(applicant.profession);
                 if (profession) {
                     activeSession = await prisma.examSession.create({
                         data: {
@@ -293,7 +353,7 @@ async function replaceVariables(
         }
 
         if (activeSession) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"));
+            const baseUrl = getBaseUrl();
             text = text.replace(/{examLink}|{mockLink}/g, `${baseUrl}/session/${activeSession.token}`);
         } else {
             text = text.replace(/{examLink}|{mockLink}/g, "رابط الاختبار غير متاح حالياً");
@@ -363,9 +423,7 @@ export async function sendMockPackageActivationMessage(purchaseId: string) {
         
         let mockLink = baseUrl;
         if (purchase.profession) {
-            const profession = await prisma.profession.findFirst({
-                where: { name: purchase.profession, isActive: true }
-            });
+            const profession = await findActiveProfession(purchase.profession);
             if (profession) {
                 mockLink = `${baseUrl}/${profession.slug}`;
             }

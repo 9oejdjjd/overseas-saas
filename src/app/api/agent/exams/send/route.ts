@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { getBaseUrl } from "@/lib/baseUrl";
 
 export async function POST(req: NextRequest) {
     try {
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
             const unitPrice = finalPriceToDeduct / qNum;
 
             const orders = [];
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXTAUTH_URL || "http://localhost:3000")));
+            const baseUrl = getBaseUrl(req);
 
             for (let i = 0; i < qNum; i++) {
                 const token = crypto.randomBytes(32).toString('hex');

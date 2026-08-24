@@ -38,14 +38,19 @@ export async function GET(request: NextRequest) {
             phoneVariants.push(...getPhoneVariants(phone));
         }
 
-        // If applicantId provided, get phone from applicant
+        let isRegisteredApplicant = false;
+
+        // If applicantId provided, get phone and profile from applicant
         if (applicantId) {
             const applicant = await prisma.applicant.findUnique({
                 where: { id: applicantId },
-                select: { phone: true }
+                select: { phone: true, profession: true }
             });
-            if (applicant?.phone) {
-                phoneVariants.push(...getPhoneVariants(applicant.phone));
+            if (applicant) {
+                isRegisteredApplicant = true;
+                if (applicant.phone) {
+                    phoneVariants.push(...getPhoneVariants(applicant.phone));
+                }
             } else {
                 // Check if it is an AgentClient
                 const agentClient = await prisma.agentClient.findUnique({
@@ -87,6 +92,17 @@ export async function GET(request: NextRequest) {
         });
 
         if (purchases.length === 0) {
+            if (isRegisteredApplicant) {
+                return NextResponse.json({
+                    hasCredits: true,
+                    remaining: -1,
+                    total: -1,
+                    used: 0,
+                    packageName: "متقدم مسجل في النظام",
+                    purchases: []
+                });
+            }
+
             return NextResponse.json({
                 hasCredits: false,
                 remaining: 0,
@@ -117,14 +133,15 @@ export async function GET(request: NextRequest) {
             };
         });
 
-        const remaining = hasUnlimited ? -1 : totalCredits - usedCredits;
+        const remaining = hasUnlimited ? -1 : Math.max(0, totalCredits - usedCredits);
+        const hasCredits = hasUnlimited || remaining > 0 || isRegisteredApplicant;
 
         return NextResponse.json({
-            hasCredits: hasUnlimited || remaining > 0,
-            remaining,
+            hasCredits,
+            remaining: isRegisteredApplicant && remaining === 0 && !hasUnlimited ? -1 : remaining,
             total: hasUnlimited ? -1 : totalCredits,
             used: usedCredits,
-            packageName: purchases[0]?.package?.name || "اختبارات مفردة",
+            packageName: purchases[0]?.package?.name || (isRegisteredApplicant ? "متقدم مسجل" : "اختبارات مفردة"),
             purchases: purchaseSummary,
         });
 

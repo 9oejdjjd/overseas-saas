@@ -125,7 +125,10 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
                     trigger: "ON_MOCK_EXAM_LINK",
                 })
             });
-            if (!genRes.ok) throw new Error("Failed to generate");
+            if (!genRes.ok) {
+                const errData = await genRes.json().catch(() => ({}));
+                throw new Error(errData.error || "فشل في إنشاء رابط الاختبار");
+            }
             const { message, phone } = await genRes.json();
 
             const sendRes = await fetch("/api/messages/send", {
@@ -168,10 +171,10 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
             // Re-fetch credits info
             await checkCredits();
             
-        } catch (e) {
+        } catch (e: any) {
             console.error("Mock exam link send error:", e);
             setHasError(true);
-            toast("حدث خطأ أثناء محاولة إرسال رابط الاختبار عبر الواتساب.", "error");
+            toast(e?.message || "حدث خطأ أثناء محاولة إرسال رابط الاختبار عبر الواتساب.", "error");
             setTimeout(() => setHasError(false), 5000);
         } finally {
             setSending(false);
@@ -192,16 +195,19 @@ function MockExamLinkButton({ applicant }: { applicant: ApplicantData }) {
                     trigger: "ON_MOCK_EXAM_LINK",
                 })
             });
-            if (!genRes.ok) throw new Error("Failed to generate");
+            if (!genRes.ok) {
+                const errData = await genRes.json().catch(() => ({}));
+                throw new Error(errData.error || "فشل في إنشاء رابط الاختبار");
+            }
             const { message } = await genRes.json();
             await navigator.clipboard.writeText(message);
             toast("تم نسخ قالب الرسالة إلى الحافظة.", "success");
             
             // Re-fetch credits info
             await checkCredits();
-        } catch (e) {
+        } catch (e: any) {
             console.error("Copy error:", e);
-            toast("تعذر إنشاء قالب الرسالة للنسخ.", "error");
+            toast(e?.message || "تعذر إنشاء قالب الرسالة للنسخ.", "error");
         } finally {
             setCopying(false);
         }

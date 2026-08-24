@@ -17,8 +17,10 @@ const inter = Inter({
   display: "swap",
 });
 
+import { getBaseUrl } from "@/lib/baseUrl";
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://local-pacc.sa"),
+  metadataBase: new URL(getBaseUrl()),
   title: "بوابة الاعتماد المهني | اختبار تجريبي مجاني للعمالة اليمنية",
   description: "اختبر مستواك قبل اختبار الاعتماد المهني السعودي. اختبارات تجريبية مجانية لمهن: عامل تحميل وتنزيل، سائق شاحنة، خياط، عامل مزرعة والمزيد. نجهزك للنجاح من أول محاولة.",
   keywords: "اعتماد مهني, اختبار تجريبي, عمالة يمنية, السعودية, اختبار مهني, عامل تحميل, سائق شاحنة, خياط, بوابة الاعتماد المهني",
