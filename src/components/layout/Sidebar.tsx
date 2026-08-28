@@ -23,7 +23,8 @@ import {
     TicketPercent,
     FileText,
     BookOpen,
-    Wallet
+    Wallet,
+    Mail
 } from "lucide-react";
 import { useState } from "react";
 
@@ -70,6 +71,12 @@ const navigation = [
         href: "/dashboard/agents",
         icon: Briefcase,
         permission: "VIEW_APPLICANTS" as const // Using VIEW_APPLICANTS for now as per instructions or we can use another. The prompt says permission: "VIEW_APPLICANTS" as const
+    },
+    {
+        name: "إدارة البريد",
+        href: "/dashboard/emails",
+        icon: Mail,
+        permission: "ACCESS_SETTINGS" as const,
     },
     {
         name: "الإعدادات",

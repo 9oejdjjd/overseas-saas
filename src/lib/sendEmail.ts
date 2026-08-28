@@ -11,23 +11,63 @@ const getCommonHeaders = (replyTo: string) => ({
 
 const LOGO_URL = "https://res.cloudinary.com/db4ulwtpa/image/upload/brand_logo.png";
 
+async function getEmailTemplate(trigger: string, defaults: { subject: string; body: string }) {
+    try {
+        const template = await prisma.messagingTemplate.findFirst({
+            where: { trigger, type: "EMAIL", active: true }
+        });
+        if (template) {
+            return {
+                subject: template.subject || defaults.subject,
+                body: template.body
+            };
+        }
+    } catch (e) {
+        console.warn(`[Email Template] Failed to fetch template for ${trigger}:`, e);
+    }
+    return defaults;
+}
+
 /**
  * Sends mail by trying available SMTP configurations in DB (with load balance), 
  * and falls back to environment variables SMTP configuration.
  */
-async function sendMailWithFailover(mailOptionsWithoutFrom: {
+export async function sendMailWithFailover(mailOptionsWithoutFrom: {
     to: string;
     subject: string;
     text: string;
     html: string;
-}) {
+}, trigger?: string) {
     let configs: any[] = [];
     try {
         configs = await prisma.smtpConfig.findMany({
             where: { isActive: true }
         });
     } catch (e) {
-        console.warn("[Email] Failed to fetch SMTP configurations from DB, using fallback:", e);
+        console.error("[Email] Failed to fetch SMTP configurations from DB:", e);
+        throw new Error("فشل الاتصال بقاعدة البيانات لجلب إعدادات خوادم البريد الإلكتروني.");
+    }
+
+    if (configs.length === 0) {
+        console.error("[Email] No active SMTP configurations found in database.");
+        
+        // Log the failure
+        try {
+            await prisma.emailLog.create({
+                data: {
+                    recipient: mailOptionsWithoutFrom.to,
+                    subject: mailOptionsWithoutFrom.subject,
+                    body: mailOptionsWithoutFrom.html,
+                    status: "FAILED",
+                    trigger: trigger || null,
+                    error: "لا توجد خوادم بريد SMTP نشطة في النظام. يرجى إضافة خادم من لوحة التحكم ← إعدادات البريد."
+                }
+            });
+        } catch (logErr) {
+            console.error("[Email Log] Failed to save failure log:", logErr);
+        }
+
+        throw new Error("لا توجد خوادم بريد SMTP نشطة في النظام. يرجى إضافة وتفعيل خادم بريد من لوحة التحكم (إعدادات ← خوادم البريد الإلكتروني).");
     }
 
     const attempts: Array<{
@@ -38,7 +78,7 @@ async function sendMailWithFailover(mailOptionsWithoutFrom: {
         send: (options: any) => Promise<any>;
     }> = [];
 
-    // 1. Add DB SMTP Configs
+    // Build send attempts from DB SMTP Configs only
     for (const config of configs) {
         attempts.push({
             host: config.host,
@@ -57,38 +97,11 @@ async function sendMailWithFailover(mailOptionsWithoutFrom: {
         });
     }
 
-    // 2. Add ENV fallback SMTP Config
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-        attempts.push({
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            user: process.env.SMTP_USER,
-            from: `"بوابة الاعتماد المهني" <${process.env.SMTP_USER}>`,
-            replyTo: process.env.SMTP_USER,
-            send: async (options: any) => {
-                const port = Number(process.env.SMTP_PORT) || 465;
-                const transporter = nodemailer.createTransport({
-                    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-                    port: port,
-                    secure: port === 465,
-                    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-                });
-                return transporter.sendMail(options);
-            }
-        });
-    }
-
-    if (attempts.length === 0) {
-        throw new Error("No configured SMTP accounts found (neither DB nor environment variables).");
-    }
-
-    // Rotational load balancing: shuffle DB configs, keep ENV fallback at the end
-    const dbAttempts = attempts.slice(0, configs.length);
-    const envAttempts = attempts.slice(configs.length);
-    const shuffledDb = dbAttempts.sort(() => Math.random() - 0.5);
-    const finalAttempts = [...shuffledDb, ...envAttempts];
+    // Rotational load balancing: shuffle DB configs for even distribution
+    const shuffledAttempts = attempts.sort(() => Math.random() - 0.5);
 
     let lastError: any = null;
-    for (const attempt of finalAttempts) {
+    for (const attempt of shuffledAttempts) {
         try {
             console.log(`[Email] Attempting send via ${attempt.user} (${attempt.host})`);
             const finalOptions = {
@@ -98,14 +111,47 @@ async function sendMailWithFailover(mailOptionsWithoutFrom: {
             };
             const info = await attempt.send(finalOptions);
             console.log(`[Email] Success via ${attempt.user}. MsgId: ${info.messageId}`);
+            
+            // Log successful email in DB
+            try {
+                await prisma.emailLog.create({
+                    data: {
+                        recipient: mailOptionsWithoutFrom.to,
+                        subject: mailOptionsWithoutFrom.subject,
+                        body: mailOptionsWithoutFrom.html,
+                        status: "SENT",
+                        trigger: trigger || null,
+                        senderEmail: attempt.user
+                    }
+                });
+            } catch (logErr) {
+                console.error("[Email Log] Failed to save success log:", logErr);
+            }
+
             return { success: true, messageId: info.messageId };
-        } catch (err) {
+        } catch (err: any) {
             console.error(`[Email] Failed via ${attempt.user}:`, err);
             lastError = err;
         }
     }
 
-    throw lastError || new Error("Failed to send email using all available configurations.");
+    // Log failed email in DB if all attempts fail
+    try {
+        await prisma.emailLog.create({
+            data: {
+                recipient: mailOptionsWithoutFrom.to,
+                subject: mailOptionsWithoutFrom.subject,
+                body: mailOptionsWithoutFrom.html,
+                status: "FAILED",
+                trigger: trigger || null,
+                error: lastError?.message || "فشلت جميع محاولات الإرسال عبر خوادم البريد النشطة في النظام"
+            }
+        });
+    } catch (logErr) {
+        console.error("[Email Log] Failed to save failure log:", logErr);
+    }
+
+    throw lastError || new Error("فشل إرسال البريد الإلكتروني عبر جميع خوادم SMTP النشطة.");
 }
 
 /**
@@ -113,11 +159,8 @@ async function sendMailWithFailover(mailOptionsWithoutFrom: {
  */
 export async function sendOTPByEmail(to: string, name: string, otp: string, professionName?: string) {
     try {
-        const mailOptions = {
-            to,
-            subject: 'رمز التحقق الخاص بك — الاختبار التجريبي',
-            text: `مرحباً ${name}،\n\nرمز التحقق الخاص بك هو: ${otp}\n\nهذا الرمز صالح لمدة 5 دقائق فقط.\nلا تشارك هذا الرمز مع أي شخص.\n\nبوابة الاعتماد المهني\nhttps://overseas-travels.com`,
-            html: `
+        const defaultSubject = 'رمز التحقق الخاص بك — الاختبار التجريبي';
+        const defaultHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -183,13 +226,13 @@ export async function sendOTPByEmail(to: string, name: string, otp: string, prof
             <img src="${LOGO_URL}" alt="بوابة الاعتماد المهني" width="140" style="height: auto; border: 0;" />
         </div>
         <div class="body">
-            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a;">مرحباً بك، ${name}</h2>
+            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a;">مرحباً بك، {name}</h2>
             <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.8;">
-                أنت على وشك البدء في الاختبار التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">${professionName || 'التخصص المختار'}</span>. يرجى استخدام رمز التحقق أدناه لتأكيد هويتك وإكمال عملية الدخول:
+                أنت على وشك البدء في الاختبار التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">{profession}</span>. يرجى استخدام رمز التحقق أدناه لتأكيد هويتك وإكمال عملية الدخول:
             </p>
             <div class="otp-container">
                 <p style="margin: 0 0 8px 0; font-size: 13px; color: #16539a; font-weight: 700;">رمز التحقق (OTP)</p>
-                <div class="otp-code">${otp}</div>
+                <div class="otp-code">{otp}</div>
             </div>
             <p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.6; text-align: center;">
                 هذا الرمز صالح لمدة <span style="color: #ef4444; font-weight: 700;">5 دقائق</span> فقط. للحفاظ على أمان حسابك، لا تشارك هذا الرمز مع أي شخص.
@@ -205,10 +248,36 @@ export async function sendOTPByEmail(to: string, name: string, otp: string, prof
     </div>
 </body>
 </html>
-            `,
+        `;
+
+        const template = await getEmailTemplate("ON_OTP", {
+            subject: defaultSubject,
+            body: defaultHtml
+        });
+
+        let subject = template.subject;
+        let html = template.body;
+
+        const replaceAll = (str: string) => {
+            return str
+                .split("{name}").join(name || "")
+                .split("{otp}").join(otp || "")
+                .split("{profession}").join(professionName || "التخصص المختار")
+                .split("{professionName}").join(professionName || "التخصص المختار");
         };
 
-        await sendMailWithFailover(mailOptions);
+        subject = replaceAll(subject);
+        html = replaceAll(html);
+        const text = html.replace(/<[^>]*>/g, ""); // Strip HTML tags for plain text
+
+        const mailOptions = {
+            to,
+            subject,
+            text,
+            html
+        };
+
+        await sendMailWithFailover(mailOptions, "ON_OTP");
         return { success: true };
     } catch (error) {
         console.error(`[Email] Error sending OTP to ${to}:`, error);
@@ -230,12 +299,8 @@ export async function sendMockResultByEmail(
 ) {
     try {
         const resultText = isPassed ? "ناجح (اجتياز)" : "لم تجتز (راسب)";
-        
-        const mailOptions = {
-            to,
-            subject: `نتيجة اختبارك التجريبي لمهنة ${professionName} — بوابة الاعتماد المهني`,
-            text: `مرحباً ${name}،\n\nنتيجة اختبارك التجريبي لمهنة ${professionName}:\nالنتيجة: ${isPassed ? 'ناجح' : 'راسب'}${score !== undefined ? `\nالدرجة: ${score}%` : ''}${passingScore !== undefined ? `\nدرجة الاجتياز: ${passingScore}%` : ''}\n\nلعرض التقرير التفصيلي: ${resultUrl}\n\nبوابة الاعتماد المهني\nhttps://overseas-travels.com`,
-            html: `
+        const defaultSubject = `نتيجة اختبارك التجريبي لمهنة ${professionName} — بوابة الاعتماد المهني`;
+        const defaultHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -319,24 +384,23 @@ export async function sendMockResultByEmail(
             <img src="${LOGO_URL}" alt="بوابة الاعتماد المهني" width="140" style="height: auto; border: 0;" />
         </div>
         <div class="body">
-            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a; text-align: right;">مرحباً بك، ${name}</h2>
+            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a; text-align: right;">مرحباً بك، {name}</h2>
             <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.8; text-align: right;">
-                لقد تم الانتهاء من تصحيح إجاباتك للاختبار التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">${professionName}</span> بنجاح. وفيما يلي نتيجة تقييمك:
+                لقد تم الانتهاء من تصحيح إجاباتك للاختبار التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">{profession}</span> بنجاح. وفيما يلي نتيجة تقييمك:
             </p>
             
             <div class="result-highlight ${isPassed ? 'success-bg' : 'fail-bg'}">
-                <span style="font-weight: 750;">اسم المتدرب:</span> ${name} <br/>
-                <span style="font-weight: 750;">المهنة المستهدفة:</span> ${professionName} <br/>
-                <span style="font-weight: 750;">النتيجة النهائية:</span> ${resultText}
-                ${score !== undefined ? `<br/><span style="font-weight: 750;">الدرجة المحرزة:</span> ${score}%` : ''}
-                ${passingScore !== undefined ? `<br/><span style="font-weight: 750;">درجة الاجتياز المطلوبة:</span> ${passingScore}%` : ''}
+                <span style="font-weight: 750;">اسم المتدرب:</span> {name} <br/>
+                <span style="font-weight: 750;">المهنة المستهدفة:</span> {profession} <br/>
+                <span style="font-weight: 750;">النتيجة النهائية:</span> {resultText}
+                {scoreDetails}
             </div>
 
             <p style="margin: 0; font-size: 14px; color: #64748b; line-height: 1.6; text-align: center;">
                 لمراجعـة الأسـئلة والاطلاع على الأخطـاء وتصحيحهـا، يرجى النقر على زر التقرير:
             </p>
             
-            <a class="btn-report" href="${resultUrl}" target="_blank">عرض تقرير النتيجة التفصيلي</a>
+            <a class="btn-report" href="{resultUrl}" target="_blank">عرض تقرير النتيجة التفصيلي</a>
         </div>
         <div class="footer">
             <p style="margin: 0; line-height: 1.6;">
@@ -348,10 +412,42 @@ export async function sendMockResultByEmail(
     </div>
 </body>
 </html>
-            `,
+        `;
+
+        const template = await getEmailTemplate("ON_MOCK_RESULT", {
+            subject: defaultSubject,
+            body: defaultHtml
+        });
+
+        let subject = template.subject;
+        let html = template.body;
+
+        const replaceAll = (str: string) => {
+            let scoreStr = '';
+            if (score !== undefined) scoreStr += `<br/><span style="font-weight: 750;">الدرجة المحرزة:</span> ${score}%`;
+            if (passingScore !== undefined) scoreStr += `<br/><span style="font-weight: 750;">درجة الاجتياز المطلوبة:</span> ${passingScore}%`;
+
+            return str
+                .split("{name}").join(name || "")
+                .split("{profession}").join(professionName || "")
+                .split("{professionName}").join(professionName || "")
+                .split("{resultText}").join(resultText)
+                .split("{resultUrl}").join(resultUrl || "")
+                .split("{scoreDetails}").join(scoreStr);
         };
 
-        await sendMailWithFailover(mailOptions);
+        subject = replaceAll(subject);
+        html = replaceAll(html);
+        const text = html.replace(/<[^>]*>/g, ""); // strip html for text fallback
+
+        const mailOptions = {
+            to,
+            subject,
+            text,
+            html
+        };
+
+        await sendMailWithFailover(mailOptions, "ON_MOCK_RESULT");
         return { success: true };
     } catch (error) {
         console.error(`[Email] Error sending exam result to ${to}:`, error);
@@ -364,11 +460,8 @@ export async function sendMockResultByEmail(
  */
 export async function sendMockExamLinkByEmail(to: string, name: string, professionName: string, examLink: string) {
     try {
-        const mailOptions = {
-            to,
-            subject: `رابط اختبارك التجريبي لمهنة ${professionName} — بوابة الاعتماد المهني`,
-            text: `مرحباً ${name}،\n\nرابط اختبارك التجريبي لمهنة ${professionName}:\n${examLink}\n\nيرجى التأكد من توفر اتصال ثابت بالإنترنت قبل بدء الاختبار.\n\nبوابة الاعتماد المهني\nhttps://overseas-travels.com`,
-            html: `
+        const defaultSubject = `رابط اختبارك التجريبي لمهنة ${professionName} — بوابة الاعتماد المهني`;
+        const defaultHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -431,11 +524,11 @@ export async function sendMockExamLinkByEmail(to: string, name: string, professi
             <img src="${LOGO_URL}" alt="بوابة الاعتماد المهني" width="140" style="height: auto; border: 0;" />
         </div>
         <div class="body">
-            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a; text-align: right;">مرحباً بك، ${name}</h2>
+            <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: 700; color: #0f172a; text-align: right;">مرحباً بك، {name}</h2>
             <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.8; text-align: right;">
-                يسعدنا إرسال رابط اختبارك التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">${professionName}</span>. يرجى الضغط على الزر أدناه لبدء جلسة الاختبار الخاصة بك مباشرة:
+                يسعدنا إرسال رابط اختبارك التجريبي لمهنة <span style="color: #16539a; font-weight: 700;">{profession}</span>. يرجى الضغط على الزر أدناه لبدء جلسة الاختبار الخاصة بك مباشرة:
             </p>
-            <a class="btn-start" href="${examLink}" target="_blank">ابدأ الاختبار التجريبي الآن</a>
+            <a class="btn-start" href="{examLink}" target="_blank">ابدأ الاختبار التجريبي الآن</a>
             <p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.6; text-align: center;">
                 يرجى التأكد من توفر اتصال ثابت بالإنترنت قبل بدء الاختبار. بمجرد الدخول لا يمكن إيقاف مؤقت الاختبار.
             </p>
@@ -450,10 +543,37 @@ export async function sendMockExamLinkByEmail(to: string, name: string, professi
     </div>
 </body>
 </html>
-            `,
+        `;
+
+        const template = await getEmailTemplate("ON_MOCK_EXAM_LINK", {
+            subject: defaultSubject,
+            body: defaultHtml
+        });
+
+        let subject = template.subject;
+        let html = template.body;
+
+        const replaceAll = (str: string) => {
+            return str
+                .split("{name}").join(name || "")
+                .split("{profession}").join(professionName || "")
+                .split("{professionName}").join(professionName || "")
+                .split("{examLink}").join(examLink || "")
+                .split("{mockLink}").join(examLink || "");
         };
 
-        await sendMailWithFailover(mailOptions);
+        subject = replaceAll(subject);
+        html = replaceAll(html);
+        const text = html.replace(/<[^>]*>/g, ""); // strip html for text fallback
+
+        const mailOptions = {
+            to,
+            subject,
+            text,
+            html
+        };
+
+        await sendMailWithFailover(mailOptions, "ON_MOCK_EXAM_LINK");
         return { success: true };
     } catch (error) {
         console.error(`[Email] Error sending exam link to ${to}:`, error);

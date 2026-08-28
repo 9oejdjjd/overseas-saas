@@ -8,7 +8,6 @@ import { SettingsStats } from "@/components/settings/SettingsStats";
 import { UsersList } from "@/components/settings/UsersList";
 import { UserFormDrawer } from "@/components/settings/UserFormDrawer";
 import { PasswordResetDialog } from "@/components/settings/PasswordResetDialog";
-import { SmtpManager } from "@/components/settings/SmtpManager";
 import { Button } from "@/components/ui/button";
 import { Shield, Plus, ShieldAlert, Loader2 } from "lucide-react";
 
@@ -129,9 +128,6 @@ export default function SettingsPage() {
                 selectedUser={selectedUser}
                 currentUserId={session.user.id}
             />
-
-            {/* SMTP Server Configuration Manager */}
-            <SmtpManager />
 
             {/* Form Sheet Drawer (Add / Edit User) */}
             <UserFormDrawer 

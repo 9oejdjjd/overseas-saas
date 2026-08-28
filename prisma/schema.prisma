@@ -1054,3 +1054,16 @@ model AgentPackageConfig {
   @@unique([agentId, packageId])
   @@index([agentId])
 }
+
+model EmailLog {
+  id          String   @id @default(uuid())
+  recipient   String   // البريد الإلكتروني للمستلم
+  subject     String   // موضوع الرسالة
+  body        String   // نص الرسالة
+  status      String   @default("SENT") // SENT or FAILED
+  error       String?  // تفاصيل الخطأ الفني في حال الفشل
+  trigger     String?  // التنبيه المرتبط (e.g. ON_OTP, ON_MOCK_EXAM_LINK)
+  senderEmail String?  // البريد الذي تم استخدامه للإرسال
+  sentAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+}

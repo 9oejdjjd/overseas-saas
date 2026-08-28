@@ -365,7 +365,7 @@ export function SmtpManager() {
                             <Server className="h-10 w-10 text-slate-350 mb-3" />
                             <p className="text-sm font-bold text-slate-700 mb-1">لا توجد خوادم بريد مضافة</p>
                             <p className="text-xs text-slate-455 max-w-sm leading-relaxed mb-4">
-                                سيقوم النظام باستخدام إعدادات البريد الافتراضية المحددة في ملف البيئة `.env` لإرسال الإشعارات حتى تقوم بإضافة خادم SMTP من لوحة التحكم.
+                                لن يتمكن النظام من إرسال رسائل البريد الإلكتروني (OTP، النتائج، الروابط) حتى تقوم بإضافة وتفعيل خادم SMTP من هنا.
                             </p>
                             <Button 
                                 onClick={handleOpenAdd}

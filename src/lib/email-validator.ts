@@ -67,13 +67,20 @@ export async function validateEmail(email: string): Promise<EmailValidationResul
         return { isValid: false, error: 'غير مسموح باستخدام نطاقات البريد المؤقتة أو الوهمية' };
     }
 
-    // 4. DNS MX Records Check
+    // 4. DNS MX Records Check (soft fail on network errors)
     try {
         const mxRecords = await resolveMxAsync(domain);
         if (!mxRecords || mxRecords.length === 0) {
             return { isValid: false, error: 'نطاق البريد الإلكتروني المدخل لا يحتوي على خوادم استقبال رسائل (MX Records)' };
         }
-    } catch (err) {
+    } catch (err: any) {
+        // If DNS itself is unreachable (network issue), allow the email through
+        const isNetworkError = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH'].includes(err?.code);
+        if (isNetworkError) {
+            console.warn(`[Email Validation] DNS lookup failed due to network issue for ${domain} (${err?.code}), allowing email through.`);
+            return { isValid: true };
+        }
+        // Only reject if the domain definitively doesn't exist (ENODATA, ENOTFOUND for the domain itself)
         console.warn(`[Email Validation] MX resolve failed for domain ${domain}:`, err);
         return { isValid: false, error: 'عنوان البريد الإلكتروني غير صالح أو غير موجود على الإنترنت' };
     }

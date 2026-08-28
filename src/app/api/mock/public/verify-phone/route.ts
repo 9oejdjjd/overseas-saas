@@ -125,10 +125,11 @@ export async function POST(request: Request) {
             });
             console.log("[OTP] Saved to DB");
             
-            // 5. Send OTP to both Email and WhatsApp concurrently
-            console.log("[OTP] Sending to Email:", email, "and WhatsApp:", visitorPhone);
+            // 5. Send OTP via the requested delivery method
+            const isEmailDelivery = deliveryMethod === "EMAIL";
+            console.log("[OTP] Delivery method:", deliveryMethod, "| Email:", email, "| Phone:", visitorPhone);
             
-            const emailPromise = email ? (async () => {
+            const emailPromise = (isEmailDelivery && email) ? (async () => {
                 try {
                     const { sendOTPByEmail } = await import("@/lib/sendEmail");
                     const result = await sendOTPByEmail(email, visitorName || "عزيزي المستخدم", code, professionName);
@@ -138,18 +139,22 @@ export async function POST(request: Request) {
                     console.error("[OTP] Email error:", e);
                     return { success: false, error: String(e) };
                 }
-            })() : Promise.resolve({ success: false });
+            })() : Promise.resolve(null);
 
             const waPromise = autoSendDirectMessage(visitorPhone, "MOCK_EXAM_OTP", { name: visitorName || "عزيزي المستخدم", otp: code })
                 .catch((e) => { console.error("[OTP] WhatsApp error:", e); return false; });
 
-            const [emailResult] = await Promise.allSettled([emailPromise, waPromise]);
-            console.log("[OTP] Email settled:", emailResult);
+            const [emailResult, waResult] = await Promise.allSettled([emailPromise, waPromise]);
+            console.log("[OTP] Email settled:", emailResult, "| WhatsApp settled:", waResult);
             
-            // If email was provided but failed
-            if (email && emailResult.status === "fulfilled" && !emailResult.value.success) {
-                 console.error("[OTP] Email sending failed, returning error");
-                 return NextResponse.json({ error: "فشل في إرسال البريد الإلكتروني، يرجى التأكد من الإيميل والمحاولة لاحقاً" }, { status: 500 });
+            // Only block if the user specifically chose EMAIL delivery and it failed
+            if (isEmailDelivery && emailResult.status === "fulfilled" && emailResult.value !== null && !emailResult.value.success) {
+                const errorMsg = emailResult.value?.error || "";
+                const userMessage = errorMsg.includes("لا توجد خوادم بريد SMTP نشطة")
+                    ? "لا يوجد خادم بريد إلكتروني مفعّل في النظام حالياً. يرجى التواصل مع الدعم الفني أو استخدام التحقق عبر الواتساب."
+                    : "فشل في إرسال رمز التحقق عبر البريد الإلكتروني. يرجى التأكد من صحة الإيميل أو استخدام التحقق عبر الواتساب.";
+                console.error("[OTP] Email delivery failed:", errorMsg);
+                return NextResponse.json({ error: userMessage }, { status: 500 });
             }
             
             console.log("[OTP] SUCCESS - OTP sent");
