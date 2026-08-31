@@ -45,7 +45,58 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Profession not found or inactive" }, { status: 404 });
         }
 
-        if (profession._count.questions < profession.questionCount) {
+        // Get correct question count from either the user's active purchase or the active free package
+        let requiredQuestions = profession.questionCount;
+        try {
+            const config = await prisma.serviceConfig.findUnique({ where: { id: "global" } });
+            const packagesEnabled = config?.mockExamPackagesEnabled ?? true;
+
+            if (packagesEnabled) {
+                const uniquePhones = getPhoneVariants(visitorPhone);
+                const activePurchaseConditions: any[] = uniquePhones.map(ph => ({ phone: ph }));
+                if (visitorEmail) activePurchaseConditions.push({ email: visitorEmail });
+
+                const purchases = await prisma.mockExamPurchase.findMany({
+                    where: {
+                        OR: activePurchaseConditions,
+                        status: { in: ["ACTIVE", "PAID"] },
+                        isPaid: true,
+                    },
+                    include: { package: true },
+                    orderBy: { createdAt: "desc" }
+                });
+
+                const activePurchase = purchases.find(p => {
+                    const isExpired = p.expiresAt && p.expiresAt < new Date();
+                    const hasCreditsLeft = p.totalCredits === -1 || p.usedCredits < p.totalCredits;
+                    return !isExpired && hasCreditsLeft;
+                });
+
+                if (activePurchase?.package?.examQuestionsCount && activePurchase.package.examQuestionsCount > 0) {
+                    requiredQuestions = activePurchase.package.examQuestionsCount;
+                } else {
+                    const freePackage = await prisma.mockExamPackage.findFirst({
+                        where: { isFree: true, isActive: true },
+                        select: { examQuestionsCount: true }
+                    });
+                    if (freePackage?.examQuestionsCount && freePackage.examQuestionsCount > 0) {
+                        requiredQuestions = freePackage.examQuestionsCount;
+                    }
+                }
+            } else {
+                const freePackage = await prisma.mockExamPackage.findFirst({
+                    where: { isFree: true, isActive: true },
+                    select: { examQuestionsCount: true }
+                });
+                if (freePackage?.examQuestionsCount && freePackage.examQuestionsCount > 0) {
+                    requiredQuestions = freePackage.examQuestionsCount;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to dynamically resolve required questions count:", e);
+        }
+
+        if (profession._count.questions < requiredQuestions) {
             return NextResponse.json({ error: "Not enough questions in bank for this profession to start exam." }, { status: 400 });
         }
 
@@ -170,6 +221,29 @@ export async function POST(request: Request) {
                 });
 
                 if (freePackage) {
+                    // --- SECURITY: Device Fingerprint Attempt Limit Check ---
+                    // Prevent creating a new free package purchase if the same device fingerprint has already used the free credits limit
+                    if (baseFingerprint && baseFingerprint !== "unknown" && baseFingerprint !== "fallback") {
+                        const freeCreditsLimit = freePackage.examCredits;
+                        
+                        const freeSessionsOnDevice = await prisma.examSession.count({
+                            where: {
+                                deviceFingerprint: { startsWith: baseFingerprint },
+                                OR: [
+                                    { purchase: { package: { isFree: true } } },
+                                    { purchaseId: null }
+                                ]
+                            }
+                        });
+                        
+                        if (freeSessionsOnDevice >= freeCreditsLimit) {
+                            console.warn(`[OTP Security] Fingerprint block triggered for ${baseFingerprint}. Free sessions: ${freeSessionsOnDevice}/${freeCreditsLimit}`);
+                            return NextResponse.json({ 
+                                error: "لقد استنفذت الحد الأقصى للمحاولات المجانية المتاحة لهذا الجهاز. يرجى الاشتراك في إحدى باقات الاختبارات للمتابعة." 
+                            }, { status: 403 });
+                        }
+                    }
+
                     activePurchase = await prisma.mockExamPurchase.create({
                         data: {
                             phone: visitorPhone,

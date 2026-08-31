@@ -55,6 +55,16 @@ export default async function ProfessionPage({ params }: { params: Promise<{ slu
     notFound();
   }
 
+  // Get active free package questions count
+  const freePackage = await prisma.mockExamPackage.findFirst({
+    where: { isFree: true, isActive: true },
+    select: { examQuestionsCount: true }
+  });
+
+  const displayQuestionCount = freePackage?.examQuestionsCount && freePackage.examQuestionsCount > 0
+    ? freePackage.examQuestionsCount
+    : profession.questionCount;
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://local-pacc.sa";
 
   // Breadcrumb Schema
@@ -107,7 +117,7 @@ export default async function ProfessionPage({ params }: { params: Promise<{ slu
       <SchemaMarkup schema={breadcrumbSchema} />
       <SchemaMarkup schema={courseSchema} />
       
-      {profession._count.questions < profession.questionCount ? (
+      {profession._count.questions < displayQuestionCount ? (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 mt-16 w-full max-w-4xl mx-auto z-10 relative">
           <div className="bg-red-500/10 text-red-500 p-8 rounded-2xl max-w-xl w-full border border-red-500/20 glass-panel shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-600 flex items-center justify-center mx-auto mb-4 border border-red-500/30">

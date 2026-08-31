@@ -3,6 +3,15 @@ import prisma from "@/lib/prisma";
 
 export async function GET() {
     try {
+        // Query the active free package to check if it specifies a custom question count
+        const freePackage = await prisma.mockExamPackage.findFirst({
+            where: { isFree: true, isActive: true },
+            select: { examQuestionsCount: true }
+        });
+        const freePkgCount = freePackage?.examQuestionsCount && freePackage.examQuestionsCount > 0 
+            ? freePackage.examQuestionsCount 
+            : null;
+
         const professions = await prisma.profession.findMany({
             where: { isActive: true },
             select: {
@@ -25,8 +34,14 @@ export async function GET() {
         });
 
         const availableProfessions = professions
-            .filter(p => p._count.questions >= p.questionCount)
-            .map(({ _count, ...rest }) => rest);
+            .filter(p => {
+                const requiredCount = freePkgCount !== null ? freePkgCount : p.questionCount;
+                return p._count.questions >= requiredCount;
+            })
+            .map(({ _count, questionCount, ...rest }) => ({
+                ...rest,
+                questionCount: freePkgCount !== null ? freePkgCount : questionCount
+            }));
 
         return NextResponse.json(availableProfessions);
     } catch (error) {

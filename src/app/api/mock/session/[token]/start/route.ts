@@ -155,6 +155,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
             const pkgQuestionsCount = session.purchase?.package?.examQuestionsCount;
             if (pkgQuestionsCount && pkgQuestionsCount > 0) {
                 totalRequired = pkgQuestionsCount;
+            } else {
+                try {
+                    const freePackage = await prisma.mockExamPackage.findFirst({
+                        where: { isFree: true, isActive: true },
+                        select: { examQuestionsCount: true }
+                    });
+                    if (freePackage?.examQuestionsCount && freePackage.examQuestionsCount > 0) {
+                        totalRequired = freePackage.examQuestionsCount;
+                    }
+                } catch (e) {
+                    console.error("Failed to query free package fallback for start route:", e);
+                }
             }
 
             const algorithmConfig = (session.profession as any).algorithmConfig;
@@ -212,18 +224,54 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
                     const allowImg = enabledTypes.includes("IMAGE");
                     const allowTf = enabledTypes.includes("TRUE_FALSE");
                     const allowFb = enabledTypes.includes("FILL_BLANK");
-                    
-                    typeQuota.IMAGE = allowImg ? 3 : 0;
-                    typeQuota.TRUE_FALSE = allowTf ? 5 : 0;
-                    typeQuota.FILL_BLANK = allowFb ? 5 : 0;
-                    typeQuota.MCQ = totalRequired - typeQuota.IMAGE - typeQuota.TRUE_FALSE - typeQuota.FILL_BLANK;
+
+                    // Proportional scaling for fallback question types to prevent negative quota values
+                    const defaultTypes = {
+                        IMAGE: allowImg ? 3 : 0,
+                        TRUE_FALSE: allowTf ? 5 : 0,
+                        FILL_BLANK: allowFb ? 5 : 0,
+                        MCQ: 17
+                    };
+                    const activeTypes = Object.keys(defaultTypes).filter(t => defaultTypes[t as keyof typeof defaultTypes] > 0);
+                    const originalSum = activeTypes.reduce((sum, t) => sum + defaultTypes[t as keyof typeof defaultTypes], 0);
+
+                    typeQuota = { MCQ: totalRequired, TRUE_FALSE: 0, IMAGE: 0, FILL_BLANK: 0 };
+                    let typeSum = 0;
+                    activeTypes.forEach((type, idx) => {
+                        if (idx === activeTypes.length - 1) {
+                            typeQuota[type] = totalRequired - typeSum;
+                        } else {
+                            const val = Math.round((defaultTypes[type as keyof typeof defaultTypes] / originalSum) * totalRequired);
+                            typeQuota[type] = val;
+                            typeSum += val;
+                        }
+                    });
                 }
-                axisQuota = {
+                
+                // Proportional scaling for default axis quota
+                const defaultAxes = {
                     HEALTH_SAFETY: 2,
                     OCCUPATIONAL_SAFETY: 2,
                     EMERGENCIES_FIRST_AID: 1,
                     CORE: 25
                 };
+                if (totalRequired !== 30) {
+                    const scale = totalRequired / 30;
+                    axisQuota = {};
+                    let axisSum = 0;
+                    const keys = Object.keys(defaultAxes) as Array<keyof typeof defaultAxes>;
+                    keys.forEach((key, idx) => {
+                        if (idx === keys.length - 1) {
+                            axisQuota[key] = totalRequired - axisSum;
+                        } else {
+                            const val = Math.round(defaultAxes[key] * scale);
+                            axisQuota[key] = val;
+                            axisSum += val;
+                        }
+                    });
+                } else {
+                    axisQuota = { ...defaultAxes };
+                }
             }
 
             const CORE_AXES = ["PROFESSION_KNOWLEDGE", "GENERAL_SKILLS", "CORRECT_METHODS", "PROFESSIONAL_BEHAVIOR", "TOOLS_AND_EQUIPMENT"];
@@ -288,8 +336,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
             // Determine allowed question types based on the purchase package and attempt number
             let allowedTypesFromPackage = ["MCQ", "TRUE_FALSE", "FILL_BLANK", "IMAGE"];
-            if (session.purchase?.package) {
-                const pkg = session.purchase.package;
+            let pkg = session.purchase?.package || null;
+            if (!pkg) {
+                try {
+                    pkg = await prisma.mockExamPackage.findFirst({
+                        where: { isFree: true, isActive: true }
+                    });
+                } catch (e) {
+                    console.error("Failed to query free package fallback for allowed types:", e);
+                }
+            }
+
+            if (pkg) {
                 let attemptConfig: any = null;
                 if (pkg.attemptsConfig) {
                     try {
