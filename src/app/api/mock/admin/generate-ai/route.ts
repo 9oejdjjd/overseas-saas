@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
 import { callGeminiWithRetry, sleep } from "@/lib/ai-rate-limiter";
+import { buildTextQuestionPrompt, buildRefinerPrompt } from "@/lib/mock-exams/promptBuilder";
+import { batchProcessQuestions, evaluateQuestionPostProcessing, GeneratedQuestionPayload } from "@/lib/mock-exams/postProcessing";
 
 export const maxDuration = 60;
 
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
                 professionId,
                 questionsRequested: 32,
                 status: "PROCESSING",
-                prompt: `Generate 32 structured professional questions for a ${profession.name} evenly across 8 axes (4 per axis).`,
+                prompt: `Generate 32 high-standard professional questions for ${profession.name} evenly across 8 axes (4 per axis).`,
             }
         });
 
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     }
 }
 
-// Background Processor — Saudi Professional Exam (SBA) Style - Batch Generation
+// Background Processor — Saudi Professional Exam (pacc.sa) Style - Batch Generation
 async function triggerAIGenerationBg(jobId: string, professionName: string, professionDescription: string, professionId: string) {
     try {
         const geminiKey = process.env.GEMINI_API_KEY;
@@ -63,10 +65,7 @@ async function triggerAIGenerationBg(jobId: string, professionName: string, prof
         const failedAxes: string[] = [];
         const axisResults: string[] = [];
 
-        // Simplify and decouple: We will request 4 questions per axis individually (8 requests).
-        // This makes the payload extremely small and practically immune to timeouts or API payload limits.
         for (const axis of axes) {
-            // Error isolation: each axis is independent
             try {
                 let axisLabelArabic = "";
                 switch(axis) {
@@ -80,83 +79,37 @@ async function triggerAIGenerationBg(jobId: string, professionName: string, prof
                     case "EMERGENCIES_FIRST_AID": axisLabelArabic = "الطوارئ والإسعافات الأولية"; break;
                 }
 
-                const promptTemplate = `أنت خبير فني رفيع المستوى وممتحن معتمد في برنامج الاعتماد المهني السعودي (pacc.sa).
-خبرتك تزيد عن 20 عاماً في مهنة "${professionName}".
-مهمتك صياغة 4 أسئلة دقيقة (Single Best Answer) 
-محصورة في المحور: [ ${axisLabelArabic} ]
+                const promptTemplate = buildTextQuestionPrompt({
+                    profName: professionName,
+                    axisLabel: axisLabelArabic,
+                    axis: axis,
+                    questionType: ["MCQ"],
+                    difficulty: ["HARD", "EXPERT"],
+                    focusTopic: professionDescription ? `معلومات إضافية عن المهنة: ${professionDescription}` : "",
+                    questionCount: 4,
+                    questionStyle: "MIXED",
+                    forceImages: false
+                });
 
-${professionDescription ? `تنويــه: مقتطف عن المهنة من الإدارة: "${professionDescription}"` : ""}
-
-═══════════════════════════════════════════
-📊 مستوى الصعوبة المطلوب: 🔴 HARD — صعب
-
-■ تعريف مستوى HARD:
-  - سيناريو مهني واقعي يتطلب معرفة تقنية جيدة
-  - الخيارات الخاطئة تبدو معقولة لغير المتخصص
-  - يحتاج خبرة عملية لا تقل عن 3 سنوات
-  - المستوى المعرفي: K2 (تطبيق + تحليل)
-
-═══════════════════════════════════════════
-⚠️ القواعد الحديدية — خالفها يعتبر فشلاً:
-═══════════════════════════════════════════
-
-🔴 القاعدة 1: حظر البديهيات المطلق
-   - ممنوع أي سؤال يمكن لشخص عادي الإجابة عليه بالتخمين
-   - ممنوع صياغة إجابة تبدو "مثالية" يسهل تخمينها
-   - كل خيار يتضمن تفصيلة تقنية دقيقة
-
-🔴 القاعدة 2: الخيارات الخاطئة (Distractors) الذكية
-   - كل خيار خاطئ = ممارسة شائعة خاطئة يقع فيها المهنيون فعلاً
-   - 4 خيارات متقاربة بالطول تماماً
-
-🔴 القاعدة 3: السيناريو القصصي
-   - كل سؤال يبدأ بسيناريو واقعي من بيئة العمل
-   - يتضمن: مكان + مشكلة + ظروف محددة
-
-🔴 القاعدة 4: الشرح التفصيلي الإلزامي
-   - لماذا الإجابة الصحيحة صحيحة
-   - لماذا كل خيار خاطئ هو خاطئ بالتحديد
-
-📋 تنسيق الإخراج (JSON فقط):
-[{
-  "text": "السيناريو + السؤال",
-  "explanation": "الشرح المهني التفصيلي",
-  "difficulty": "HARD",
-  "axis": "${axis}",
-  "cognitiveLevel": "K2",
-  "options": [
-    { "text": "خيار 1", "isCorrect": false },
-    { "text": "خيار 2", "isCorrect": true },
-    { "text": "خيار 3", "isCorrect": false },
-    { "text": "خيار 4", "isCorrect": false }
-  ]
-}]`;
-
-                console.log(`[AI Gen] 🔄 Starting axis [${axis}] for profession "${professionName}"...`);
+                console.log(`[AI Gen Batch] 🔄 Starting axis [${axis}] for profession "${professionName}"...`);
 
                 const result = await callGeminiWithRetry({
                     apiKey: geminiKey,
                     model: "gemini-2.5-flash",
                     prompt: promptTemplate,
-                    maxRetries: 5,
-                    baseDelayMs: 10000,
+                    maxRetries: 4,
+                    baseDelayMs: 6000,
                     timeoutMs: 60000,
+                    temperature: 0.7
                 });
 
                 if (!result.success) {
-                    console.error(`[AI Gen] ❌ Axis [${axis}] failed after ${result.attempts} attempts: ${result.lastError}`);
+                    console.error(`[AI Gen Batch] ❌ Axis [${axis}] failed after ${result.attempts} attempts: ${result.lastError}`);
                     failedAxes.push(`${axis} (AI: ${result.lastError})`);
                     axisResults.push(`${axis}: FAILED (AI)`);
                     continue;
                 }
 
-                if (result.attempts > 1) {
-                    console.log(`[AI Gen] ✅ Axis [${axis}] succeeded after ${result.attempts} attempts`);
-                } else {
-                    console.log(`[AI Gen] ✅ Axis [${axis}] succeeded on first attempt`);
-                }
-
-                // Smart JSON Extraction to bypass any conversational text before or after the JSON array
                 let finalContent = result.content;
                 const jsonStart = finalContent.indexOf('[');
                 const jsonEnd = finalContent.lastIndexOf(']');
@@ -164,34 +117,80 @@ ${professionDescription ? `تنويــه: مقتطف عن المهنة من ا�
                     finalContent = finalContent.substring(jsonStart, jsonEnd + 1);
                 }
 
-                let generatedQuestions: any[] = [];
+                let generatedQuestions: GeneratedQuestionPayload[] = [];
                 try {
                     generatedQuestions = JSON.parse(finalContent);
                 } catch (e) {
-                    console.error(`[AI Gen] ❌ JSON parse failed for axis [${axis}]`);
-                    console.error("[AI Gen] Raw content:", finalContent.substring(0, 200) + "...");
+                    console.error(`[AI Gen Batch] ❌ JSON parse failed for axis [${axis}]`);
                     failedAxes.push(`${axis} (JSON parse error)`);
                     axisResults.push(`${axis}: FAILED (JSON)`);
                     continue;
                 }
 
-                // Save questions sequentially to avoid overwhelming DB connection pool
+                // Post-Processing & Refinement
+                const batchReport = batchProcessQuestions(generatedQuestions, "MCQ");
+                const approvedQuestions: GeneratedQuestionPayload[] = [...batchReport.validQuestions];
+
+                if (batchReport.questionsNeedingRefinement.length > 0) {
+                    console.log(`[AI Gen Batch] 🛠️ Refining ${batchReport.questionsNeedingRefinement.length} questions for axis [${axis}]...`);
+                    const refinerPrompt = buildRefinerPrompt({
+                        profName: professionName,
+                        axisLabel: axisLabelArabic,
+                        questionsToRefine: batchReport.questionsNeedingRefinement
+                    });
+
+                    const refinerResult = await callGeminiWithRetry({
+                        apiKey: geminiKey,
+                        model: "gemini-2.5-flash",
+                        prompt: refinerPrompt,
+                        maxRetries: 2,
+                        baseDelayMs: 2000,
+                        timeoutMs: 35000,
+                        temperature: 0.2
+                    });
+
+                    if (refinerResult.success) {
+                        let refinerJson = refinerResult.content;
+                        const refStart = refinerJson.indexOf('[');
+                        const refEnd = refinerJson.lastIndexOf(']');
+                        if (refStart !== -1 && refEnd !== -1) {
+                            refinerJson = refinerJson.substring(refStart, refEnd + 1);
+                        }
+                        try {
+                            const refinedBatch: GeneratedQuestionPayload[] = JSON.parse(refinerJson);
+                            for (const rq of refinedBatch) {
+                                const check = evaluateQuestionPostProcessing(rq, "MCQ");
+                                if (check.isValid || check.canAutoFix) {
+                                    approvedQuestions.push(check.cleanedQuestion);
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                // Save approved questions sequentially
                 let axisQuestionCount = 0;
-                for (const q of generatedQuestions) {
+                for (const q of approvedQuestions) {
                     if (q.text && q.options && q.options.length === 4) {
-                        const correctCount = q.options.filter((o: any) => o.isCorrect).length;
+                        const correctCount = q.options.filter(o => o.isCorrect).length;
                         if (correctCount === 1) {
                             try {
+                                const returnedCog = q.cognitiveLevel || "K2";
+                                const finalDifficulty = (returnedCog === "K3" || q.difficulty === "EXPERT") ? "EXPERT" : "HARD";
+                                const finalCognitiveLevel = ["K1", "K2", "K3", "K4", "K5"].includes(returnedCog) ? returnedCog : "K2";
+
                                 await prisma.question.create({
                                     data: {
                                         professionId,
                                         text: q.text,
-                                        explanation: q.explanation,
-                                        difficulty: q.difficulty || "HARD",
-                                        cognitiveLevel: q.cognitiveLevel || "K2",
+                                        explanation: q.explanation || null,
+                                        difficulty: finalDifficulty as any,
+                                        cognitiveLevel: finalCognitiveLevel,
                                         axis: axis as any,
+                                        type: "MCQ",
+                                        questionStyle: q.questionStyle || "SCENARIO_SHORT",
                                         options: {
-                                            create: q.options.map((opt: any) => ({
+                                            create: q.options.map(opt => ({
                                                 text: opt.text,
                                                 isCorrect: opt.isCorrect
                                             }))
@@ -201,7 +200,7 @@ ${professionDescription ? `تنويــه: مقتطف عن المهنة من ا�
                                 totalValidGenerated++;
                                 axisQuestionCount++;
                             } catch (dbError: any) {
-                                console.error(`[AI Gen] ⚠️ DB error saving question for axis [${axis}]:`, dbError.message);
+                                console.error(`[AI Gen Batch] ⚠️ DB error saving question for axis [${axis}]:`, dbError.message);
                             }
                         }
                     }
@@ -209,34 +208,34 @@ ${professionDescription ? `تنويــه: مقتطف عن المهنة من ا�
 
                 axisResults.push(`${axis}: OK (${axisQuestionCount} questions)`);
 
-                // Extremely important: Update Job Progress in Database so frontend can poll it
+                // Update Job Progress in Database
                 try {
                     await prisma.aIGenerationJob.update({
                         where: { id: jobId },
                         data: { questionsGenerated: totalValidGenerated }
                     });
                 } catch (dbError: any) {
-                    console.error(`[AI Gen] ⚠️ Failed to update job progress:`, dbError.message);
+                    console.error(`[AI Gen Batch] ⚠️ Failed to update job progress:`, dbError.message);
                 }
                 
-                // Wait between axes to prevent 429 rate limiting from Google
-                await sleep(8000, 2000);
+                // Rate limiting pause
+                await sleep(5000, 2000);
 
             } catch (axisError: any) {
-                console.error(`[AI Gen] ❌ Unexpected error on axis [${axis}]:`, axisError.message);
+                console.error(`[AI Gen Batch] ❌ Unexpected error on axis [${axis}]:`, axisError.message);
                 failedAxes.push(`${axis} (Unexpected: ${axisError.message})`);
                 axisResults.push(`${axis}: FAILED (Error)`);
                 continue;
             }
         }
 
-        // Build summary log
+        // Summary log
         const summaryLog = failedAxes.length > 0
             ? `Completed with ${failedAxes.length} failed axis(es): ${failedAxes.join(", ")}. Results: ${axisResults.join(" | ")}`
             : null;
 
-        console.log(`[AI Gen] 🏁 Generation complete: ${totalValidGenerated}/32 questions. Failed axes: ${failedAxes.length}`);
-        if (summaryLog) console.warn(`[AI Gen] ⚠️ ${summaryLog}`);
+        console.log(`[AI Gen Batch] 🏁 Batch complete: ${totalValidGenerated}/32 questions. Failed axes: ${failedAxes.length}`);
+        if (summaryLog) console.warn(`[AI Gen Batch] ⚠️ ${summaryLog}`);
 
         await prisma.aIGenerationJob.update({
             where: { id: jobId },
@@ -256,7 +255,7 @@ ${professionDescription ? `تنويــه: مقتطف عن المهنة من ا�
                 data: { status: "FAILED", errorLog: error.message }
             });
         } catch (dbError: any) {
-            console.error("[AI Gen] ❌ Could not update job status to FAILED:", dbError.message);
+            console.error("[AI Gen Batch] ❌ Could not update job status to FAILED:", dbError.message);
         }
     }
 }

@@ -1,17 +1,23 @@
 /**
  * @file ProfessionFormSheet.tsx
  * @description مكون نموذج إضافة وتعديل خصائص المهن (ProfessionFormSheet).
- * ينعزل بمتغيراته وتحكماته لتقليص الأكواد المزدحمة في قسم المهن والتخصصات.
+ * يدعم توليد ونسخ برومبت محاور المهن بالذكاء الاصطناعي (8-13 محور ثنائي اللغة مع توزيع الحصص)، والتوليد المباشر والاستيراد من JSON.
  * 
  * @author Senior Software Engineer & Systems Architect
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ListChecks, CheckSquare, Target, Image as ImageIcon, ToggleLeft, ToggleRight, Loader2, Plus, Edit2 } from "lucide-react";
+import { 
+    ListChecks, CheckSquare, Target, Image as ImageIcon, 
+    ToggleLeft, ToggleRight, Loader2, Plus, Edit2, Copy, 
+    Check, Sparkles, Code2, Layers, CheckCircle2
+} from "lucide-react";
 import { ProfessionFormData } from "@/hooks/mock-exams/useProfessionsManager";
+import { buildAxesGenerationPrompt } from "@/lib/mock-exams/promptBuilder";
+import { parseAxesJson } from "@/lib/mock-exams/axesHelper";
 
 interface ProfessionFormSheetProps {
     showAdd: boolean;
@@ -32,6 +38,90 @@ export function ProfessionFormSheet({
     saving,
     handleSave
 }: ProfessionFormSheetProps) {
+    const [copySuccess, setCopySuccess] = useState(false);
+    const [aiGenLoading, setAiGenLoading] = useState(false);
+    const [showJsonInput, setShowJsonInput] = useState(false);
+    const [pastedJson, setPastedJson] = useState("");
+    const [jsonError, setJsonError] = useState<string | null>(null);
+
+    // نسخ برومبت توليد المحاور المخصص بالذكاء الاصطناعي
+    const handleCopyPrompt = async () => {
+        if (!formData.name.trim()) {
+            alert("الرجاء كتابة اسم المهنة أولاً لإنشاء برومبت المحاور المخصص لها.");
+            return;
+        }
+        const prompt = buildAxesGenerationPrompt(
+            formData.name.trim(), 
+            formData.questionCount || 30, 
+            formData.description
+        );
+        try {
+            await navigator.clipboard.writeText(prompt);
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 3000);
+        } catch (e) {
+            alert("فشل النسخ إلى الحافظة تلقائياً.");
+        }
+    };
+
+    // التوليد المباشر عبر السيرفر بنقرة واحدة
+    const handleDirectAiGenerate = async () => {
+        if (!formData.name.trim()) {
+            alert("الرجاء كتابة اسم المهنة أولاً لتوليد المحاور بالذكاء الاصطناعي.");
+            return;
+        }
+        setAiGenLoading(true);
+        try {
+            const res = await fetch("/api/mock/admin/professions/generate-axes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    profName: formData.name.trim(),
+                    questionCount: formData.questionCount || 30,
+                    description: formData.description
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.axes) {
+                const currentConfig = formData.algorithmConfig || {};
+                setFormData(prev => ({
+                    ...prev,
+                    algorithmConfig: {
+                        ...currentConfig,
+                        axes: data.axes
+                    }
+                }));
+                alert(`✅ تم توليد وتخصيص ${data.axes.length} محاور ثنائية اللغة لمهنة "${formData.name}" بنجاح!`);
+            } else {
+                alert(data.error || "حدث خطأ أثناء توليد المحاور بالذكاء الاصطناعي");
+            }
+        } catch (e) {
+            alert("فشل الاتصال بخادم التوليد بالذكاء الاصطناعي");
+        } finally {
+            setAiGenLoading(false);
+        }
+    };
+
+    // استيراد ولصق المحاور من كود JSON
+    const handleImportJson = () => {
+        const res = parseAxesJson(pastedJson, formData.questionCount || 30);
+        if (res.success && res.axes.length > 0) {
+            const currentConfig = formData.algorithmConfig || {};
+            setFormData(prev => ({
+                ...prev,
+                algorithmConfig: {
+                    ...currentConfig,
+                    axes: res.axes
+                }
+            }));
+            setJsonError(null);
+            setShowJsonInput(false);
+            setPastedJson("");
+            alert(`✅ تم استيراد واعتماد ${res.axes.length} محاور بنجاح!`);
+        } else {
+            setJsonError(res.error || "صيغة JSON غير صالحة");
+        }
+    };
     
     // منطق تبديل الحالات المخصصة لأنواع الأسئلة الاختيارية المفعّلة
     const toggleQuestionType = (typeId: string) => {
@@ -40,7 +130,6 @@ export function ProfessionFormSheet({
             ? currentTypes.filter(t => t !== typeId) 
             : [...currentTypes, typeId];
             
-        // التأكيد على بقاء اختيار متعدد (MCQ) مفعلاً دائماً كنوع أساسي
         if (!newTypes.includes("MCQ")) {
             newTypes.unshift("MCQ");
         }
@@ -103,13 +192,16 @@ export function ProfessionFormSheet({
         }
     ];
 
+    const currentAxes: any[] = formData.algorithmConfig?.axes || [];
+    const axesTotalQuota = currentAxes.reduce((sum, a) => sum + (Number(a.quota) || 0), 0);
+
     return (
         <Sheet open={showAdd} onOpenChange={setShowAdd}>
-            <SheetContent className="w-[400px] sm:w-[500px] overflow-y-auto rounded-l-2xl shadow-2xl p-6" dir="rtl">
+            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto rounded-l-2xl shadow-2xl p-6" dir="rtl">
                 <SheetHeader className="pb-6 border-b text-right">
                     <SheetTitle className="text-xl font-black flex items-center gap-2 text-gray-900">
-                        {editingId ? <Edit2 className="h-5 w-5 text-blue-600" /> : <Plus className="h-5 w-5 text-blue-600" />}
-                        {editingId ? "تعديل خصائص المهنة" : "إضافة مهنة جديدة"}
+                        {editingId ? <Edit2 className="h-5 w-5 text-indigo-600" /> : <Plus className="h-5 w-5 text-indigo-600" />}
+                        {editingId ? "تعديل خصائص المهنة والمحاور" : "إضافة مهنة جديدة ومحاورها"}
                     </SheetTitle>
                 </SheetHeader>
                 
@@ -120,7 +212,7 @@ export function ProfessionFormSheet({
                         <Input 
                             value={formData.name} 
                             onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} 
-                            placeholder="مثال: لحام، كهربائي مباني..." 
+                            placeholder="مثال: لحام، كهربائي مباني، طبيب أسنان..." 
                             className="bg-gray-50/50 border-gray-200 focus:bg-white transition-colors h-10 placeholder-gray-400 font-medium" 
                         />
                     </div>
@@ -134,7 +226,6 @@ export function ProfessionFormSheet({
                             placeholder="يتم توليده تلقائياً..." 
                             className="dir-ltr text-left font-mono bg-gray-50/50 border-gray-200 focus:bg-white transition-colors h-10" 
                         />
-                        <p className="text-[10px] text-gray-400 leading-snug">يمكنك تعديل الرابط أو تركه كما هو لإمكانية الاستدعاء المباشر.</p>
                     </div>
                     
                     {/* حالة المهنة تفعيل/تعطيل */}
@@ -150,6 +241,99 @@ export function ProfessionFormSheet({
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.isActive ? "-translate-x-6" : "translate-x-1"}`} />
                         </button>
+                    </div>
+
+                    {/* 🤖 قسم الذكاء الاصطناعي وتوليد المحاور الذكية */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-slate-50 border border-indigo-100/80 space-y-3.5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="h-4 w-4 text-indigo-600 animate-pulse" />
+                                <h4 className="text-xs font-black text-indigo-950">محاور المهنة التخصصية بالذكاء الاصطناعي</h4>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">8 - 13 محور</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                            يمكنك نسخ البرومبت الاحترافي لاستخدامه خارجياً، أو توليد المحاور ثنائية اللغة وتحديد حصص الأسئلة تلقائياً بنقرة واحدة.
+                        </p>
+
+                        {/* الأزرار الثلاثة للتحكم بالمحاور */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {/* زر التوليد التلقائي المباشر */}
+                            <Button
+                                type="button"
+                                onClick={handleDirectAiGenerate}
+                                disabled={aiGenLoading || !formData.name.trim()}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 gap-1.5 shadow-sm rounded-xl"
+                            >
+                                {aiGenLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                                توليد المحاور آلياً عبر AI
+                            </Button>
+
+                            {/* زر نسخ برومبت طلب المحاور */}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleCopyPrompt}
+                                disabled={!formData.name.trim()}
+                                className="border-indigo-200 text-indigo-800 hover:bg-indigo-100/50 font-bold text-xs h-9 gap-1.5 rounded-xl bg-white"
+                            >
+                                {copySuccess ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-indigo-600" />}
+                                {copySuccess ? "تم نسخ البرومبت!" : "نسخ برومبت المحاور"}
+                            </Button>
+                        </div>
+
+                        {/* زر فتح خانة استيراد JSON */}
+                        <button
+                            type="button"
+                            onClick={() => setShowJsonInput(!showJsonInput)}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 pt-1"
+                        >
+                            <Code2 className="h-3.5 w-3.5" />
+                            {showJsonInput ? "إخفاء مربع استيراد JSON" : "أو استيراد محاور من كود JSON مجهز..."}
+                        </button>
+
+                        {/* مربع لصق الـ JSON */}
+                        {showJsonInput && (
+                            <div className="space-y-2 pt-2 border-t border-indigo-100">
+                                <textarea
+                                    value={pastedJson}
+                                    onChange={e => setPastedJson(e.target.value)}
+                                    placeholder='الطق كود JSON المولد هنا (مثال: { "axes": [ { "name": "...", "quota": 4 } ] })'
+                                    className="w-full h-24 p-2.5 text-xs font-mono rounded-xl border border-indigo-200 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                />
+                                {jsonError && <p className="text-[11px] font-bold text-red-500">{jsonError}</p>}
+                                <Button
+                                    type="button"
+                                    onClick={handleImportJson}
+                                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-8 w-full rounded-xl"
+                                >
+                                    اعتِماد واستيراد المحاور
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* معاينة المحاور المعتمدة المضافة حالياً */}
+                        {currentAxes.length > 0 && (
+                            <div className="pt-2.5 border-t border-indigo-100 space-y-2">
+                                <div className="flex justify-between items-center text-xs font-bold text-indigo-900">
+                                    <span className="flex items-center gap-1">
+                                        <Layers className="h-3.5 w-3.5 text-indigo-600" />
+                                        المحاور المعتمدة للمهنة ({currentAxes.length})
+                                    </span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded font-black ${axesTotalQuota === (formData.questionCount || 30) ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+                                        مجموع الأسئلة: {axesTotalQuota} / {formData.questionCount || 30}
+                                    </span>
+                                </div>
+                                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                                    {currentAxes.map((a, idx) => (
+                                        <div key={a.id || idx} className="flex justify-between items-center text-[11px] p-2 bg-white/90 rounded-lg border border-indigo-100 shadow-2xs">
+                                            <span className="font-semibold text-slate-800 truncate pl-2">{idx + 1}. {a.name}</span>
+                                            <span className="font-black text-indigo-700 shrink-0 bg-indigo-50 px-2 py-0.5 rounded">{a.quota} سؤال</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     
                     {/* درجة النجاح ومدة الاختبار */}
@@ -269,7 +453,7 @@ export function ProfessionFormSheet({
                     <Button 
                         onClick={handleSave} 
                         disabled={saving} 
-                        className="bg-slate-900 hover:bg-slate-800 w-32 shadow-sm font-bold text-xs h-9"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white w-36 shadow-sm font-bold text-xs h-9 rounded-xl"
                     >
                         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "حفظ التغييرات"}
                     </Button>

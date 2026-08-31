@@ -16,6 +16,7 @@ interface GeminiCallOptions {
     maxRetries?: number;
     baseDelayMs?: number;
     timeoutMs?: number;
+    temperature?: number;
 }
 
 interface GeminiCallResult {
@@ -36,6 +37,7 @@ export async function callGeminiWithRetry(options: GeminiCallOptions): Promise<G
         maxRetries = 5,
         baseDelayMs = 10000,
         timeoutMs = 60000,
+        temperature = 0.7,
     } = options;
 
     let lastError = "";
@@ -50,7 +52,7 @@ export async function callGeminiWithRetry(options: GeminiCallOptions): Promise<G
                     body: JSON.stringify({
                         contents: [{ role: "user", parts: [{ text: prompt }] }],
                         generationConfig: {
-                            temperature: 0.7,
+                            temperature: temperature,
                             responseMimeType: "application/json",
                         },
                     }),

@@ -183,6 +183,19 @@ export function validateQuestionsJson(jsonText: string, questionType: string): V
                     }
                 }
             }
+
+            // التحقق من توازن طول الخيارات (Option Length Bias) في أسئلة الاختيار من متعدد
+            if (currentQType === "MCQ" && q.options && q.options.length === 4 && correctCount === 1) {
+                const correctOpt = q.options.find((o: any) => o.isCorrect === true || o.isCorrect === "true");
+                const incorrectOpts = q.options.filter((o: any) => !(o.isCorrect === true || o.isCorrect === "true"));
+                if (correctOpt && incorrectOpts.length === 3) {
+                    const correctLen = correctOpt.text?.trim()?.length || 0;
+                    const avgIncorrectLen = incorrectOpts.reduce((sum: number, o: any) => sum + (o.text?.trim()?.length || 0), 0) / 3;
+                    if (avgIncorrectLen > 0 && correctLen / avgIncorrectLen > 1.4) {
+                        warnings.push(`السؤال رقم ${qNumber}: الخيار الصحيح أطول بكثير من المشتتات الخاطئة (${correctLen} حرف مقابل متوسط ${Math.round(avgIncorrectLen)} حرف)، مما قد يسبب انحيازاً ويسهل التخمين.`);
+                    }
+                }
+            }
         }
 
         return {

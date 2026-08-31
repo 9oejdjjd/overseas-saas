@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac";
 import { callGeminiWithRetry } from "@/lib/ai-rate-limiter";
-import { buildPrompt } from "@/lib/mock-exams/promptBuilder";
+import { buildPrompt, buildRefinerPrompt } from "@/lib/mock-exams/promptBuilder";
+import { batchProcessQuestions, evaluateQuestionPostProcessing, GeneratedQuestionPayload } from "@/lib/mock-exams/postProcessing";
 
 export const maxDuration = 60; // Max API duration for Vercel
 
@@ -41,9 +42,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
         }
 
-        const axisLabelArabic = axis; // Axis is now a dynamic string directly sent from UI
+        const axisLabelArabic = axis;
+        const targetType = questionTypes[0] || "MCQ";
 
-        // Build prompt using centralized builder (passes array directly now)
+        // ══════════════════════════════════════════════════════════
+        // المرحلة 1: التوليد الأولي (Stage 1: Primary Generation)
+        // ══════════════════════════════════════════════════════════
         const promptTemplate = buildPrompt({
             profName: profession.name,
             axisLabel: axisLabelArabic,
@@ -56,23 +60,22 @@ export async function POST(request: Request) {
             forceImages
         });
 
-        console.log(`[AI Gen Partial] 🔄 Generating ${count} questions (multiple selection) for axis [${axis}] - profession: "${profession.name}"`);
+        console.log(`[AI Gen Hybrid] 🔄 Stage 1: Generating ${count} questions for [${axis}] - ${profession.name}`);
 
         const result = await callGeminiWithRetry({
             apiKey: geminiKey,
             model: "gemini-2.5-flash",
             prompt: promptTemplate,
-            maxRetries: 3,         // Faster failure, lighter limit
-            baseDelayMs: 3000,     // Only 3 seconds base wait for retries
+            maxRetries: 3,
+            baseDelayMs: 3000,
             timeoutMs: 45000,
+            temperature: 0.7
         });
 
         if (!result.success) {
-            console.error(`[AI Gen Partial] ❌ Failed after ${result.attempts} attempts: ${result.lastError}`);
+            console.error(`[AI Gen Hybrid] ❌ Stage 1 failed after ${result.attempts} attempts: ${result.lastError}`);
             return NextResponse.json({ error: `AI Generation failed: ${result.lastError}` }, { status: 502 });
         }
-
-        console.log(`[AI Gen Partial] ✅ Succeeded in ${result.attempts} attempts`);
 
         let finalContent = result.content;
         const jsonStart = finalContent.indexOf('[');
@@ -81,54 +84,114 @@ export async function POST(request: Request) {
             finalContent = finalContent.substring(jsonStart, jsonEnd + 1);
         }
 
-        let generatedQuestions: any[] = [];
+        let generatedQuestions: GeneratedQuestionPayload[] = [];
         try {
             generatedQuestions = JSON.parse(finalContent);
         } catch (e) {
-            console.error(`[AI Gen Partial] ❌ JSON parse failed`);
+            console.error(`[AI Gen Hybrid] ❌ Stage 1 JSON parse failed`);
             return NextResponse.json({ error: "AI returned invalid JSON format" }, { status: 502 });
         }
 
-        // Save questions sequentially
+        // ══════════════════════════════════════════════════════════
+        // المرحلة 2: التدقيق البرمجي الأولي (Stage 2: Post-Processing)
+        // ══════════════════════════════════════════════════════════
+        const batchReport = batchProcessQuestions(generatedQuestions, targetType);
+        const approvedQuestions: GeneratedQuestionPayload[] = [...batchReport.validQuestions];
+
+        console.log(`[AI Gen Hybrid] 📊 Post-Processing: ${batchReport.validQuestions.length} passed directly, ${batchReport.questionsNeedingRefinement.length} need AI refinement.`);
+
+        // ══════════════════════════════════════════════════════════
+        // المرحلة 3: منقح الذكاء الاصطناعي (Stage 3: AI Refiner for failed items)
+        // ══════════════════════════════════════════════════════════
+        let refinedCount = 0;
+        if (batchReport.questionsNeedingRefinement.length > 0) {
+            console.log(`[AI Gen Hybrid] 🛠️ Triggering AI Refiner for ${batchReport.questionsNeedingRefinement.length} questions...`);
+
+            const refinerPrompt = buildRefinerPrompt({
+                profName: profession.name,
+                axisLabel: axisLabelArabic,
+                questionsToRefine: batchReport.questionsNeedingRefinement
+            });
+
+            const refinerResult = await callGeminiWithRetry({
+                apiKey: geminiKey,
+                model: "gemini-2.5-flash",
+                prompt: refinerPrompt,
+                maxRetries: 2,
+                baseDelayMs: 2000,
+                timeoutMs: 35000,
+                temperature: 0.2 // درجة حرارة منخفضة جداً للالتزام الصارم بالإصلاح
+            });
+
+            if (refinerResult.success) {
+                let refinerJson = refinerResult.content;
+                const refStart = refinerJson.indexOf('[');
+                const refEnd = refinerJson.lastIndexOf(']');
+                if (refStart !== -1 && refEnd !== -1) {
+                    refinerJson = refinerJson.substring(refStart, refEnd + 1);
+                }
+
+                try {
+                    const refinedBatch: GeneratedQuestionPayload[] = JSON.parse(refinerJson);
+                    for (const rq of refinedBatch) {
+                        const check = evaluateQuestionPostProcessing(rq, targetType);
+                        if (check.isValid) {
+                            approvedQuestions.push(check.cleanedQuestion);
+                            refinedCount++;
+                        } else if (check.canAutoFix) {
+                            approvedQuestions.push(check.cleanedQuestion);
+                            refinedCount++;
+                        } else {
+                            console.warn(`[AI Gen Hybrid] ⚠️ Refined question still failed: ${check.reasons.join(", ")}`);
+                        }
+                    }
+                } catch (refParseError) {
+                    console.error("[AI Gen Hybrid] ⚠️ Failed to parse AI Refiner output, falling back to cleanable original questions.");
+                }
+            } else {
+                console.warn("[AI Gen Hybrid] ⚠️ AI Refiner call failed, continuing with passing questions.");
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // المرحلة 4: الحفظ في قاعدة البيانات (Stage 4: Database Persistence)
+        // ══════════════════════════════════════════════════════════
         let savedCount = 0;
 
-        for (const q of generatedQuestions) {
-            // Determine expected options length dynamically based on type
-            const qType = q.type || questionTypes[0] || "MCQ";
-            const expectedOptionsLength = qType === "TRUE_FALSE" ? 2 : 4;
+        for (const q of approvedQuestions) {
+            const currentQType = q.type || targetType || "MCQ";
+            const expectedOptionsLength = currentQType === "TRUE_FALSE" ? 2 : 4;
 
             if (q.text && q.options && q.options.length === expectedOptionsLength) {
-                const correctCount = q.options.filter((o: any) => o.isCorrect).length;
+                const correctCount = q.options.filter(o => o.isCorrect).length;
                 if (correctCount === 1) {
                     try {
                         const returnedDiff = q.difficulty || difficulties[0] || "HARD";
                         const returnedCog = q.cognitiveLevel || "K2";
                         
-                        // Map to EXPERT only if returned cognitiveLevel is K3 or difficulty is EXPERT, otherwise HARD for DB schema enum safety
+                        // صعوبة قاعدة البيانات: EXPERT لـ K3 أو EXPERT، و HARD للباقي
                         const finalDifficulty = (returnedCog === "K3" || returnedDiff === "EXPERT") ? "EXPERT" : "HARD";
                         
-                        // Map and validate cognitiveLevel (supporting K1, K2, K3, K4, K5)
-                        const finalCognitiveLevel = (returnedDiff === "VERY_HARD" || returnedDiff === "K1" || returnedCog === "K1") 
-                            ? "K1" 
-                            : ["K1", "K2", "K3", "K4", "K5"].includes(returnedCog)
-                                ? returnedCog
-                                : "K2";
+                        // المستوى المعرفي الدقيق: K1, K2, K3, K4, K5
+                        const finalCognitiveLevel = ["K1", "K2", "K3", "K4", "K5"].includes(returnedCog)
+                            ? returnedCog
+                            : "K2";
                         
-                        // Detect and save style
                         const finalStyle = q.questionStyle || questionStyle || "SCENARIO";
 
                         await prisma.question.create({
                             data: {
                                 professionId,
                                 text: q.text,
-                                explanation: q.explanation,
+                                explanation: q.explanation || null,
                                 difficulty: finalDifficulty as any,
                                 cognitiveLevel: finalCognitiveLevel,
                                 axis: axis as any,
-                                type: qType as any,
+                                type: currentQType as any,
                                 questionStyle: finalStyle,
+                                imageUrl: q.imageUrl || null,
                                 options: {
-                                    create: q.options.map((opt: any) => ({
+                                    create: q.options.map(opt => ({
                                         text: opt.text,
                                         isCorrect: opt.isCorrect
                                     }))
@@ -137,20 +200,28 @@ export async function POST(request: Request) {
                         });
                         savedCount++;
                     } catch (dbError: any) {
-                        console.error(`[AI Gen Partial] ⚠️ DB error saving question:`, dbError.message);
+                        console.error(`[AI Gen Hybrid] ⚠️ DB error saving question:`, dbError.message);
                     }
                 }
             }
         }
 
+        console.log(`[AI Gen Hybrid] ✅ Completed: ${savedCount} questions saved successfully (Direct: ${batchReport.validQuestions.length}, Refined: ${refinedCount})`);
+
         return NextResponse.json({ 
             success: true, 
-            message: `تم توليد وحفظ ${savedCount} سؤال بنجاح لمحور ${axisLabelArabic}`,
-            savedCount 
+            message: `تم توليد وتدقيق وحفظ ${savedCount} سؤال بنجاح لمحور ${axisLabelArabic}`,
+            savedCount,
+            stats: {
+                totalGenerated: generatedQuestions.length,
+                passedDirectly: batchReport.validQuestions.length,
+                refinedCount,
+                savedCount
+            }
         });
 
     } catch (error: any) {
-        console.error("AI Partial Gen Error:", error);
+        console.error("AI Hybrid Gen Error:", error);
         return NextResponse.json({ error: error.message || "Failed to trigger AI generation" }, { status: 500 });
     }
 }

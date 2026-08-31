@@ -17,6 +17,7 @@ export interface ProfessionFormData {
     description: string;
     enabledQuestionTypes: string;
     isActive: boolean;
+    algorithmConfig?: any;
 }
 
 const initialFormData: ProfessionFormData = {
@@ -27,7 +28,8 @@ const initialFormData: ProfessionFormData = {
     questionCount: 30,
     description: "",
     enabledQuestionTypes: "MCQ",
-    isActive: true
+    isActive: true,
+    algorithmConfig: null
 };
 
 export function useProfessionsManager() {
@@ -105,7 +107,8 @@ export function useProfessionsManager() {
             questionCount: prof.questionCount,
             description: prof.description || "",
             enabledQuestionTypes: prof.enabledQuestionTypes || "MCQ",
-            isActive: prof.isActive !== false
+            isActive: prof.isActive !== false,
+            algorithmConfig: prof.algorithmConfig || null
         });
         setShowAdd(true);
     };

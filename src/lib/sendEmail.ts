@@ -1,15 +1,43 @@
 import nodemailer from 'nodemailer';
 import prisma from '@/lib/prisma';
 
-// Common headers to improve deliverability and avoid spam filters
-const getCommonHeaders = (replyTo: string) => ({
-    'X-Priority': '3',
-    'X-Mailer': 'Professional Accreditation Portal',
-    'Precedence': 'bulk',
+/**
+ * Standard RFC-compliant headers for Transactional Emails (OTP, Exam Results, Links).
+ * Crucially removes 'Precedence: bulk' and spam-inducing headers to ensure inbox delivery.
+ */
+export const getTransactionalHeaders = (replyTo: string) => ({
+    'Auto-Submitted': 'auto-generated',         // RFC 3834: Signals to mail filters that this is an automated system notice
+    'X-Auto-Response-Suppress': 'All',          // Suppresses auto-responders & out-of-office loops
+    'Importance': 'high',
+    'Priority': 'urgent',
+    'X-Priority': '1',                          // Highest priority for OTP / Transactional
     'Reply-To': replyTo,
 });
 
 const LOGO_URL = "https://res.cloudinary.com/db4ulwtpa/image/upload/brand_logo.png";
+
+/**
+ * Converts HTML email content to clean, human-readable plain text without messy CSS or broken tags.
+ */
+function htmlToPlainText(html: string): string {
+    return html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/h[1-6]>/gi, '\n\n')
+        .replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/\n\s+\n/g, '\n\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
 
 async function getEmailTemplate(trigger: string, defaults: { subject: string; body: string }) {
     try {
@@ -29,8 +57,8 @@ async function getEmailTemplate(trigger: string, defaults: { subject: string; bo
 }
 
 /**
- * Sends mail by trying available SMTP configurations in DB (with load balance), 
- * and falls back to environment variables SMTP configuration.
+ * Sends mail by trying available SMTP configurations in DB (with load balance).
+ * Strictly requires database SMTP configurations.
  */
 export async function sendMailWithFailover(mailOptionsWithoutFrom: {
     to: string;
@@ -60,7 +88,7 @@ export async function sendMailWithFailover(mailOptionsWithoutFrom: {
                     body: mailOptionsWithoutFrom.html,
                     status: "FAILED",
                     trigger: trigger || null,
-                    error: "لا توجد خوادم بريد SMTP نشطة في النظام. يرجى إضافة خادم من لوحة التحكم ← إعدادات البريد."
+                    error: "لا توجد خوادم بريد SMTP نشطة في النظام. يرجى إضافة وتفعيل خادم من لوحة التحكم ← إعدادات البريد."
                 }
             });
         } catch (logErr) {
@@ -78,7 +106,7 @@ export async function sendMailWithFailover(mailOptionsWithoutFrom: {
         send: (options: any) => Promise<any>;
     }> = [];
 
-    // Build send attempts from DB SMTP Configs only
+    // Build send attempts from DB SMTP Configs only with robust pooling and timeout options
     for (const config of configs) {
         attempts.push({
             host: config.host,
@@ -90,7 +118,13 @@ export async function sendMailWithFailover(mailOptionsWithoutFrom: {
                     host: config.host,
                     port: config.port,
                     secure: config.secure,
-                    auth: { user: config.user, pass: config.pass }
+                    auth: { user: config.user, pass: config.pass },
+                    pool: true,                      // Connection pooling for fast delivery
+                    maxConnections: 3,
+                    maxMessages: 50,
+                    connectionTimeout: 10000,        // 10s connection timeout
+                    greetingTimeout: 10000,          // 10s greeting timeout
+                    socketTimeout: 15000,            // 15s socket timeout
                 });
                 return transporter.sendMail(options);
             }
@@ -107,7 +141,7 @@ export async function sendMailWithFailover(mailOptionsWithoutFrom: {
             const finalOptions = {
                 ...mailOptionsWithoutFrom,
                 from: attempt.from,
-                headers: getCommonHeaders(attempt.replyTo)
+                headers: getTransactionalHeaders(attempt.replyTo)
             };
             const info = await attempt.send(finalOptions);
             console.log(`[Email] Success via ${attempt.user}. MsgId: ${info.messageId}`);
@@ -159,7 +193,8 @@ export async function sendMailWithFailover(mailOptionsWithoutFrom: {
  */
 export async function sendOTPByEmail(to: string, name: string, otp: string, professionName?: string) {
     try {
-        const defaultSubject = 'رمز التحقق الخاص بك — الاختبار التجريبي';
+        const targetProfession = professionName || "التخصص المختار";
+        const defaultSubject = `رمز التحقق الخاص بك: ${otp} — بوابة الاعتماد المهني`;
         const defaultHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -262,18 +297,32 @@ export async function sendOTPByEmail(to: string, name: string, otp: string, prof
             return str
                 .split("{name}").join(name || "")
                 .split("{otp}").join(otp || "")
-                .split("{profession}").join(professionName || "التخصص المختار")
-                .split("{professionName}").join(professionName || "التخصص المختار");
+                .split("{profession}").join(targetProfession)
+                .split("{professionName}").join(targetProfession);
         };
 
         subject = replaceAll(subject);
         html = replaceAll(html);
-        const text = html.replace(/<[^>]*>/g, ""); // Strip HTML tags for plain text
+
+        // High quality, human-readable plain text fallback for anti-spam filters
+        const cleanPlainText = [
+            `مرحباً بك، ${name || "عزيزي المتدرب"}`,
+            ``,
+            `أنت على وشك البدء في الاختبار التجريبي لمهنة ${targetProfession}.`,
+            `رمز التحقق الخاص بك (OTP) هو: ${otp}`,
+            ``,
+            `هذا الرمز صالح لمدة 5 دقائق فقط. للحفاظ على أمان حسابك، لا تشارك هذا الرمز مع أي شخص.`,
+            ``,
+            `إذا لم تكن أنت من طلب هذا الرمز، يمكنك تجاهل هذه الرسالة بأمان.`,
+            ``,
+            `بوابة الاعتماد المهني`,
+            `https://overseas-travels.com`
+        ].join('\n');
 
         const mailOptions = {
             to,
             subject,
-            text,
+            text: cleanPlainText,
             html
         };
 
@@ -286,7 +335,7 @@ export async function sendOTPByEmail(to: string, name: string, otp: string, prof
 }
 
 /**
- * Sends a premium, responsive Exam Result email using brand identity (no table, text based layout)
+ * Sends a premium, responsive Exam Result email using brand identity
  */
 export async function sendMockResultByEmail(
     to: string, 
@@ -299,7 +348,7 @@ export async function sendMockResultByEmail(
 ) {
     try {
         const resultText = isPassed ? "ناجح (اجتياز)" : "لم تجتز (راسب)";
-        const defaultSubject = `نتيجة اختبارك التجريبي لمهنة ${professionName} — بوابة الاعتماد المهني`;
+        const defaultSubject = `نتيجة اختبارك التجريبي لمهنة ${professionName}: ${resultText} — بوابة الاعتماد المهني`;
         const defaultHtml = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -438,12 +487,26 @@ export async function sendMockResultByEmail(
 
         subject = replaceAll(subject);
         html = replaceAll(html);
-        const text = html.replace(/<[^>]*>/g, ""); // strip html for text fallback
+
+        const cleanPlainText = [
+            `مرحباً بك، ${name || "عزيزي المتدرب"}`,
+            ``,
+            `لقد تم الانتهاء من تصحيح إجاباتك للاختبار التجريبي لمهنة ${professionName}.`,
+            `النتيجة النهائية: ${resultText}`,
+            score !== undefined ? `الدرجة المحرزة: ${score}%` : null,
+            passingScore !== undefined ? `درجة الاجتياز المطلوبة: ${passingScore}%` : null,
+            ``,
+            `لعرض تقرير النتيجة التفصيلي ومراجعة الإجابات الصحيحة والخاطئة:`,
+            resultUrl,
+            ``,
+            `بوابة الاعتماد المهني`,
+            `https://overseas-travels.com`
+        ].filter(Boolean).join('\n');
 
         const mailOptions = {
             to,
             subject,
-            text,
+            text: cleanPlainText,
             html
         };
 
@@ -564,12 +627,24 @@ export async function sendMockExamLinkByEmail(to: string, name: string, professi
 
         subject = replaceAll(subject);
         html = replaceAll(html);
-        const text = html.replace(/<[^>]*>/g, ""); // strip html for text fallback
+
+        const cleanPlainText = [
+            `مرحباً بك، ${name || "عزيزي المتدرب"}`,
+            ``,
+            `يسعدنا إرسال رابط اختبارك التجريبي لمهنة ${professionName}.`,
+            `رابط الدخول للاختبار:`,
+            examLink,
+            ``,
+            `يرجى التأكد من توفر اتصال ثابت بالإنترنت قبل بدء الاختبار. بمجرد الدخول لا يمكن إيقاف مؤقت الاختبار.`,
+            ``,
+            `بوابة الاعتماد المهني`,
+            `https://overseas-travels.com`
+        ].join('\n');
 
         const mailOptions = {
             to,
             subject,
-            text,
+            text: cleanPlainText,
             html
         };
 
